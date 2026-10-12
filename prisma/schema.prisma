@@ -1,0 +1,275 @@
+// Meridian EMR data model. Tables mirror FHIR R4 resources (see plan spec §3)
+// so the clinical structure stays honest and a FHIR export is possible later.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Sex {
+  male
+  female
+  other
+  unknown
+}
+
+enum Role {
+  physician
+  nurse
+  front_desk
+}
+
+// "No known allergies" is an explicit, reviewed state, distinct from "not reviewed".
+enum AllergyReviewStatus {
+  not_reviewed
+  no_known_allergies
+  has_allergies
+}
+
+enum EncounterType {
+  office
+  telehealth
+  phone
+}
+
+enum EncounterStatus {
+  planned
+  arrived
+  in_progress
+  finished
+  cancelled
+}
+
+enum ConditionStatus {
+  active
+  resolved
+}
+
+enum AllergySeverity {
+  mild
+  moderate
+  severe
+}
+
+enum AllergyType {
+  drug
+  food
+  environment
+  other
+}
+
+enum MedStatus {
+  active
+  on_hold
+  discontinued
+  completed
+}
+
+enum ObservationCategory {
+  vital_signs
+  laboratory
+}
+
+// N normal, L/H low/high, LL/HH critical, A abnormal (non-numeric)
+enum Flag {
+  N
+  L
+  H
+  LL
+  HH
+  A
+}
+
+enum ReportStatus {
+  preliminary
+  final
+}
+
+enum ReportSource {
+  ordered
+  imported
+}
+
+enum NoteType {
+  progress
+  history_physical
+  consult
+  phone
+}
+
+enum NoteStatus {
+  draft
+  signed
+  addended
+}
+
+model Practitioner {
+  id          String   @id @default(cuid())
+  name        String
+  role        Role
+  credentials String?
+  createdAt   DateTime @default(now())
+
+  primaryPatients  Patient[]           @relation("PCP")
+  encounters       Encounter[]
+  prescriptions    MedicationRequest[]
+  notes            Note[]
+}
+
+model Patient {
+  id            String              @id @default(cuid())
+  mrn           String              @unique
+  firstName     String
+  lastName      String
+  dob           DateTime            @db.Date
+  sex           Sex
+  phone         String?
+  address       String?
+  preferredLanguage String          @default("English")
+  codeStatus    String              @default("Full code")
+  allergyStatus AllergyReviewStatus @default(not_reviewed)
+  pcpId         String?
+  pcp           Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
+  createdAt     DateTime            @default(now())
+
+  encounters   Encounter[]
+  conditions   Condition[]
+  allergies    AllergyIntolerance[]
+  medications  MedicationRequest[]
+  observations Observation[]
+  reports      DiagnosticReport[]
+  notes        Note[]
+
+  @@index([lastName, firstName])
+}
+
+model Encounter {
+  id         String          @id @default(cuid())
+  patientId  String
+  patient    Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type       EncounterType
+  status     EncounterStatus
+  reason     String?
+  start      DateTime
+  end        DateTime?
+  providerId String?
+  provider   Practitioner?   @relation(fields: [providerId], references: [id])
+
+  observations Observation[]
+  notes        Note[]
+
+  @@index([patientId, start])
+  @@index([start])
+}
+
+model Condition {
+  id        String          @id @default(cuid())
+  patientId String
+  patient   Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code      String // ICD-10-CM
+  display   String
+  status    ConditionStatus
+  onset     DateTime?       @db.Date
+  resolvedAt DateTime?      @db.Date
+  priority  Int             @default(100) // lower sorts first
+  comment   String?
+
+  @@index([patientId])
+}
+
+model AllergyIntolerance {
+  id         String          @id @default(cuid())
+  patientId  String
+  patient    Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  substance  String
+  type       AllergyType
+  reaction   String?
+  severity   AllergySeverity
+  verified   Boolean         @default(false)
+  recordedAt DateTime        @default(now())
+
+  @@index([patientId])
+}
+
+model MedicationRequest {
+  id           String        @id @default(cuid())
+  patientId    String
+  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  drug         String
+  rxnorm       String?
+  dose         String
+  route        String
+  frequency    String
+  indication   String?
+  status       MedStatus
+  start        DateTime      @db.Date
+  end          DateTime?     @db.Date
+  prescriberId String?
+  prescriber   Practitioner? @relation(fields: [prescriberId], references: [id])
+
+  @@index([patientId])
+}
+
+model Observation {
+  id          String              @id @default(cuid())
+  patientId   String
+  patient     Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId String?
+  encounter   Encounter?          @relation(fields: [encounterId], references: [id])
+  reportId    String?
+  report      DiagnosticReport?   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  category    ObservationCategory
+  code        String // LOINC, or a local code for vitals without one
+  display     String
+  valueNum    Float?
+  valueText   String?
+  unit        String? // UCUM
+  refLow      Float?
+  refHigh     Float?
+  refText     String?
+  flag        Flag?
+  effectiveAt DateTime
+  sortOrder   Int                 @default(0)
+
+  @@index([patientId, category, effectiveAt])
+}
+
+model DiagnosticReport {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code        String
+  display     String // e.g. "Complete blood count"
+  performer   String // lab name
+  effectiveAt DateTime
+  issuedAt    DateTime
+  status      ReportStatus
+  source      ReportSource @default(ordered)
+  verifiedAt  DateTime?
+
+  observations Observation[]
+
+  @@index([patientId, effectiveAt])
+}
+
+model Note {
+  id          String        @id @default(cuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId String?
+  encounter   Encounter?    @relation(fields: [encounterId], references: [id])
+  type        NoteType
+  title       String
+  body        String
+  status      NoteStatus
+  authorId    String
+  author      Practitioner  @relation(fields: [authorId], references: [id])
+  createdAt   DateTime      @default(now())
+  signedAt    DateTime?
+
+  @@index([patientId, createdAt])
+}
