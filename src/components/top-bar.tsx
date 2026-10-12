@@ -5,15 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { closeOpenPatient, readOpenPatients, subscribeOpenPatients, type OpenPatient } from "@/lib/open-patients";
 import { currentUser } from "@/lib/session";
+import { CommandPalette } from "@/components/command-palette";
 
 const EMPTY: OpenPatient[] = [];
 
 const nav = [
   { href: "/", label: "My Day" },
+  { href: "/inbox", label: "Inbox" },
   { href: "/patients", label: "Patient Lists" },
 ];
 
-export function TopBar() {
+export function TopBar({ inboxCount }: { inboxCount: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = useSyncExternalStore(subscribeOpenPatients, readOpenPatients, () => EMPTY);
@@ -29,7 +31,8 @@ export function TopBar() {
   }
 
   return (
-    <header className="flex h-11 shrink-0 items-stretch bg-chrome text-white">
+    <header className="flex h-11 shrink-0 items-stretch bg-chrome text-white print:hidden">
+      <CommandPalette />
       <Link href="/" className="flex items-center gap-2 px-4 font-semibold tracking-wide">
         <Logo />
         <span>Meridian</span>
@@ -37,6 +40,7 @@ export function TopBar() {
       <nav className="flex items-stretch">
         {nav.map((n) => {
           const active = n.href === "/" ? pathname === "/" : pathname === n.href;
+          const count = n.href === "/inbox" ? inboxCount : 0;
           return (
             <Link
               key={n.href}
@@ -44,6 +48,7 @@ export function TopBar() {
               className={`flex items-center px-3 text-[13px] ${active ? "bg-chrome-2 text-white" : "text-white/75 hover:bg-chrome-2/60 hover:text-white"}`}
             >
               {n.label}
+              {count > 0 && <span className="tabular ml-1.5 rounded-full bg-high px-1.5 text-[10.5px] font-semibold leading-4 text-white">{count}</span>}
             </Link>
           );
         })}
@@ -72,6 +77,14 @@ export function TopBar() {
           );
         })}
       </div>
+      <button
+        onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}
+        className="my-2 flex items-center gap-2 rounded border border-white/15 bg-chrome-2/60 px-2.5 text-[12px] text-white/70 hover:text-white"
+        title="Search patients and commands"
+      >
+        Search
+        <kbd className="rounded bg-white/10 px-1 font-sans text-[10.5px]">⌘/Ctrl K</kbd>
+      </button>
       <div className="flex items-center gap-3 px-4 text-[12.5px] text-white/80">
         <span className="rounded bg-warn px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">
           Synthetic data

@@ -13,6 +13,7 @@ export const chartTabs = [
   { slug: "problems", label: "Problems" },
   { slug: "allergies", label: "Allergies" },
   { slug: "notes", label: "Notes" },
+  { slug: "orders", label: "Orders" },
   { slug: "import", label: "Import Report" },
 ];
 

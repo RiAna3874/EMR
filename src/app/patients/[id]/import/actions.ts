@@ -9,6 +9,7 @@ import { currentUser } from "@/lib/session";
 import { toUrlDate } from "@/lib/format";
 import { assessDraft, blankRow, DraftSchema, emptyDraft, panelFor } from "@/lib/labs/draft";
 import { labHistory, runExtraction } from "@/lib/labs/jobs";
+import { completeLabOrder } from "@/lib/orders/server";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // Claude's per-image limit
@@ -161,9 +162,13 @@ export async function fileImport(patientId: string, jobId: string, draftJson: st
           verifiedAt: now,
           verifiedById: currentUser.id,
           importJobId: jobId,
+          // The PCP still sees imported results in their Inbox unless they verified them.
+          reviewedAt: patient.pcpId === currentUser.id ? now : null,
+          reviewedById: patient.pcpId === currentUser.id ? currentUser.id : null,
           observations: { createMany: { data: g.obs } },
         },
       });
+      await completeLabOrder(tx, report, g.obs.map((o) => o.code));
       ids.push(report.id);
     }
     return ids;

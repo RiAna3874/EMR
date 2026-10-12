@@ -9,7 +9,10 @@ import {
   type AllergyType,
 } from "@prisma/client";
 
+import { ORDERABLES } from "../src/lib/orders/catalog";
+
 const prisma = new PrismaClient();
+const orderables = new Map(ORDERABLES.map((o) => [o.code, o]));
 
 let seed = 20261012;
 function rand() {
@@ -51,6 +54,7 @@ type PatientDef = {
   vitals: { sbp: number; dbp: number; hr: number; weightKg: number; heightCm: number; spo2?: number };
   labBias?: LabBias;
   reasonToday?: string;
+  orders?: { code: string; status: "pending" | "signed"; daysAgo: number; priority?: "routine" | "urgent" | "stat"; indication?: string; orderSet?: string; dueInDays?: number }[];
   telehealth?: boolean;
   visitHour?: number;
 };
@@ -74,6 +78,11 @@ const patients: PatientDef[] = [
     vitals: { sbp: 142, dbp: 88, hr: 78, weightKg: 88, heightCm: 163 },
     labBias: { glucose: 1.6, a1c: 1.45, ldl: 1.2, tg: 1.4, creatinine: 1.15 },
     reasonToday: "Diabetes follow-up", visitHour: 8,
+    orders: [
+      { code: "58410-2", status: "signed", daysAgo: 6, indication: "Type 2 diabetes mellitus without complications", dueInDays: 0 },
+      { code: "14959-1", status: "signed", daysAgo: 3, indication: "Type 2 diabetes mellitus without complications", dueInDays: 0 },
+      { code: "REF:ophthalmology", status: "signed", daysAgo: 3, indication: "Type 2 diabetes mellitus without complications" },
+    ],
   },
   {
     firstName: "Marcus", lastName: "Okonkwo-Hale", sex: "male", age: 67,
@@ -93,6 +102,10 @@ const patients: PatientDef[] = [
     vitals: { sbp: 128, dbp: 76, hr: 88, weightKg: 94, heightCm: 180, spo2: 94 },
     labBias: { creatinine: 1.7, bun: 1.6, egfr: 0.55, potassium: 1.12, hgb: 0.88 },
     reasonToday: "CHF check, weight gain", visitHour: 8,
+    orders: [
+      { code: "CPT:93306", status: "signed", daysAgo: 2, priority: "urgent", indication: "Heart failure, unspecified", dueInDays: 5 },
+      { code: "30934-4", status: "signed", daysAgo: 0, priority: "stat", indication: "Heart failure, unspecified", dueInDays: 0 },
+    ],
   },
   {
     firstName: "Priya", lastName: "Raman", sex: "female", age: 34,
@@ -109,6 +122,11 @@ const patients: PatientDef[] = [
     vitals: { sbp: 112, dbp: 70, hr: 84, weightKg: 61, heightCm: 165 },
     labBias: { tsh: 2.2, hgb: 0.8, mcv: 0.86, ferritin: 0.2 },
     reasonToday: "Fatigue, recheck thyroid", visitHour: 9,
+    orders: [
+      { code: "58410-2", status: "pending", daysAgo: 0, indication: "Iron deficiency anemia, unspecified", orderSet: "Anemia workup" },
+      { code: "local:iron", status: "pending", daysAgo: 0, indication: "Iron deficiency anemia, unspecified", orderSet: "Anemia workup" },
+      { code: "2132-9", status: "pending", daysAgo: 0, indication: "Iron deficiency anemia, unspecified", orderSet: "Anemia workup" },
+    ],
   },
   {
     firstName: "Theodore", lastName: "Vance", sex: "male", age: 45,
@@ -150,6 +168,7 @@ const patients: PatientDef[] = [
     vitals: { sbp: 136, dbp: 74, hr: 68, weightKg: 54, heightCm: 155 },
     labBias: { sodium: 0.97, vitd: 0.6 },
     reasonToday: "Annual wellness visit", visitHour: 10,
+    orders: [{ code: "CPT:77080", status: "signed", daysAgo: 30, indication: "Age-related osteoporosis without current fracture", dueInDays: 14 }],
   },
   {
     firstName: "Jonah", lastName: "Kessler", sex: "male", age: 29,
@@ -317,6 +336,7 @@ async function main() {
   await prisma.$transaction([
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
+    prisma.serviceRequest.deleteMany(),
     prisma.documentReference.deleteMany(),
     prisma.importJob.deleteMany(),
     prisma.note.deleteMany(),
@@ -430,12 +450,24 @@ async function main() {
         const collected = new Date(start.getTime() + 30 * 60_000);
         for (const panel of panels) {
           if (panel.code === "3016-3" && !p.labBias?.tsh && vIdx < 4) continue;
+          const issuedAt = new Date(collected.getTime() + 18 * 3_600_000);
+          const order = await prisma.serviceRequest.create({
+            data: {
+              patientId: patient.id, type: "lab", code: panel.code, display: panel.display,
+              status: "completed", indication: p.conditions[0]?.display, orderedById: pcpId,
+              createdAt: start, signedAt: start, completedAt: issuedAt,
+            },
+          });
+          // Results from the latest visit are still waiting in the PCP's Inbox.
+          const reviewed = vIdx < visitDaysAgo.length - 1;
           const report = await prisma.diagnosticReport.create({
             data: {
               patientId: patient.id, code: panel.code, display: panel.display,
               performer: "Lakeview Reference Laboratory",
-              effectiveAt: collected, issuedAt: new Date(collected.getTime() + 18 * 3_600_000),
-              status: "final", source: "ordered",
+              effectiveAt: collected, issuedAt,
+              status: "final", source: "ordered", orderId: order.id,
+              reviewedAt: reviewed ? new Date(issuedAt.getTime() + 20 * 3_600_000) : null,
+              reviewedById: reviewed ? pcpId : null,
             },
           });
           await prisma.observation.createMany({
@@ -492,6 +524,19 @@ async function main() {
         },
       });
     }
+    for (const o of p.orders ?? []) {
+      const def = orderables.get(o.code)!;
+      const signed = o.status !== "pending";
+      await prisma.serviceRequest.create({
+        data: {
+          patientId: patient.id, type: def.type, code: o.code, display: def.display,
+          status: o.status, priority: o.priority ?? "routine", indication: o.indication, orderSet: o.orderSet,
+          orderedById: pcpId, createdAt: daysAgo(o.daysAgo, 11), signedAt: signed ? daysAgo(o.daysAgo, 11) : null,
+          expectedAt: o.dueInDays !== undefined ? daysAgo(-o.dueInDays, 0) : null,
+        },
+      });
+    }
+
     await prisma.encounter.create({
       data: {
         patientId: patient.id, type: "office", status: "planned", reason: "Routine follow-up",

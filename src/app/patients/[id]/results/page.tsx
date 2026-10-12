@@ -5,6 +5,9 @@ import { fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } fro
 import { Empty } from "@/components/panel";
 import { FlagBadge, flagText, flagTitle } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
+import { TrendChart } from "@/components/trend-chart";
+import { Button } from "@/components/form";
+import { acknowledgeResult } from "@/app/inbox/actions";
 
 const MAX_COLUMNS = 6;
 
@@ -13,7 +16,7 @@ export default async function Results({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view?: string; report?: string }>;
+  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -21,9 +24,9 @@ export default async function Results({
   const reports = await db.diagnosticReport.findMany({
     where: { patientId: id },
     orderBy: { effectiveAt: "desc" },
-    include: { observations: { orderBy: { sortOrder: "asc" } }, verifiedBy: true },
+    include: { observations: { orderBy: { sortOrder: "asc" } }, verifiedBy: true, reviewedBy: true },
   });
-  const view = sp.view === "reports" ? "reports" : "grid";
+  const view = sp.view === "reports" ? "reports" : sp.view === "graph" ? "graph" : "grid";
 
   return (
     <div className="p-4">
@@ -39,6 +42,12 @@ export default async function Results({
           >
             Reports
           </Link>
+          <Link
+            href={`${base}?view=graph`}
+            className={`border-l border-line px-3 py-1 ${view === "graph" ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}
+          >
+            Graph
+          </Link>
         </div>
         <Legend />
       </div>
@@ -48,6 +57,8 @@ export default async function Results({
         </div>
       ) : view === "grid" ? (
         <TrendGrid reports={reports} base={base} />
+      ) : view === "graph" ? (
+        <GraphView reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
         <ReportView reports={reports} selected={sp.report} base={base} />
       )}
@@ -55,7 +66,9 @@ export default async function Results({
   );
 }
 
-type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ include: { observations: true; verifiedBy: true } }>>>[number];
+type ReportWithObs = Awaited<
+  ReturnType<typeof db.diagnosticReport.findMany<{ include: { observations: true; verifiedBy: true; reviewedBy: true } }>>
+>[number];
 
 function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }) {
   // One section per panel type, newest results on the left.
@@ -110,7 +123,11 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.code} id={r.code} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-                    <td className="px-3 py-1.5">{r.display}</td>
+                    <td className="px-3 py-1.5">
+                      <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title="Graph this result">
+                        {r.display}
+                      </Link>
+                    </td>
                     {cols.map((t) => {
                       const o = r.byTime.get(t);
                       return (
@@ -175,7 +192,20 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
 
       <article className="min-w-0 flex-1 rounded-md border border-line bg-panel">
         <header className="border-b border-line px-4 py-3">
-          <h2 className="text-[15px] font-semibold">{current.display}</h2>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-[15px] font-semibold">{current.display}</h2>
+            <div className="flex shrink-0 gap-3 text-[12.5px]">
+              <Link href={`${base}?view=graph&codes=${current.observations.map((o) => encodeURIComponent(o.code)).join(",")}`} className="font-medium text-accent hover:underline">
+                Graph
+              </Link>
+              <Link href={`/print/results?${printQuery(reports, current)}`} className="font-medium text-accent hover:underline">
+                Print
+              </Link>
+              <Link href={`/print/results?${printQuery(reports, current)}&copy=patient`} className="font-medium text-accent hover:underline">
+                Patient letter
+              </Link>
+            </div>
+          </div>
           <dl className="mt-1 grid grid-cols-2 gap-x-6 gap-y-0.5 text-ink-2 md:grid-cols-4">
             <div>
               <dt className="text-[11px] uppercase text-ink-3">Collected</dt>
@@ -197,6 +227,7 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
               </dd>
             </div>
           </dl>
+          <ReviewLine report={current} next={`${base}?view=reports&report=${current.id}`} />
           {current.source === "imported" && (
             <p className="mt-2 text-[12px] text-ink-3">
               Transcribed from an outside report
@@ -270,6 +301,161 @@ function Legend() {
         <ImportedMark />
         Imported
       </span>
+    </div>
+  );
+}
+
+// Reports collected together (same draw, or the same imported document) print as one.
+function printQuery(reports: ReportWithObs[], current: ReportWithObs) {
+  const together = reports.filter((r) =>
+    current.importJobId ? r.importJobId === current.importJobId : r.effectiveAt.getTime() === current.effectiveAt.getTime() && !r.importJobId,
+  );
+  return together.map((r) => `report=${r.id}`).join("&");
+}
+
+function ReviewLine({ report, next }: { report: ReportWithObs; next: string }) {
+  if (report.reviewedAt) {
+    return (
+      <p className="mt-2 text-[12px] text-ink-3">
+        Acknowledged by {report.reviewedBy?.name ?? "unknown"} on {fmtDateTime(report.reviewedAt)}
+        {report.reviewComment && <span className="text-ink-2">: “{report.reviewComment}”</span>}
+      </p>
+    );
+  }
+  return (
+    <form action={acknowledgeResult.bind(null, report.id, next)} className="mt-2 flex items-center gap-2 text-[12px]">
+      <span className="rounded bg-warn-soft px-1.5 py-0.5 font-semibold text-warn">Not yet acknowledged</span>
+      <Button type="submit" variant="secondary" className="py-0.5 text-[11.5px]">
+        Acknowledge
+      </Button>
+    </form>
+  );
+}
+
+const RANGES = { "1y": 365, "2y": 730, all: 0 } as const;
+
+function GraphView({ reports, base, codes, range }: { reports: ReportWithObs[]; base: string; codes?: string; range?: string }) {
+  const days = range && range in RANGES ? RANGES[range as keyof typeof RANGES] : 0;
+  const cutoff = days ? Date.now() - days * 86_400_000 : 0;
+
+  // Components grouped by panel, in the order the trend table shows them.
+  const panels = new Map<string, { display: string; rows: ReturnType<typeof pivot>["rows"] }>();
+  const byPanel = new Map<string, ReportWithObs[]>();
+  for (const r of reports) byPanel.set(r.code, [...(byPanel.get(r.code) ?? []), r]);
+  for (const [code, group] of byPanel) {
+    const rows = pivot(group.flatMap((r) => r.observations)).rows.filter((row) => row.values.length > 0);
+    if (rows.length) panels.set(code, { display: group[0].display, rows });
+  }
+  const allRows = [...panels.values()].flatMap((p) => p.rows);
+  const latestFlag = (row: (typeof allRows)[number]) => [...row.byTime.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
+
+  let selected = (codes ?? "").split(",").filter((c) => allRows.some((r) => r.code === c));
+  if (!selected.length) {
+    const abnormal = allRows.filter((r) => { const f = latestFlag(r); return f && f !== "N"; }).map((r) => r.code);
+    selected = (abnormal.length ? abnormal : allRows.map((r) => r.code)).slice(0, 4);
+  }
+  const reportOf = new Map(reports.flatMap((r) => r.observations.map((o) => [o.id, r] as const)));
+  const href = (next: string[], r = range) => `${base}?view=graph&codes=${next.map(encodeURIComponent).join(",")}${r ? `&range=${r}` : ""}`;
+
+  return (
+    <div className="flex gap-3">
+      <nav className="w-64 shrink-0 self-start overflow-hidden rounded-md border border-line bg-panel">
+        <div className="flex items-center justify-between border-b border-line px-3 py-2">
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Components</span>
+          <span className="text-[11px] text-ink-3">{selected.length} shown</span>
+        </div>
+        <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
+          {[...panels.entries()].map(([code, p]) => (
+            <div key={code} className="border-b border-line last:border-b-0">
+              <div className="bg-panel-muted px-3 py-1 text-[11.5px] font-semibold text-ink-2">{p.display}</div>
+              {p.rows.map((r) => {
+                const on = selected.includes(r.code);
+                const f = latestFlag(r);
+                return (
+                  <Link
+                    key={r.code}
+                    href={href(on ? selected.filter((c) => c !== r.code) : [...selected, r.code])}
+                    className={`flex items-center gap-2 px-3 py-1 ${on ? "bg-accent-soft" : "hover:bg-panel-muted"}`}
+                  >
+                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none ${on ? "border-accent bg-accent text-white" : "border-line"}`}>
+                      {on ? "✓" : ""}
+                    </span>
+                    <span className="flex-1 truncate">{r.display}</span>
+                    {f && f !== "N" && <FlagBadge flag={f} />}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </nav>
+
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-center gap-2 text-[12px]">
+          <span className="text-ink-3">Time range</span>
+          <div className="flex overflow-hidden rounded border border-line bg-panel">
+            {Object.keys(RANGES).map((k) => (
+              <Link
+                key={k}
+                href={href(selected, k === "all" ? undefined : k)}
+                className={`border-l border-line px-2.5 py-0.5 first:border-l-0 ${(range ?? "all") === k ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}
+              >
+                {k === "all" ? "All" : k === "1y" ? "1 year" : "2 years"}
+              </Link>
+            ))}
+          </div>
+          <span className="ml-auto text-ink-3">Shaded band is the reference range. Diamonds are imported results. Click a point to open its report.</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+          {selected.map((code) => {
+            const row = allRows.find((r) => r.code === code)!;
+            const points = [...row.byTime.values()]
+              .filter((o) => o.valueNum !== null && o.unit === row.unit && o.effectiveAt.getTime() >= cutoff)
+              .map((o) => {
+                const rep = reportOf.get(o.id);
+                return {
+                  t: o.effectiveAt.getTime(),
+                  v: o.valueNum!,
+                  flag: o.flag,
+                  imported: rep?.source === "imported",
+                  href: rep ? `${base}?view=reports&report=${rep.id}` : undefined,
+                };
+              })
+              .sort((a, b) => a.t - b.t);
+            const last = points.at(-1);
+            const first = points[0];
+            return (
+              <section key={code} className="rounded-md border border-line bg-panel">
+                <header className="flex items-baseline gap-3 border-b border-line px-3 py-2">
+                  <h3 className="font-semibold">{row.display}</h3>
+                  <span className="text-[11.5px] text-ink-3">
+                    {unitLabel(row.unit)} · range {fmtRange(row) || "none"}
+                  </span>
+                  {last && (
+                    <span className={`tabular ml-auto font-semibold ${flagText(last.flag)}`}>
+                      {last.v}
+                      <FlagBadge flag={last.flag} />
+                      {first && first !== last && (
+                        <span className="ml-2 text-[11.5px] font-normal text-ink-3">
+                          {last.v > first.v ? "▲" : last.v < first.v ? "▼" : "="} from {first.v} over {points.length} results
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </header>
+                <div className="px-2 py-2">
+                  <TrendChart series={[{ name: row.display, points }]} unit={unitLabel(row.unit)} refLow={row.refLow} refHigh={row.refHigh} />
+                </div>
+              </section>
+            );
+          })}
+          {selected.length === 0 && (
+            <div className="rounded-md border border-line bg-panel">
+              <Empty>Pick components on the left to graph them.</Empty>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,379 @@
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { currentUser } from "@/lib/session";
+import { inboxCounts, inboxResults } from "@/lib/inbox";
+import { age, fmtDate, fmtDateTime, fmtRange, fmtValue, fullName, isAbnormal, relativeDays, sexShort, unitLabel } from "@/lib/format";
+import { orderableByCode } from "@/lib/orders/catalog";
+import { orderWarnings } from "@/lib/orders/checks";
+import { orderContext } from "@/lib/orders/server";
+import { Empty } from "@/components/panel";
+import { FlagBadge, flagText } from "@/components/flag";
+import { Sparkline } from "@/components/sparkline";
+import { Button, inputCls } from "@/components/form";
+import { ImportStatusChip } from "@/components/import/status-chip";
+import { medSig, OrderTypeIcon, PriorityChip, WarningList } from "@/components/orders/order-bits";
+import { acknowledgeAllNormal, acknowledgeResult, signDraftNote } from "./actions";
+
+export const dynamic = "force-dynamic";
+
+const FOLDERS = [
+  { id: "abnormal", label: "Abnormal results" },
+  { id: "normal", label: "Normal results" },
+  { id: "imports", label: "Imported reports to verify" },
+  { id: "notes", label: "Notes to sign" },
+  { id: "orders", label: "Orders to sign" },
+] as const;
+type FolderId = (typeof FOLDERS)[number]["id"];
+
+type Item = { id: string; href: string; patient: { firstName: string; lastName: string }; title: string; sub: React.ReactNode; at: Date; critical?: boolean };
+
+export default async function Inbox({ searchParams }: { searchParams: Promise<{ folder?: string; item?: string }> }) {
+  const sp = await searchParams;
+  const counts = await inboxCounts(currentUser.id);
+  const folder: FolderId = FOLDERS.some((f) => f.id === sp.folder)
+    ? (sp.folder as FolderId)
+    : (FOLDERS.find((f) => counts[f.id] > 0)?.id ?? "abnormal");
+  const href = (item?: string) => `/inbox?folder=${folder}${item ? `&item=${item}` : ""}`;
+
+  let items: Item[] = [];
+  let detail: React.ReactNode = null;
+
+  if (folder === "abnormal" || folder === "normal") {
+    const results = (await inboxResults(currentUser.id)).filter((r) => r.abnormal === (folder === "abnormal"));
+    items = results.map((r) => ({
+      id: r.id,
+      href: href(r.id),
+      patient: r.patient,
+      title: r.display,
+      at: r.issuedAt,
+      critical: r.critical,
+      sub: r.abnormal ? (
+        <span className="truncate">
+          {r.observations
+            .filter((o) => isAbnormal(o.flag))
+            .slice(0, 3)
+            .map((o, i) => (
+              <span key={o.id} className={flagText(o.flag)}>
+                {i > 0 && ", "}
+                {o.display} {fmtValue(o)}
+                {o.flag !== "A" && ` ${o.flag}`}
+              </span>
+            ))}
+        </span>
+      ) : (
+        `${r.observations.length} components, all within range`
+      ),
+    }));
+    const current = results.find((r) => r.id === sp.item) ?? results[0];
+    if (current) {
+      const idx = results.indexOf(current);
+      const next = results[idx + 1] ?? results[idx - 1];
+      detail = <ResultDetail reportId={current.id} next={next ? href(next.id) : href()} />;
+    }
+  } else if (folder === "notes") {
+    const notes = await db.note.findMany({ where: { authorId: currentUser.id, status: "draft" }, orderBy: { createdAt: "asc" }, include: { patient: true } });
+    items = notes.map((n) => ({ id: n.id, href: href(n.id), patient: n.patient, title: n.title, at: n.createdAt, sub: `Draft started ${relativeDays(n.createdAt)}` }));
+    const current = notes.find((n) => n.id === sp.item) ?? notes[0];
+    if (current) {
+      const next = notes[notes.indexOf(current) + 1];
+      detail = (
+        <div className="flex h-full flex-col">
+          <DetailHeader patient={current.patient} title={current.title} meta={`Draft · started ${fmtDateTime(current.createdAt)}`} />
+          <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-4 py-3 font-sans text-[13px] leading-relaxed">{current.body || "(empty)"}</pre>
+          <div className="flex gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+            <form action={signDraftNote.bind(null, current.id, next ? href(next.id) : href())}>
+              <Button type="submit">Sign note</Button>
+            </form>
+            <Link href={`/patients/${current.patientId}/notes?note=${current.id}`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Edit in chart
+            </Link>
+          </div>
+        </div>
+      );
+    }
+  } else if (folder === "imports") {
+    const jobs = await db.importJob.findMany({
+      where: { status: { in: ["needs_review", "failed"] } },
+      orderBy: { createdAt: "asc" },
+      include: { patient: true, createdBy: true, _count: { select: { documents: true } } },
+    });
+    items = jobs.map((j) => ({
+      id: j.id,
+      href: href(j.id),
+      patient: j.patient,
+      title: "Outside lab report",
+      at: j.createdAt,
+      sub: <ImportStatusChip status={j.status} />,
+    }));
+    const current = jobs.find((j) => j.id === sp.item) ?? jobs[0];
+    if (current) {
+      detail = (
+        <div>
+          <DetailHeader patient={current.patient} title="Outside lab report" meta={`Uploaded ${fmtDateTime(current.createdAt)} by ${current.createdBy.name}`} />
+          <div className="space-y-3 px-4 py-4">
+            <p>
+              {current._count.documents} {current._count.documents === 1 ? "page" : "pages"}.{" "}
+              {current.status === "failed" ? "The report couldn't be read automatically; results can be entered by hand." : "Results were read from the image and are waiting for verification before they're filed."}
+            </p>
+            <Link href={`/patients/${current.patientId}/import/${current.id}`} className="inline-block rounded bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent/90">
+              Review and file
+            </Link>
+          </div>
+        </div>
+      );
+    }
+  } else {
+    const orders = await db.serviceRequest.findMany({ where: { orderedById: currentUser.id, status: "pending" }, orderBy: { createdAt: "asc" }, include: { patient: true } });
+    const byPatient = new Map<string, typeof orders>();
+    for (const o of orders) byPatient.set(o.patientId, [...(byPatient.get(o.patientId) ?? []), o]);
+    const groups = [...byPatient.values()];
+    items = groups.map((g) => ({
+      id: g[0].patientId,
+      href: href(g[0].patientId),
+      patient: g[0].patient,
+      title: `${g.length} unsigned order${g.length === 1 ? "" : "s"}`,
+      at: g[0].createdAt,
+      sub: <span className="truncate">{g.map((o) => o.display).join(", ")}</span>,
+    }));
+    const current = groups.find((g) => g[0].patientId === sp.item) ?? groups[0];
+    if (current) {
+      const ctx = await orderContext(current[0].patientId);
+      detail = (
+        <div>
+          <DetailHeader patient={current[0].patient} title="Unsigned orders" meta={`Started ${fmtDateTime(current[0].createdAt)}`} />
+          <ul>
+            {current.map((o) => {
+              const def = orderableByCode.get(o.code);
+              const warnings = def ? orderWarnings(def, { ...ctx, openOrders: ctx.openOrders.filter((x) => x.status !== "pending") }) : [];
+              return (
+                <li key={o.id} className="space-y-1 border-b border-line px-4 py-2">
+                  <div className="flex items-center gap-2">
+                    <OrderTypeIcon type={o.type} />
+                    <span className="font-medium">{o.display}</span>
+                    <PriorityChip priority={o.priority} />
+                  </div>
+                  {o.type === "medication" && <div className="pl-10 text-[12px] text-ink-2">{medSig(o.details)}</div>}
+                  <div className="pl-10 text-[12px] text-ink-3">{o.indication ? `For: ${o.indication}` : "No indication"}</div>
+                  <div className="pl-10">
+                    <WarningList warnings={warnings} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="px-4 py-3">
+            <Link href={`/patients/${current[0].patientId}/orders`} className="inline-block rounded bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent/90">
+              Review and sign in chart
+            </Link>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  const selectedId = sp.item ?? items[0]?.id;
+
+  return (
+    <div className="flex h-full">
+      <nav className="w-60 shrink-0 border-r border-line bg-panel py-2">
+        <h1 className="px-4 pb-2 text-[15px] font-semibold">Inbox</h1>
+        {FOLDERS.map((f) => (
+          <Link
+            key={f.id}
+            href={`/inbox?folder=${f.id}`}
+            className={`flex items-center justify-between border-l-[3px] px-4 py-1.5 ${f.id === folder ? "border-accent bg-accent-soft font-semibold" : "border-transparent hover:bg-panel-muted"}`}
+          >
+            <span>{f.label}</span>
+            {counts[f.id] > 0 && (
+              <span className={`tabular rounded-full px-1.5 text-[11px] font-semibold ${f.id === "abnormal" ? "bg-high-soft text-high" : "bg-panel-muted text-ink-2"}`}>
+                {counts[f.id]}
+              </span>
+            )}
+          </Link>
+        ))}
+        <p className="mt-4 px-4 text-[11.5px] leading-snug text-ink-3">
+          Results land here when you ordered them, or, for outside reports, when you are the patient&apos;s PCP.
+        </p>
+      </nav>
+
+      <section className="flex w-[380px] shrink-0 flex-col border-r border-line bg-panel">
+        <header className="flex items-center justify-between border-b border-line px-3 py-2">
+          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">{FOLDERS.find((f) => f.id === folder)!.label}</h2>
+          {folder === "normal" && items.length > 0 && (
+            <form action={acknowledgeAllNormal}>
+              <Button type="submit" variant="secondary" className="py-0.5 text-[11.5px]">
+                Acknowledge all {items.length}
+              </Button>
+            </form>
+          )}
+        </header>
+        <ul className="min-h-0 flex-1 overflow-y-auto">
+          {items.length === 0 && <Empty>Nothing here. You&apos;re all caught up.</Empty>}
+          {items.map((it) => (
+            <li key={it.id} className="border-b border-line">
+              <Link
+                href={it.href}
+                className={`block border-l-[3px] px-3 py-2 ${it.id === selectedId ? "border-accent bg-accent-soft" : "border-transparent hover:bg-panel-muted"}`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate font-medium">{fullName(it.patient)}</span>
+                  <span className="tabular shrink-0 text-[11.5px] text-ink-3">{fmtDate(it.at)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {it.critical && <span className="rounded bg-crit px-1 text-[10px] font-bold text-white">CRITICAL</span>}
+                  <span className="truncate text-ink-2">{it.title}</span>
+                </div>
+                <div className="flex min-w-0 text-[12px] text-ink-3">{it.sub}</div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="min-w-0 flex-1 overflow-y-auto bg-panel">{detail ?? <Empty>Select an item.</Empty>}</section>
+    </div>
+  );
+}
+
+function DetailHeader({
+  patient,
+  title,
+  meta,
+}: {
+  patient: { id: string; firstName: string; lastName: string; dob: Date; sex: "male" | "female" | "other" | "unknown"; mrn: string };
+  title: React.ReactNode;
+  meta: React.ReactNode;
+}) {
+  return (
+    <header className="border-b border-line px-4 py-3">
+      <div className="flex items-baseline gap-2">
+        <Link href={`/patients/${patient.id}`} className="text-[15px] font-semibold hover:text-accent">
+          {fullName(patient)}
+        </Link>
+        <span className="text-ink-2">
+          {age(patient.dob)} y {sexShort(patient.sex)} · MRN <span className="font-mono">{patient.mrn}</span>
+        </span>
+      </div>
+      <div className="mt-0.5 font-medium">{title}</div>
+      <div className="text-[12px] text-ink-3">{meta}</div>
+    </header>
+  );
+}
+
+async function ResultDetail({ reportId, next }: { reportId: string; next: string }) {
+  const r = await db.diagnosticReport.findUniqueOrThrow({
+    where: { id: reportId },
+    include: { patient: true, observations: { orderBy: { sortOrder: "asc" } }, order: { include: { orderedBy: true } }, verifiedBy: true },
+  });
+  const history = await db.observation.findMany({
+    where: { patientId: r.patientId, category: "laboratory", code: { in: r.observations.map((o) => o.code) }, effectiveAt: { lte: r.effectiveAt } },
+    orderBy: { effectiveAt: "asc" },
+    select: { code: true, valueNum: true, valueText: true, effectiveAt: true, flag: true, unit: true },
+  });
+  const byCode = new Map<string, typeof history>();
+  for (const h of history) byCode.set(h.code, [...(byCode.get(h.code) ?? []), h]);
+  const base = `/patients/${r.patientId}`;
+
+  return (
+    <div>
+      <DetailHeader
+        patient={r.patient}
+        title={
+          <>
+            {r.display}
+            {r.source === "imported" && <span className="ml-1.5 rounded bg-low-soft px-1 text-[10.5px] font-semibold text-low">IMPORTED</span>}
+          </>
+        }
+        meta={
+          <>
+            Collected {fmtDateTime(r.effectiveAt)} · Resulted {fmtDateTime(r.issuedAt)} · {r.performer}
+            {r.order && (
+              <>
+                {" "}
+                · Ordered by {r.order.orderedBy.name}
+                {r.order.indication && ` for ${r.order.indication}`}
+              </>
+            )}
+            {r.source === "imported" && r.verifiedBy && ` · Transcribed and verified by ${r.verifiedBy.name}`}
+          </>
+        }
+      />
+      <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-line bg-panel-muted px-4 py-1.5 text-[12.5px]">
+        <Link href={`${base}/results?view=reports&report=${r.id}`} className="font-medium text-accent hover:underline">
+          Open in chart
+        </Link>
+        <Link href={`${base}/results?view=graph&codes=${r.observations.map((o) => o.code).join(",")}`} className="font-medium text-accent hover:underline">
+          Graph trends
+        </Link>
+        <Link href={`/print/results?report=${r.id}`} className="font-medium text-accent hover:underline">
+          Print
+        </Link>
+        <Link href={`/print/results?report=${r.id}&copy=patient`} className="font-medium text-accent hover:underline">
+          Patient letter
+        </Link>
+        <Link href={`${base}/orders`} className="font-medium text-accent hover:underline">
+          Order follow-up
+        </Link>
+        <Link href={`${base}/notes?new=1`} className="font-medium text-accent hover:underline">
+          Write note
+        </Link>
+      </div>
+      <table className="w-full">
+        <thead className="text-left text-[11.5px] text-ink-3">
+          <tr>
+            <th className="px-4 py-2 font-medium">Component</th>
+            <th className="px-3 py-2 text-right font-medium">Value</th>
+            <th className="px-3 py-2 font-medium">Range</th>
+            <th className="px-3 py-2 text-right font-medium">Previous</th>
+            <th className="px-3 py-2 text-right font-medium">Change</th>
+            <th className="px-3 py-2 font-medium">Trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {r.observations.map((o) => {
+            const series = (byCode.get(o.code) ?? []).filter((h) => h.unit === o.unit);
+            const prior = series.filter((h) => h.effectiveAt < r.effectiveAt).at(-1);
+            const delta = prior?.valueNum != null && o.valueNum != null ? o.valueNum - prior.valueNum : null;
+            const pct = delta !== null && prior?.valueNum ? (delta / prior.valueNum) * 100 : null;
+            return (
+              <tr key={o.id} className="border-t border-line">
+                <td className="px-4 py-1.5">{o.display}</td>
+                <td className={`tabular whitespace-nowrap px-3 py-1.5 text-right font-medium ${flagText(o.flag)}`}>
+                  {fmtValue(o)} <span className="font-normal text-ink-3">{unitLabel(o.unit)}</span>
+                  <FlagBadge flag={o.flag} />
+                </td>
+                <td className="tabular px-3 py-1.5 text-ink-2">{fmtRange(o)}</td>
+                <td className="tabular whitespace-nowrap px-3 py-1.5 text-right text-ink-2">
+                  {prior ? (
+                    <>
+                      <span className={flagText(prior.flag)}>{fmtValue(prior)}</span>
+                      <div className="text-[11px] text-ink-3">{fmtDate(prior.effectiveAt)}</div>
+                    </>
+                  ) : (
+                    <span className="text-ink-3">—</span>
+                  )}
+                </td>
+                <td className="tabular whitespace-nowrap px-3 py-1.5 text-right">
+                  {delta !== null && pct !== null ? (
+                    <span className={Math.abs(pct) >= 15 ? "font-semibold text-ink" : "text-ink-3"}>
+                      {delta > 0 ? "▲" : delta < 0 ? "▼" : "="} {Math.abs(Math.round(pct))}%
+                    </span>
+                  ) : (
+                    <span className="text-ink-3">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-1.5">
+                  <Sparkline values={series.map((h) => h.valueNum).filter((v): v is number => v !== null)} refLow={o.refLow} refHigh={o.refHigh} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <form action={acknowledgeResult.bind(null, r.id, next)} className="flex items-center gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+        <input name="comment" placeholder="Optional comment (e.g. Discussed with patient, repeat in 3 months)" className={`${inputCls} flex-1`} />
+        <Button type="submit">Acknowledge</Button>
+      </form>
+    </div>
+  );
+}

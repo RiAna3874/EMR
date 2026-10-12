@@ -8,16 +8,19 @@ An outpatient electronic medical record that follows the workflows clinicians kn
 - **Patient Lists**: Clinic Today, My Patients and All Patients, with search by name or MRN, sortable columns and alert badges (allergies, abnormal results, code status).
 - **Patient chart**: several charts can be open at once as tabs in the top bar, and each remembers its last activity. A patient rail stays on the left (demographics, code status, allergies, top problems, last vitals, next appointment).
   - **Summary**: problems, medications, allergies, vitals with sparkline trends, recent abnormal results, recent notes, upcoming visits.
-  - **Results**: trend table (tests by date, H/L/critical flags, reference ranges, sparklines) and a single-report view.
-  - **Vitals**: flowsheet by visit, with a quick-entry row that computes BMI and flags.
+  - **Results**: trend table (tests by date, H/L/critical flags, reference ranges, sparklines), a single-report view with acknowledgement, and a **graph** view: pick any components, see them over time against the shaded reference range, with imported results drawn as diamonds. Click a test name in the table to graph it.
+  - **Vitals**: flowsheet by visit, with a quick-entry row that computes BMI and flags, and graphs (blood pressure, heart rate, weight, BMI, SpO₂, temperature).
   - **Medications**: current and discontinued lists; add, hold, resume, discontinue.
   - **Problems**: active and resolved problems with ICD-10 codes; add, resolve, reactivate.
   - **Allergies**: allergen, reaction, severity, verified status. "No known allergies" is a reviewed state, distinct from "not reviewed".
   - **Notes**: progress, H&P, consult and phone notes. Templates, and smart phrases (`.vitals`, `.meds`, `.problems`, `.allergies`, `.labs`) that pull live chart data into the note. Drafts can be edited; signed notes are locked.
-
+  - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), metformin/NSAID/contrast with low eGFR, NSAIDs with an anticoagulant. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
   - **Import Report**: turn a photo, scan or PDF of an outside lab report into filed, flagged results. See below.
+- **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), imported reports to verify, notes to sign and orders to sign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
+- **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; and an order requisition for active labs, imaging and referrals.
+- **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g h` My Day.
 
-Not built yet: sign-in (every request acts as Dr. Dana Chen), Inbox, Orders and the Documents tab.
+Not built yet: sign-in (every request acts as Dr. Dana Chen) and the Documents tab.
 
 ## Lab report import
 
@@ -61,7 +64,7 @@ Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic 
 | `npm run dev` | Development server |
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
-| `npm test` | Unit tests for lab import parsing and checks |
+| `npm test` | Unit tests for lab import parsing and order safety checks |
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Wipe and reseed synthetic data |
 | `npm run db:reset` | Drop the database, migrate and seed |
