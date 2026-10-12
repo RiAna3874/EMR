@@ -1,17 +1,24 @@
 import { db } from "@/lib/db";
 import { latestVitals, pivot } from "@/lib/chart";
-import { fmtRange, fmtShortDate, fmtValue, unitLabel } from "@/lib/format";
+import { age, fmtDate, fmtDob, fmtRange, fmtShortDate, fmtValue, isAbnormal, unitLabel } from "@/lib/format";
+import { currentUser } from "@/lib/session";
+import { problemBlock } from "@/lib/notes/smarttext";
 
-// Builds the text each smart phrase (".vitals", ".meds", ...) expands to in the note editor.
+// Builds the value of each chart link (@VITALS@, @MEDS@, ...) for the note editor.
+// See chartLinks in src/lib/notes/library.ts for the list.
 export async function smartTextFor(patientId: string): Promise<Record<string, string>> {
-  const [vitals, meds, conditions, allergies, patient, labs] = await Promise.all([
+  const [vitals, meds, conditions, allergies, patient, labs, today] = await Promise.all([
     latestVitals(patientId),
     db.medicationRequest.findMany({ where: { patientId, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
     db.condition.findMany({ where: { patientId, status: "active" }, orderBy: { priority: "asc" } }),
     db.allergyIntolerance.findMany({ where: { patientId } }),
-    db.patient.findUniqueOrThrow({ where: { id: patientId }, select: { allergyStatus: true } }),
+    db.patient.findUniqueOrThrow({ where: { id: patientId }, include: { pcp: true } }),
     db.observation.findMany({
       where: { patientId, category: "laboratory", effectiveAt: { gte: new Date(Date.now() - 180 * 86_400_000) } },
+    }),
+    db.encounter.findFirst({
+      where: { patientId, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)), lt: new Date(new Date().setHours(24, 0, 0, 0)) } },
+      orderBy: { start: "asc" },
     }),
   ]);
 
@@ -48,16 +55,33 @@ export async function smartTextFor(patientId: string): Promise<Record<string, st
 
   // Latest value of each lab drawn in the last 6 months, abnormal ones marked.
   const { rows } = pivot(labs);
-  const labsText = rows.length
-    ? "Recent labs:\n" +
-      rows
-        .map((r) => {
-          const o = r.byTime.get(Math.max(...r.byTime.keys()))!;
-          const flag = o.flag && o.flag !== "N" ? ` [${o.flag}]` : "";
-          return `- ${r.display} ${fmtValue(o)} ${unitLabel(o.unit)}${flag} (ref ${fmtRange(o)}, ${fmtShortDate(o.effectiveAt)})`;
-        })
-        .join("\n")
-    : "Recent labs: none in the last 6 months.";
+  const latest = rows.map((r) => r.byTime.get(Math.max(...r.byTime.keys()))!);
+  const labLine = (o: (typeof latest)[number]) => {
+    const flag = o.flag && o.flag !== "N" ? ` [${o.flag}]` : "";
+    return `- ${o.display} ${fmtValue(o)} ${unitLabel(o.unit)}${flag} (ref ${fmtRange(o)}, ${fmtShortDate(o.effectiveAt)})`;
+  };
+  const labsText = latest.length ? "Recent labs:\n" + latest.map(labLine).join("\n") : "Recent labs: none in the last 6 months.";
+  const abnormal = latest.filter((o) => isAbnormal(o.flag));
+  const abnLabsText = abnormal.length ? "Abnormal labs:\n" + abnormal.map(labLine).join("\n") : "Abnormal labs: none in the last 6 months.";
 
-  return { vitals: vitalsText, meds: medsText, problems: problemsText, allergies: allergiesText, labs: labsText };
+  const apText = conditions.length ? conditions.map((c, i) => problemBlock(c, i + 1)).join("\n\n") : "1. ***\nPlan: ***";
+
+  return {
+    NAME: `${patient.firstName} ${patient.lastName}`,
+    AGE: String(age(patient.dob)),
+    SEX: patient.sex === "male" ? "male" : patient.sex === "female" ? "female" : "patient",
+    DOB: fmtDob(patient.dob),
+    MRN: patient.mrn,
+    PCP: patient.pcp ? `${patient.pcp.name}, ${patient.pcp.credentials ?? ""}`.replace(/, $/, "") : "no PCP on file",
+    CC: today?.reason ?? "***",
+    TODAY: fmtDate(new Date()),
+    ME: `${currentUser.name}, ${currentUser.credentials}`,
+    VITALS: vitalsText,
+    MEDS: medsText,
+    PROBLEMS: problemsText,
+    APPROBLEMS: apText,
+    ALLERGIES: allergiesText,
+    LABS: labsText,
+    ABNLABS: abnLabsText,
+  };
 }

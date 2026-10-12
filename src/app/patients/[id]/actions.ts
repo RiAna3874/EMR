@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import type { AllergySeverity, AllergyType, Flag, NoteType } from "@prisma/client";
+import type { AllergySeverity, AllergyType, Flag } from "@prisma/client";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/session";
 
@@ -154,30 +153,4 @@ export async function addMed(patientId: string, form: FormData) {
     },
   });
   revalidatePath(`/patients/${patientId}`, "layout");
-}
-
-export async function saveNote(patientId: string, noteId: string | null, form: FormData) {
-  const sign = form.get("intent") === "sign";
-  const data = {
-    title: str(form, "title") || "Progress note",
-    type: (str(form, "type") || "progress") as NoteType,
-    body: String(form.get("body") ?? ""),
-    status: sign ? ("signed" as const) : ("draft" as const),
-    signedAt: sign ? new Date() : null,
-  };
-  let id = noteId;
-  if (id) {
-    // Signed notes are locked; only drafts can be edited.
-    await db.note.update({ where: { id, patientId, status: "draft", authorId: currentUser.id }, data });
-  } else {
-    id = (await db.note.create({ data: { ...data, patientId, authorId: currentUser.id } })).id;
-  }
-  revalidatePath(`/patients/${patientId}`, "layout");
-  redirect(`/patients/${patientId}/notes?note=${id}`);
-}
-
-export async function deleteDraft(patientId: string, noteId: string) {
-  await db.note.delete({ where: { id: noteId, patientId, status: "draft", authorId: currentUser.id } });
-  revalidatePath(`/patients/${patientId}`, "layout");
-  redirect(`/patients/${patientId}/notes`);
 }

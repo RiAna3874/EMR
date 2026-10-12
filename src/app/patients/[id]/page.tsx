@@ -18,7 +18,7 @@ export default async function Summary({ params }: { params: Promise<{ id: string
     db.allergyIntolerance.findMany({ where: { patientId: id } }),
     db.observation.findMany({ where: { patientId: id, category: "vital_signs", code: { in: vitalCodes } } }),
     recentAbnormalLabs(120, id),
-    db.note.findMany({ where: { patientId: id }, orderBy: { createdAt: "desc" }, take: 5, include: { author: true } }),
+    db.note.findMany({ where: { patientId: id }, orderBy: { serviceAt: "desc" }, take: 5, include: { author: true } }),
     db.encounter.findMany({
       where: { patientId: id, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: { not: "cancelled" } },
       orderBy: { start: "asc" },
@@ -169,10 +169,17 @@ export default async function Summary({ params }: { params: Promise<{ id: string
                 <Link href={`${base}/notes?note=${n.id}`} className="block px-3 py-1.5 hover:bg-accent-soft/40">
                   <div className="flex justify-between">
                     <span className="font-medium">{n.title}</span>
-                    <span className="text-ink-3">{relativeDays(n.createdAt)}</span>
+                    <span className="text-ink-3">{relativeDays(n.serviceAt)}</span>
                   </div>
                   <div className="text-ink-2">
-                    {n.author.name}, {n.author.credentials ?? ""} · {n.status === "draft" ? <span className="text-warn">Draft</span> : `Signed ${n.signedAt ? fmtDate(n.signedAt) : ""}`}
+                    {n.author.name}, {n.author.credentials ?? ""} ·{" "}
+                    {n.status === "draft" ? (
+                      <span className="text-warn">Pended</span>
+                    ) : n.status === "pending_cosign" ? (
+                      <span className="text-low">Needs cosign</span>
+                    ) : (
+                      `Signed ${n.signedAt ? fmtDate(n.signedAt) : ""}`
+                    )}
                   </div>
                 </Link>
               </li>
