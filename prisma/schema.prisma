@@ -102,6 +102,28 @@ enum ImportStatus {
   discarded
 }
 
+enum OrderType {
+  lab
+  imaging
+  medication
+  referral
+  procedure
+}
+
+// pending = in the unsigned "cart"; signed = active, waiting to be done or resulted.
+enum OrderStatus {
+  pending
+  signed
+  completed
+  discontinued
+}
+
+enum OrderPriority {
+  routine
+  urgent
+  stat
+}
+
 enum NoteType {
   progress
   history_physical
@@ -130,6 +152,8 @@ model Practitioner {
   uploads          DocumentReference[]
   importJobs       ImportJob[]        @relation("ImportCreatedBy")
   filedImports     ImportJob[]        @relation("ImportFiledBy")
+  reviewedReports  DiagnosticReport[] @relation("ReviewedReports")
+  orders           ServiceRequest[]
 }
 
 model Patient {
@@ -157,6 +181,7 @@ model Patient {
   notes        Note[]
   documents    DocumentReference[]
   importJobs   ImportJob[]
+  orders       ServiceRequest[]
 
   @@index([lastName, firstName])
 }
@@ -268,10 +293,18 @@ model DiagnosticReport {
   verifiedBy  Practitioner? @relation("VerifiedReports", fields: [verifiedById], references: [id])
   importJobId String?
   importJob   ImportJob?   @relation(fields: [importJobId], references: [id])
+  orderId     String?
+  order       ServiceRequest? @relation(fields: [orderId], references: [id])
+  // Inbox acknowledgement by the responsible clinician.
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewedBy   Practitioner? @relation("ReviewedReports", fields: [reviewedById], references: [id])
+  reviewComment String?
 
   observations Observation[]
 
   @@index([patientId, effectiveAt])
+  @@index([reviewedAt])
 }
 
 model Note {
@@ -339,4 +372,34 @@ model ImportJob {
 
   @@index([patientId, createdAt])
   @@index([status])
+}
+
+// An order (FHIR ServiceRequest, or MedicationRequest once a prescription is
+// signed). `code` is the orderable's code from src/lib/orders/catalog.ts.
+model ServiceRequest {
+  id             String        @id @default(cuid())
+  patientId      String
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type           OrderType
+  code           String
+  display        String
+  status         OrderStatus   @default(pending)
+  priority       OrderPriority @default(routine)
+  indication     String?
+  instructions   String?
+  details        Json? // medication: dose, route, frequency, quantity, refills
+  orderSet       String?
+  expectedAt     DateTime?     @db.Date
+  orderedById    String
+  orderedBy      Practitioner  @relation(fields: [orderedById], references: [id])
+  createdAt      DateTime      @default(now())
+  signedAt       DateTime?
+  completedAt    DateTime?
+  discontinuedAt DateTime?
+  medicationId   String? // the MedicationRequest a signed prescription created
+
+  reports DiagnosticReport[]
+
+  @@index([patientId, status])
+  @@index([orderedById, status])
 }

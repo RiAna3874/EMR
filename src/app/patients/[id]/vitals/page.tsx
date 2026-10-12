@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { pivot } from "@/lib/chart";
 import { fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
@@ -5,12 +6,24 @@ import { Empty } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
 import { Button, Field, inputCls } from "@/components/form";
+import { TrendChart, type TrendSeries } from "@/components/trend-chart";
 import { recordVitals } from "../actions";
 
 const MAX_COLUMNS = 8;
 
-export default async function Vitals({ params }: { params: Promise<{ id: string }> }) {
+// Graphs on the vitals flowsheet; BP draws systolic and diastolic together.
+const GRAPHS: { title: string; codes: string[]; unit: string; low?: number; high?: number }[] = [
+  { title: "Blood pressure", codes: ["8480-6", "8462-4"], unit: "mmHg" },
+  { title: "Heart rate", codes: ["8867-4"], unit: "/min", low: 60, high: 100 },
+  { title: "Weight", codes: ["29463-7"], unit: "kg" },
+  { title: "BMI", codes: ["39156-5"], unit: "kg/m²", low: 18.5, high: 24.9 },
+  { title: "SpO₂", codes: ["59408-5"], unit: "%", low: 95, high: 100 },
+  { title: "Temperature", codes: ["8310-5"], unit: "°C", low: 36.1, high: 37.8 },
+];
+
+export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string }> }) {
   const { id } = await params;
+  const graph = (await searchParams).view === "graph";
   const observations = await db.observation.findMany({ where: { patientId: id, category: "vital_signs" } });
   const { times, rows } = pivot(observations);
   const cols = times.slice(0, MAX_COLUMNS);
@@ -57,9 +70,40 @@ export default async function Vitals({ params }: { params: Promise<{ id: string 
         </div>
       </form>
 
+      <div className="flex overflow-hidden rounded border border-line bg-panel text-[12.5px] w-fit">
+        <Link href={`/patients/${id}/vitals`} className={`px-3 py-1 ${!graph ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}>
+          Flowsheet
+        </Link>
+        <Link href={`/patients/${id}/vitals?view=graph`} className={`border-l border-line px-3 py-1 ${graph ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}>
+          Graph
+        </Link>
+      </div>
+
       {rows.length === 0 ? (
         <div className="rounded-md border border-line bg-panel">
           <Empty>No vitals recorded.</Empty>
+        </div>
+      ) : graph ? (
+        <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+          {GRAPHS.map((g) => {
+            const series: TrendSeries[] = g.codes.flatMap((code) => {
+              const row = rows.find((r) => r.code === code);
+              if (!row) return [];
+              const points = [...row.byTime.values()]
+                .filter((o) => o.valueNum !== null)
+                .map((o) => ({ t: o.effectiveAt.getTime(), v: o.valueNum!, flag: o.flag }));
+              return [{ name: row.display, points }];
+            });
+            if (!series.length) return null;
+            return (
+              <section key={g.title} className="rounded-md border border-line bg-panel">
+                <header className="border-b border-line px-3 py-2 font-semibold">{g.title}</header>
+                <div className="px-2 py-2">
+                  <TrendChart series={series} unit={g.unit} refLow={g.low} refHigh={g.high} height={180} />
+                </div>
+              </section>
+            );
+          })}
         </div>
       ) : (
         <section className="overflow-x-auto rounded-md border border-line bg-panel">
