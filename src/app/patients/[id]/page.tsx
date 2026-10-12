@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requireUser } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { pivot } from "@/lib/chart";
 import { recentAbnormalLabs } from "@/lib/queries";
-import { fmtDate, fmtRange, fmtShortDate, fmtTime, fmtValue, relativeDays, unitLabel } from "@/lib/format";
+import { fmtDate, fmtDob, fmtRange, fmtShortDate, fmtTime, fmtValue, relativeDays, unitLabel } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
@@ -12,6 +14,8 @@ const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5
 export default async function Summary({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const base = `/patients/${id}`;
+  const currentUser = await requireUser();
+  if (!can(currentUser.role, "viewClinical")) return <FrontDeskSummary patientId={id} />;
   const [conditions, meds, allergies, vitals, abnormal, notes, upcoming] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
@@ -182,6 +186,61 @@ export default async function Summary({ params }: { params: Promise<{ id: string
                     )}
                   </div>
                 </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// Front desk sees who the patient is and when they're coming in, not their clinical record.
+async function FrontDeskSummary({ patientId }: { patientId: string }) {
+  const [patient, upcoming] = await Promise.all([
+    db.patient.findUniqueOrThrow({ where: { id: patientId }, include: { pcp: true } }),
+    db.encounter.findMany({
+      where: { patientId, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: { not: "cancelled" } },
+      orderBy: { start: "asc" },
+      take: 10,
+      include: { provider: true },
+    }),
+  ]);
+  return (
+    <div className="grid grid-cols-1 gap-3 p-4 xl:grid-cols-2">
+      <Panel title="Demographics">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-3 py-2">
+          <dt className="text-ink-3">Name</dt>
+          <dd>
+            {patient.firstName} {patient.lastName}
+          </dd>
+          <dt className="text-ink-3">Date of birth</dt>
+          <dd className="tabular">{fmtDob(patient.dob)}</dd>
+          <dt className="text-ink-3">MRN</dt>
+          <dd className="font-mono">{patient.mrn}</dd>
+          <dt className="text-ink-3">Phone</dt>
+          <dd className="tabular">{patient.phone ?? "—"}</dd>
+          <dt className="text-ink-3">Address</dt>
+          <dd>{patient.address ?? "—"}</dd>
+          <dt className="text-ink-3">Language</dt>
+          <dd>{patient.preferredLanguage}</dd>
+          <dt className="text-ink-3">PCP</dt>
+          <dd>{patient.pcp ? `${patient.pcp.name}${patient.pcp.credentials ? `, ${patient.pcp.credentials}` : ""}` : "None"}</dd>
+        </dl>
+      </Panel>
+      <Panel title="Upcoming appointments">
+        {upcoming.length === 0 ? (
+          <Empty>No upcoming appointments.</Empty>
+        ) : (
+          <ul>
+            {upcoming.map((e) => (
+              <li key={e.id} className="flex justify-between gap-3 border-t border-line px-3 py-1.5 first:border-t-0">
+                <span className="tabular font-medium">
+                  {fmtDate(e.start)} {fmtTime(e.start)}
+                </span>
+                <span className="text-ink-2">
+                  {e.reason} · {e.provider?.name} · <span className="capitalize">{e.status.replace("_", " ")}</span>
+                </span>
               </li>
             ))}
           </ul>

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { OrderPriority, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { ORDER_SETS, orderableByCode, type Orderable } from "@/lib/orders/catalog";
 import { orderWarnings } from "@/lib/orders/checks";
 import { orderContext } from "@/lib/orders/server";
@@ -11,20 +11,21 @@ import { orderContext } from "@/lib/orders/server";
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const PRIORITIES: OrderPriority[] = ["routine", "urgent", "stat"];
 
-function baseOrder(patientId: string, o: Orderable, orderSet?: string) {
+function baseOrder(patientId: string, orderedById: string, o: Orderable, orderSet?: string) {
   return {
     patientId,
     type: o.type,
     code: o.code,
     display: o.display,
     status: "pending" as const,
-    orderedById: currentUser.id,
+    orderedById,
     orderSet: orderSet ?? null,
     details: o.med ? ({ dose: o.med.dose, route: o.med.route, frequency: o.med.frequency, quantity: o.med.quantity, refills: o.med.refills } as Prisma.InputJsonValue) : undefined,
   };
 }
 
 export async function addOrder(patientId: string, form: FormData) {
+  const currentUser = await requirePermission("pendOrders");
   const o = orderableByCode.get(str(form, "code"));
   if (!o) return;
   const priority = str(form, "priority") as OrderPriority;
@@ -40,7 +41,7 @@ export async function addOrder(patientId: string, form: FormData) {
     : undefined;
   await db.serviceRequest.create({
     data: {
-      ...baseOrder(patientId, o),
+      ...baseOrder(patientId, currentUser.id, o),
       priority: PRIORITIES.includes(priority) ? priority : "routine",
       indication: str(form, "indication") || null,
       instructions: str(form, "instructions") || null,
@@ -54,6 +55,7 @@ export async function addOrder(patientId: string, form: FormData) {
 
 // Adds every order in the set that isn't already pending or active.
 export async function addOrderSet(patientId: string, setId: string) {
+  const currentUser = await requirePermission("pendOrders");
   const set = ORDER_SETS.find((s) => s.id === setId);
   if (!set) return;
   const open = await db.serviceRequest.findMany({ where: { patientId, status: { in: ["pending", "signed"] } }, select: { code: true } });
@@ -62,19 +64,21 @@ export async function addOrderSet(patientId: string, setId: string) {
     .filter((c) => !skip.has(c))
     .map((c) => orderableByCode.get(c))
     .filter((o): o is Orderable => !!o)
-    .map((o) => baseOrder(patientId, o, set.name));
+    .map((o) => baseOrder(patientId, currentUser.id, o, set.name));
   if (data.length) await db.serviceRequest.createMany({ data });
   revalidatePath(`/patients/${patientId}`, "layout");
   revalidatePath("/inbox");
 }
 
 export async function removePendingOrder(patientId: string, orderId: string) {
+  await requirePermission("pendOrders");
   await db.serviceRequest.delete({ where: { id: orderId, patientId, status: "pending" } });
   revalidatePath(`/patients/${patientId}`, "layout");
   revalidatePath("/inbox");
 }
 
 export async function updatePendingOrder(patientId: string, orderId: string, form: FormData) {
+  await requirePermission("pendOrders");
   const priority = str(form, "priority") as OrderPriority;
   await db.serviceRequest.update({
     where: { id: orderId, patientId, status: "pending" },
@@ -86,8 +90,10 @@ export async function updatePendingOrder(patientId: string, orderId: string, for
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
-// Signs every pending order. Orders with a hard-stop warning need an override reason.
+// Signs every pending order, including ones a nurse pended; the signer becomes the
+// ordering clinician. Orders with a hard-stop warning need an override reason.
 export async function signOrders(patientId: string, form: FormData): Promise<{ error: string } | void> {
+  const currentUser = await requirePermission("signOrders");
   const pending = await db.serviceRequest.findMany({ where: { patientId, status: "pending" }, orderBy: { createdAt: "asc" } });
   if (!pending.length) return;
   const ctx = await orderContext(patientId);
@@ -141,12 +147,14 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
 }
 
 export async function discontinueOrder(patientId: string, orderId: string) {
+  await requirePermission("signOrders");
   await db.serviceRequest.update({ where: { id: orderId, patientId, status: "signed" }, data: { status: "discontinued", discontinuedAt: new Date() } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
 // Imaging, referrals and procedures have no result feed; the clinician marks them done.
 export async function completeOrder(patientId: string, orderId: string) {
+  await requirePermission("signOrders");
   await db.serviceRequest.update({
     where: { id: orderId, patientId, status: "signed", type: { in: ["imaging", "referral", "procedure"] } },
     data: { status: "completed", completedAt: new Date() },

@@ -2,6 +2,25 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isAbnormal, isCritical } from "@/lib/format";
+import { can, type SessionUser } from "@/lib/roles";
+
+// Which Inbox folders a role works.
+export type InboxFolder = "abnormal" | "normal" | "imports" | "notes" | "cosign" | "orders";
+export function inboxFolderAllowed(role: SessionUser["role"], folder: InboxFolder) {
+  switch (folder) {
+    case "abnormal":
+    case "normal":
+      return can(role, "reviewResults");
+    case "imports":
+      return can(role, "fileImports");
+    case "notes":
+      return can(role, "writeNotes");
+    case "cosign":
+      return can(role, "cosignNotes");
+    case "orders":
+      return can(role, "signOrders");
+  }
+}
 
 // A result belongs in a clinician's Inbox when they ordered it, or, with no
 // order (an imported outside report), when they are the patient's PCP.
@@ -26,7 +45,8 @@ export async function inboxResults(userId: string) {
   return tagged;
 }
 
-export async function inboxCounts(userId: string) {
+export async function inboxCounts(user: Pick<SessionUser, "id" | "role">) {
+  const userId = user.id;
   const [results, abnormal, notes, cosign, imports, orders] = await Promise.all([
     db.diagnosticReport.count({ where: resultsWhere(userId) }),
     db.diagnosticReport.count({ where: { ...resultsWhere(userId), observations: { some: { flag: { in: ["L", "H", "LL", "HH", "A"] } } } } }),
@@ -35,5 +55,7 @@ export async function inboxCounts(userId: string) {
     db.importJob.count({ where: { status: { in: ["needs_review", "failed"] } } }),
     db.serviceRequest.groupBy({ by: ["patientId"], where: { orderedById: userId, status: "pending" } }),
   ]);
-  return { abnormal, normal: results - abnormal, notes, cosign, imports, orders: orders.length, total: results + notes + cosign + imports + orders.length };
+  const raw: Record<InboxFolder, number> = { abnormal, normal: results - abnormal, notes, cosign, imports, orders: orders.length };
+  const counts = Object.fromEntries(Object.entries(raw).map(([k, n]) => [k, inboxFolderAllowed(user.role, k as InboxFolder) ? n : 0])) as Record<InboxFolder, number>;
+  return { ...counts, total: Object.values(counts).reduce((a, b) => a + b, 0) };
 }

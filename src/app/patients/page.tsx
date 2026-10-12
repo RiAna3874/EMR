@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { todayRange } from "@/lib/queries";
-import { currentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { can, isProvider } from "@/lib/roles";
 import { age, fmtDob, fmtTime, fullName, sexShort } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,11 @@ export default async function PatientLists({
   searchParams: Promise<{ list?: string; q?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
-  const list: ListKey = lists.some((l) => l.key === sp.list) ? (sp.list as ListKey) : "today";
+  const currentUser = await requireUser();
+  const clinical = can(currentUser.role, "viewClinical");
+  // "My Patients" is a PCP panel, so only providers have one.
+  const shownLists = lists.filter((l) => l.key !== "mine" || isProvider(currentUser.role));
+  const list: ListKey = shownLists.some((l) => l.key === sp.list) ? (sp.list as ListKey) : "today";
   const sort: SortKey = sp.sort && sp.sort in sorts ? (sp.sort as SortKey) : list === "today" ? "appt" : "name";
   const dir = sp.dir === "desc" ? -1 : 1;
   const q = sp.q?.trim() ?? "";
@@ -98,7 +103,7 @@ export default async function PatientLists({
     <main className="flex h-full">
       <aside className="w-52 shrink-0 border-r border-line bg-panel py-3">
         <h2 className="px-4 pb-2 text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Lists</h2>
-        {lists.map((l) => (
+        {shownLists.map((l) => (
           <Link
             key={l.key}
             href={`/patients?list=${l.key}`}
@@ -135,7 +140,7 @@ export default async function PatientLists({
                 <th className="px-3 py-2 font-medium">{sortHeader("mrn")}</th>
                 <th className="px-3 py-2 font-medium">DOB</th>
                 <th className="px-3 py-2 font-medium">{sortHeader("appt")}</th>
-                <th className="px-3 py-2 font-medium">Top problems</th>
+                {clinical && <th className="px-3 py-2 font-medium">Top problems</th>}
                 <th className="px-3 py-2 font-medium">PCP</th>
                 <th className="px-3 py-2 font-medium">Alerts</th>
               </tr>
@@ -166,9 +171,11 @@ export default async function PatientLists({
                         <span className="text-ink-3">—</span>
                       )}
                     </td>
-                    <td className="max-w-72 truncate px-3 py-2 text-ink-2" title={p.conditions.map((c) => c.display).join("; ")}>
-                      {p.conditions.map((c) => c.display).join("; ")}
-                    </td>
+                    {clinical && (
+                      <td className="max-w-72 truncate px-3 py-2 text-ink-2" title={p.conditions.map((c) => c.display).join("; ")}>
+                        {p.conditions.map((c) => c.display).join("; ")}
+                      </td>
+                    )}
                     <td className="whitespace-nowrap px-3 py-2 text-ink-2">{p.pcp?.name}</td>
                     <td className="space-x-1 whitespace-nowrap px-3 py-2">
                       {p.allergies.length > 0 && (
@@ -179,7 +186,7 @@ export default async function PatientLists({
                       {p.allergyStatus === "not_reviewed" && (
                         <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn">Allergies not reviewed</span>
                       )}
-                      {p._count.observations > 0 && (
+                      {clinical && p._count.observations > 0 && (
                         <Link
                           href={`/patients/${p.id}/results`}
                           className="rounded bg-high-soft px-1.5 py-0.5 text-[11px] font-medium text-high"

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
-import { inboxCounts, inboxResults } from "@/lib/inbox";
+import { requirePermission } from "@/lib/session";
+import { inboxCounts, inboxFolderAllowed, inboxResults } from "@/lib/inbox";
 import { age, fmtDate, fmtDateTime, fmtRange, fmtValue, fullName, isAbnormal, relativeDays, sexShort, unitLabel } from "@/lib/format";
 import { orderableByCode } from "@/lib/orders/catalog";
 import { orderWarnings } from "@/lib/orders/checks";
@@ -33,10 +33,12 @@ type Item = { id: string; href: string; patient: { firstName: string; lastName: 
 
 export default async function Inbox({ searchParams }: { searchParams: Promise<{ folder?: string; item?: string }> }) {
   const sp = await searchParams;
-  const counts = await inboxCounts(currentUser.id);
-  const folder: FolderId = FOLDERS.some((f) => f.id === sp.folder)
+  const currentUser = await requirePermission("useInbox");
+  const counts = await inboxCounts(currentUser);
+  const folders = FOLDERS.filter((f) => inboxFolderAllowed(currentUser.role, f.id));
+  const folder: FolderId = folders.some((f) => f.id === sp.folder)
     ? (sp.folder as FolderId)
-    : (FOLDERS.find((f) => counts[f.id] > 0)?.id ?? "abnormal");
+    : (folders.find((f) => counts[f.id] > 0)?.id ?? folders[0].id);
   const href = (item?: string) => `/inbox?folder=${folder}${item ? `&item=${item}` : ""}`;
 
   let items: Item[] = [];
@@ -241,7 +243,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     <div className="flex h-full">
       <nav className="w-60 shrink-0 border-r border-line bg-panel py-2">
         <h1 className="px-4 pb-2 text-[15px] font-semibold">Inbox</h1>
-        {FOLDERS.map((f) => (
+        {folders.map((f) => (
           <Link
             key={f.id}
             href={`/inbox?folder=${f.id}`}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
 import { age, fmtDate, fmtDateTime, fmtDob, sexShort } from "@/lib/format";
 import { noteTypeLabel } from "@/lib/notes/library";
 import { NoteBody } from "@/components/notes/note-view";
@@ -12,6 +13,7 @@ const signer = (p: { name: string; credentials: string | null }) => `${p.name}${
 // A note as a printable document, with its signatures and addenda.
 export default async function PrintNote({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const { id } = await searchParams;
+  await requirePermission("viewClinical");
   const note = id
     ? await db.note.findUnique({
         where: { id },

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { toUrlDate } from "@/lib/format";
 import { assessDraft, blankRow, DraftSchema, emptyDraft, panelFor } from "@/lib/labs/draft";
 import { labHistory, runExtraction } from "@/lib/labs/jobs";
@@ -19,6 +19,7 @@ const MAX_FILES = 10;
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 
 export async function uploadReport(patientId: string, form: FormData): Promise<{ error: string } | void> {
+  const currentUser = await requirePermission("importReports");
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const sizes: { width: number | null; height: number | null }[] = JSON.parse(String(form.get("sizes") ?? "[]"));
   if (files.length === 0) return { error: "Choose a photo or PDF of the report." };
@@ -63,6 +64,7 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
 }
 
 export async function retryExtraction(patientId: string, jobId: string) {
+  await requirePermission("importReports");
   await db.importJob.update({
     where: { id: jobId, patientId, status: { in: ["failed", "extracting"] } },
     data: { status: "extracting", error: null },
@@ -72,6 +74,7 @@ export async function retryExtraction(patientId: string, jobId: string) {
 }
 
 export async function enterManually(patientId: string, jobId: string) {
+  await requirePermission("importReports");
   await db.importJob.update({
     where: { id: jobId, patientId, status: { in: ["failed", "extracting"] } },
     data: { status: "needs_review", error: null, model: null, draft: json({ ...emptyDraft(), rows: [blankRow("m1")] }) },
@@ -80,11 +83,13 @@ export async function enterManually(patientId: string, jobId: string) {
 }
 
 export async function saveDraft(patientId: string, jobId: string, draftJson: string) {
+  await requirePermission("importReports");
   const draft = DraftSchema.parse(JSON.parse(draftJson));
   await db.importJob.update({ where: { id: jobId, patientId, status: "needs_review" }, data: { draft: json(draft) } });
 }
 
 export async function discardImport(patientId: string, jobId: string) {
+  await requirePermission("importReports");
   await db.importJob.update({
     where: { id: jobId, patientId, status: { in: ["needs_review", "failed", "extracting"] } },
     data: { status: "discarded" },
@@ -96,6 +101,7 @@ export async function discardImport(patientId: string, jobId: string) {
 // Files the verified draft: one DiagnosticReport per panel, one Observation per
 // included row. Every check from the review screen is re-run here first.
 export async function fileImport(patientId: string, jobId: string, draftJson: string): Promise<{ errors: string[] } | void> {
+  const currentUser = await requirePermission("fileImports");
   const parsed = DraftSchema.safeParse(JSON.parse(draftJson));
   if (!parsed.success) return { errors: ["The review form sent something unexpected. Reload and try again."] };
   const draft = parsed.data;

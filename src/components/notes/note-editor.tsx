@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Field, inputCls } from "@/components/form";
 import { chartLinks, noteTypes } from "@/lib/notes/library";
 import { findMarkers, problemBlock, signBlocker, type Phrase } from "@/lib/notes/smarttext";
+import { COSIGNER_REQUIRED } from "@/lib/roles";
 import { SmartEditor, type SmartEditorHandle } from "./smart-editor";
 
 type Ctx = {
@@ -13,6 +14,7 @@ type Ctx = {
   problems: { id: string; display: string; code: string; lastPlan: string | null; lastPlanDate: string | null }[];
   encounters: { id: string; label: string }[];
   cosigners: { id: string; label: string }[];
+  cosignRequired: boolean;
 };
 
 type Initial = { title: string; type: string; body: string; templateId?: string | null; encounterId?: string | null; cosignerId?: string | null };
@@ -62,7 +64,8 @@ export function NoteEditor({
   }, [initial.body]);
 
   function onSign(e: React.MouseEvent) {
-    const blocker = mode === "cosign" && !body.trim() ? null : signBlocker(body);
+    const blocker =
+      mode === "cosign" && !body.trim() ? null : (signBlocker(body) ?? (mode === "note" && ctx.cosignRequired && !cosigner ? COSIGNER_REQUIRED : null));
     if (blocker) {
       e.preventDefault();
       setFlash(blocker);
@@ -160,7 +163,7 @@ export function NoteEditor({
               <label className="ml-2 flex items-center gap-1.5 text-[12px] text-ink-2">
                 Cosigner
                 <select name="cosignerId" value={cosigner} onChange={(e) => setCosigner(e.target.value)} className={`${inputCls} py-0.5`}>
-                  <option value="">None</option>
+                  <option value="">{ctx.cosignRequired ? "Choose (required)" : "None"}</option>
                   {ctx.cosigners.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.label}

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { clinic } from "@/lib/clinic";
 import { age, fmtDate, fmtDateTime, fmtDob, fmtRange, fmtValue, isAbnormal, sexShort, unitLabel } from "@/lib/format";
 import { aboutTest, resultInWords } from "@/lib/labs/plain-language";
@@ -12,6 +12,7 @@ export const dynamic = "force-dynamic";
 // together, as the clinician's copy or as a plain-language letter for the patient.
 export default async function PrintResults({ searchParams }: { searchParams: Promise<{ report?: string | string[]; copy?: string }> }) {
   const sp = await searchParams;
+  const currentUser = await requirePermission("viewClinical");
   const ids = [sp.report ?? []].flat();
   const reports = await db.diagnosticReport.findMany({
     where: { id: { in: ids } },

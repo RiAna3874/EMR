@@ -23,7 +23,44 @@ An outpatient electronic medical record that follows the workflows clinicians kn
 - **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; and an order requisition for active labs, imaging and referrals.
 - **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g h` My Day.
 
-Not built yet: sign-in (every request acts as Dr. Dana Chen) and the Documents tab.
+- **Sign-in and roles**: see below.
+
+Not built yet: the Documents tab.
+
+## Sign-in and roles
+
+Everything except the sign-in page needs a signed-in user. Sessions are a random token in an httpOnly cookie (only its SHA-256 is stored, in the `Session` table); they last a 12-hour shift and end after 2 hours idle or on **Sign out**. Passwords are hashed with scrypt. Five failed attempts lock a username for a minute.
+
+Each role sees and does what fits it. Every server action checks the role itself (`requirePermission` in `src/lib/session.ts`); hiding buttons is only a convenience. The rules live in one table, `src/lib/roles.ts`.
+
+| | Physician | Resident | Nurse | Front desk |
+|---|:-:|:-:|:-:|:-:|
+| Patient lists, schedule, demographics, allergies | ✓ | ✓ | ✓ | ✓ |
+| Clinical chart (results, vitals, notes, orders), printing | ✓ | ✓ | ✓ | |
+| Record vitals, edit allergies | ✓ | ✓ | ✓ | |
+| Edit problems and the medication list | ✓ | ✓ | | |
+| Write and sign notes, addenda, phrases | ✓ | ✓, routed for cosign | ✓ | |
+| Cosign notes | ✓ | | | |
+| Pend orders | ✓ | ✓ | ✓ | |
+| Sign and discontinue orders | ✓ | ✓ | | |
+| Upload and review outside reports | ✓ | ✓ | ✓ | |
+| Verify and file imported results | ✓ | ✓ | | |
+| Acknowledge results (Inbox) | ✓ | ✓ | | |
+
+A resident can't sign a note without choosing an attending to cosign it; the note then waits in that attending's Inbox. Orders a nurse pends show "pended by" on the chart's Orders tab, and the physician or resident who signs them becomes the ordering clinician. Front desk opens a chart to a demographics and appointments view only.
+
+Synthetic accounts (password `meridian` for all):
+
+| Username | Name | Role |
+|---|---|---|
+| `dchen` | Dana Chen, MD | Physician |
+| `ribarra` | Rafael Ibarra, DO | Physician |
+| `hmarsh` | Helena Marsh, MD | Physician (cardiology) |
+| `lbrandt` | Leo Brandt, MD | Resident |
+| `klund` | Kirsten Lund, RN | Nurse |
+| `tmbeki` | Thandi Mbeki | Front desk |
+
+The sign-in page lists them in development. In a production build they are hidden unless `MERIDIAN_DEMO_ACCOUNTS=1`.
 
 ## Lab report import
 
@@ -55,7 +92,7 @@ cp .env.example .env          # edit DATABASE_URL if needed
 npm install
 npx prisma migrate deploy
 npm run db:seed               # 12 synthetic patients with two years of history
-npm run dev                   # http://localhost:3000
+npm run dev                   # http://localhost:3000, sign in as dchen / meridian
 ```
 
 Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic day for whatever day you run it.
@@ -67,7 +104,7 @@ Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic 
 | `npm run dev` | Development server |
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
-| `npm test` | Unit tests for lab import parsing and order safety checks |
+| `npm test` | Unit tests for lab import parsing, order safety checks, roles and password hashing |
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Wipe and reseed synthetic data |
 | `npm run db:reset` | Drop the database, migrate and seed |

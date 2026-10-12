@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { recentAbnormalLabs, todaysSchedule } from "@/lib/queries";
-import { currentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { can, isProvider, roleLabel } from "@/lib/roles";
 import { age, fmtDate, fmtTime, fmtValue, fullName, sexShort, unitLabel } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
@@ -16,16 +17,22 @@ const statusStyles: Record<string, string> = {
   finished: "bg-panel-muted text-ink-3 border-line",
 };
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+  const { denied } = await searchParams;
+  const currentUser = await requireUser();
+  // Front desk gets the schedule; clinical panels need clinical access.
+  const clinical = can(currentUser.role, "viewClinical");
   const [schedule, abnormal, draftNotes, toVerify] = await Promise.all([
     todaysSchedule(),
-    recentAbnormalLabs(30),
+    clinical ? recentAbnormalLabs(30) : [],
     db.note.count({ where: { authorId: currentUser.id, status: "draft" } }),
-    db.importJob.findMany({
-      where: { status: { in: ["needs_review", "failed"] } },
-      orderBy: { createdAt: "asc" },
-      include: { patient: true, createdBy: true, _count: { select: { documents: true } } },
-    }),
+    can(currentUser.role, "importReports")
+      ? db.importJob.findMany({
+          where: { status: { in: ["needs_review", "failed"] } },
+          orderBy: { createdAt: "asc" },
+          include: { patient: true, createdBy: true, _count: { select: { documents: true } } },
+        })
+      : [],
   ]);
   const mine = schedule.filter((e) => e.providerId === currentUser.id);
   const arrived = schedule.filter((e) => e.status === "arrived").length;
@@ -36,16 +43,24 @@ export default async function Home() {
       <div className="mx-auto max-w-7xl p-5">
         <div className="mb-4 flex items-end justify-between">
           <div>
-            <h1 className="text-xl font-semibold">Good {greeting()}, Dr. {currentUser.name.split(" ")[1]}</h1>
+            <h1 className="text-xl font-semibold">
+              Good {greeting()}, {isProvider(currentUser.role) ? `Dr. ${currentUser.name.split(" ").at(-1)}` : currentUser.name.split(" ")[0]}
+            </h1>
             <p className="text-ink-2">{fmtDate(new Date())} · Lakeview Family Medicine</p>
           </div>
         </div>
 
+        {denied && (
+          <p role="alert" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-warn">
+            Your role ({roleLabel[currentUser.role].toLowerCase()}) doesn&apos;t have access to that. Ask a clinician if you need it done.
+          </p>
+        )}
+
         <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Clinic visits today" value={schedule.length} sub={`${mine.length} on your schedule`} />
+          <Stat label="Clinic visits today" value={schedule.length} sub={isProvider(currentUser.role) ? `${mine.length} on your schedule` : "all providers"} />
           <Stat label="Arrived and waiting" value={arrived} sub="checked in" />
-          <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />
-          <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />
+          {clinical && <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />}
+          {can(currentUser.role, "writeNotes") && <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />}
         </div>
 
         {toVerify.length > 0 && (
@@ -69,7 +84,7 @@ export default async function Home() {
         )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-          <Panel title="Today's schedule" className="lg:col-span-3">
+          <Panel title="Today's schedule" className={clinical ? "lg:col-span-3" : "lg:col-span-5"}>
             {schedule.length === 0 ? (
               <Empty>No appointments today.</Empty>
             ) : (
@@ -112,31 +127,33 @@ export default async function Home() {
             )}
           </Panel>
 
-          <Panel title="Abnormal results" className="lg:col-span-2">
-            {abnormal.length === 0 ? (
-              <Empty>Nothing abnormal in the last 30 days.</Empty>
-            ) : (
-              <ul className="max-h-[480px] overflow-y-auto">
-                {abnormal.slice(0, 40).map((o) => (
-                  <li key={o.id} className="border-t border-line first:border-t-0">
-                    <Link
-                      href={`/patients/${o.patientId}/results#${o.code}`}
-                      className="flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-accent-soft/40"
-                    >
-                      <span className="min-w-0 truncate">
-                        <span className="font-medium">{fullName(o.patient)}</span>
-                        <span className="text-ink-3"> · {o.display}</span>
-                      </span>
-                      <span className={`tabular shrink-0 ${flagText(o.flag)}`}>
-                        {fmtValue(o)} {unitLabel(o.unit)}
-                        <FlagBadge flag={o.flag} />
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
+          {clinical && (
+            <Panel title="Abnormal results" className="lg:col-span-2">
+              {abnormal.length === 0 ? (
+                <Empty>Nothing abnormal in the last 30 days.</Empty>
+              ) : (
+                <ul className="max-h-[480px] overflow-y-auto">
+                  {abnormal.slice(0, 40).map((o) => (
+                    <li key={o.id} className="border-t border-line first:border-t-0">
+                      <Link
+                        href={`/patients/${o.patientId}/results#${o.code}`}
+                        className="flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-accent-soft/40"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">{fullName(o.patient)}</span>
+                          <span className="text-ink-3"> · {o.display}</span>
+                        </span>
+                        <span className={`tabular shrink-0 ${flagText(o.flag)}`}>
+                          {fmtValue(o)} {unitLabel(o.unit)}
+                          <FlagBadge flag={o.flag} />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          )}
         </div>
       </div>
     </main>

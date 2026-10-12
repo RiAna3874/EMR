@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { isValidPhraseName, normalizePhraseName } from "@/lib/notes/smarttext";
 
 export async function savePhrase(phraseId: string | null, form: FormData) {
+  const currentUser = await requirePermission("writeNotes");
   const name = normalizePhraseName(String(form.get("name") ?? ""));
   const description = String(form.get("description") ?? "").trim();
   const body = String(form.get("body") ?? "").replace(/\s+$/, "");
@@ -24,6 +25,7 @@ export async function savePhrase(phraseId: string | null, form: FormData) {
 }
 
 export async function deletePhrase(phraseId: string) {
+  const currentUser = await requirePermission("writeNotes");
   await db.smartPhrase.delete({ where: { id: phraseId, ownerId: currentUser.id } });
   revalidatePath("/phrases");
   redirect("/phrases");

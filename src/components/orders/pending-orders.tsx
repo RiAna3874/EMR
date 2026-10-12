@@ -14,6 +14,8 @@ export type PendingRow = {
   indication: string | null;
   sig: string;
   orderSet: string | null;
+  // Set when someone other than the viewer pended it.
+  pendedBy: string | null;
   warnings: OrderWarning[];
 };
 
@@ -26,7 +28,8 @@ export function PendingOrders({
   rows: PendingRow[];
   remove: (id: string) => Promise<void>;
   setPriority: (id: string, form: FormData) => Promise<void>;
-  sign: (form: FormData) => Promise<{ error: string } | void>;
+  // Absent when the user can pend but not sign (nursing).
+  sign?: (form: FormData) => Promise<{ error: string } | void>;
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +55,7 @@ export function PendingOrders({
                   <div className="text-[11.5px] text-ink-3">
                     {r.indication ? `For: ${r.indication}` : "No indication"}
                     {r.orderSet && ` · ${r.orderSet}`}
+                    {r.pendedBy && ` · pended by ${r.pendedBy}`}
                   </div>
                 </div>
                 {r.type !== "medication" && (
@@ -85,7 +89,10 @@ export function PendingOrders({
           ))}
         </ul>
       )}
-      {rows.length > 0 && (
+      {rows.length > 0 && !sign && (
+        <p className="border-t border-line bg-panel-muted p-3 text-[12px] text-ink-2">Pended for a physician or resident to review and sign.</p>
+      )}
+      {rows.length > 0 && sign && (
         <form
           action={(form) =>
             start(async () => {
