@@ -94,6 +94,14 @@ enum ReportSource {
   imported
 }
 
+enum ImportStatus {
+  extracting
+  needs_review
+  failed
+  filed
+  discarded
+}
+
 enum NoteType {
   progress
   history_physical
@@ -118,6 +126,10 @@ model Practitioner {
   encounters       Encounter[]
   prescriptions    MedicationRequest[]
   notes            Note[]
+  verifiedReports  DiagnosticReport[] @relation("VerifiedReports")
+  uploads          DocumentReference[]
+  importJobs       ImportJob[]        @relation("ImportCreatedBy")
+  filedImports     ImportJob[]        @relation("ImportFiledBy")
 }
 
 model Patient {
@@ -143,6 +155,8 @@ model Patient {
   observations Observation[]
   reports      DiagnosticReport[]
   notes        Note[]
+  documents    DocumentReference[]
+  importJobs   ImportJob[]
 
   @@index([lastName, firstName])
 }
@@ -250,6 +264,10 @@ model DiagnosticReport {
   status      ReportStatus
   source      ReportSource @default(ordered)
   verifiedAt  DateTime?
+  verifiedById String?
+  verifiedBy  Practitioner? @relation("VerifiedReports", fields: [verifiedById], references: [id])
+  importJobId String?
+  importJob   ImportJob?   @relation(fields: [importJobId], references: [id])
 
   observations Observation[]
 
@@ -272,4 +290,53 @@ model Note {
   signedAt    DateTime?
 
   @@index([patientId, createdAt])
+}
+
+// An uploaded file (photo, scan or PDF). Bytes live in Postgres for v1; move to
+// object storage when files get large or numerous.
+model DocumentReference {
+  id           String       @id @default(cuid())
+  patientId    String
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  kind         String       @default("lab_report")
+  fileName     String
+  mimeType     String
+  size         Int
+  width        Int?
+  height       Int?
+  data         Bytes
+  uploadedById String
+  uploadedBy   Practitioner @relation(fields: [uploadedById], references: [id])
+  uploadedAt   DateTime     @default(now())
+  importJobId  String?
+  importJob    ImportJob?   @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  position     Int          @default(0) // page order within an import
+
+  @@index([patientId, uploadedAt])
+}
+
+// One lab report import: the uploaded pages, what Claude read from them, and the
+// clinician's reviewed draft. Nothing reaches the chart until it is filed.
+model ImportJob {
+  id          String        @id @default(cuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  status      ImportStatus  @default(extracting)
+  model       String?
+  extraction  Json? // raw model output, kept for audit
+  draft       Json? // the review screen's working copy
+  error       String?
+  createdById String
+  createdBy   Practitioner  @relation("ImportCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  filedAt     DateTime?
+  filedById   String?
+  filedBy     Practitioner? @relation("ImportFiledBy", fields: [filedById], references: [id])
+
+  documents DocumentReference[]
+  reports   DiagnosticReport[]
+
+  @@index([patientId, createdAt])
+  @@index([status])
 }

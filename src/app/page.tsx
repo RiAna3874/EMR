@@ -5,6 +5,7 @@ import { currentUser } from "@/lib/session";
 import { age, fmtDate, fmtTime, fmtValue, fullName, sexShort, unitLabel } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
+import { ImportStatusChip } from "@/components/import/status-chip";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,15 @@ const statusStyles: Record<string, string> = {
 };
 
 export default async function Home() {
-  const [schedule, abnormal, draftNotes] = await Promise.all([
+  const [schedule, abnormal, draftNotes, toVerify] = await Promise.all([
     todaysSchedule(),
     recentAbnormalLabs(30),
     db.note.count({ where: { authorId: currentUser.id, status: "draft" } }),
+    db.importJob.findMany({
+      where: { status: { in: ["needs_review", "failed"] } },
+      orderBy: { createdAt: "asc" },
+      include: { patient: true, createdBy: true, _count: { select: { documents: true } } },
+    }),
   ]);
   const mine = schedule.filter((e) => e.providerId === currentUser.id);
   const arrived = schedule.filter((e) => e.status === "arrived").length;
@@ -41,6 +47,26 @@ export default async function Home() {
           <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />
           <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />
         </div>
+
+        {toVerify.length > 0 && (
+          <Panel title="Imported reports to verify" className="mb-4">
+            <ul>
+              {toVerify.map((j) => (
+                <li key={j.id} className="border-t border-line first:border-t-0">
+                  <Link href={`/patients/${j.patientId}/import/${j.id}`} className="flex items-center gap-3 px-3 py-1.5 hover:bg-accent-soft/40">
+                    <span className="font-medium">{fullName(j.patient)}</span>
+                    <span className="text-ink-3">
+                      {j._count.documents} {j._count.documents === 1 ? "page" : "pages"} uploaded {fmtDate(j.createdAt)} {fmtTime(j.createdAt)} by {j.createdBy.name}
+                    </span>
+                    <span className="ml-auto">
+                      <ImportStatusChip status={j.status} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
           <Panel title="Today's schedule" className="lg:col-span-3">

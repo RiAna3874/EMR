@@ -20,7 +20,7 @@ export default async function ChartLayout({ children, params }: { children: Reac
   });
   if (!patient) notFound();
 
-  const [vitals, abnormal, drafts] = await Promise.all([
+  const [vitals, abnormal, drafts, toVerify] = await Promise.all([
     latestVitals(id),
     db.observation.count({
       where: {
@@ -31,13 +31,14 @@ export default async function ChartLayout({ children, params }: { children: Reac
       },
     }),
     db.note.count({ where: { patientId: id, status: "draft" } }),
+    db.importJob.count({ where: { patientId: id, status: "needs_review" } }),
   ]);
 
   return (
     <div className="flex h-full">
       <PatientRail patient={patient} vitals={vitals} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, notes: drafts }} />
+        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, notes: drafts, import: toVerify }} />
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       </div>
     </div>

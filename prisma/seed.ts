@@ -317,6 +317,8 @@ async function main() {
   await prisma.$transaction([
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
+    prisma.documentReference.deleteMany(),
+    prisma.importJob.deleteMany(),
     prisma.note.deleteMany(),
     prisma.encounter.deleteMany(),
     prisma.medicationRequest.deleteMany(),
