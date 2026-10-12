@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { pivot } from "@/lib/chart";
 import { fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
@@ -23,6 +25,7 @@ const GRAPHS: { title: string; codes: string[]; unit: string; low?: number; high
 
 export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string }> }) {
   const { id } = await params;
+  const currentUser = await requirePermission("viewClinical");
   const graph = (await searchParams).view === "graph";
   const observations = await db.observation.findMany({ where: { patientId: id, category: "vital_signs" } });
   const { times, rows } = pivot(observations);
@@ -32,43 +35,45 @@ export default async function Vitals({ params, searchParams }: { params: Promise
 
   return (
     <div className="space-y-4 p-4">
-      <form action={record} className="rounded-md border border-line bg-panel p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Enter vitals</h2>
-          <span className="text-[11.5px] text-ink-3">Recorded now. Leave any field blank to skip it.</span>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label="BP (mmHg)">
-            <div className="flex items-center gap-1">
-              <input name="sbp" inputMode="numeric" placeholder="120" className={`${inputCls} w-14`} />
-              <span className="text-ink-3">/</span>
-              <input name="dbp" inputMode="numeric" placeholder="80" className={`${inputCls} w-14`} />
-            </div>
-          </Field>
-          <Field label="HR (/min)">
-            <input name="hr" inputMode="numeric" className={`${inputCls} w-16`} />
-          </Field>
-          <Field label="RR (/min)">
-            <input name="rr" inputMode="numeric" className={`${inputCls} w-16`} />
-          </Field>
-          <Field label="Temp (°C)">
-            <input name="temp" inputMode="decimal" className={`${inputCls} w-16`} />
-          </Field>
-          <Field label="SpO₂ (%)">
-            <input name="spo2" inputMode="numeric" className={`${inputCls} w-16`} />
-          </Field>
-          <Field label="Weight (kg)">
-            <input name="weight" inputMode="decimal" className={`${inputCls} w-20`} />
-          </Field>
-          <Field label="Height (cm)">
-            <input name="height" inputMode="decimal" defaultValue={lastHeight ?? ""} className={`${inputCls} w-20`} />
-          </Field>
-          <Field label="Pain (0–10)">
-            <input name="pain" inputMode="numeric" className={`${inputCls} w-16`} />
-          </Field>
-          <Button type="submit">File vitals</Button>
-        </div>
-      </form>
+      {can(currentUser.role, "recordVitals") && (
+        <form action={record} className="rounded-md border border-line bg-panel p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Enter vitals</h2>
+            <span className="text-[11.5px] text-ink-3">Recorded now. Leave any field blank to skip it.</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="BP (mmHg)">
+              <div className="flex items-center gap-1">
+                <input name="sbp" inputMode="numeric" placeholder="120" className={`${inputCls} w-14`} />
+                <span className="text-ink-3">/</span>
+                <input name="dbp" inputMode="numeric" placeholder="80" className={`${inputCls} w-14`} />
+              </div>
+            </Field>
+            <Field label="HR (/min)">
+              <input name="hr" inputMode="numeric" className={`${inputCls} w-16`} />
+            </Field>
+            <Field label="RR (/min)">
+              <input name="rr" inputMode="numeric" className={`${inputCls} w-16`} />
+            </Field>
+            <Field label="Temp (°C)">
+              <input name="temp" inputMode="decimal" className={`${inputCls} w-16`} />
+            </Field>
+            <Field label="SpO₂ (%)">
+              <input name="spo2" inputMode="numeric" className={`${inputCls} w-16`} />
+            </Field>
+            <Field label="Weight (kg)">
+              <input name="weight" inputMode="decimal" className={`${inputCls} w-20`} />
+            </Field>
+            <Field label="Height (cm)">
+              <input name="height" inputMode="decimal" defaultValue={lastHeight ?? ""} className={`${inputCls} w-20`} />
+            </Field>
+            <Field label="Pain (0–10)">
+              <input name="pain" inputMode="numeric" className={`${inputCls} w-16`} />
+            </Field>
+            <Button type="submit">File vitals</Button>
+          </div>
+        </form>
+      )}
 
       <div className="flex overflow-hidden rounded border border-line bg-panel text-[12.5px] w-fit">
         <Link href={`/patients/${id}/vitals`} className={`px-3 py-1 ${!graph ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}>

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { AllergySeverity, AllergyType, Flag } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => {
@@ -19,6 +19,7 @@ function flagFor(value: number, low?: number, high?: number): Flag | null {
 }
 
 export async function recordVitals(patientId: string, form: FormData) {
+  await requirePermission("recordVitals");
   const at = new Date();
   const weight = num(form, "weight");
   const height = num(form, "height");
@@ -62,6 +63,7 @@ export async function recordVitals(patientId: string, form: FormData) {
 }
 
 export async function addAllergy(patientId: string, form: FormData) {
+  await requirePermission("editAllergies");
   const substance = str(form, "substance");
   if (!substance) return;
   await db.$transaction([
@@ -81,6 +83,7 @@ export async function addAllergy(patientId: string, form: FormData) {
 }
 
 export async function removeAllergy(patientId: string, allergyId: string) {
+  await requirePermission("editAllergies");
   await db.allergyIntolerance.delete({ where: { id: allergyId, patientId } });
   const remaining = await db.allergyIntolerance.count({ where: { patientId } });
   if (remaining === 0) await db.patient.update({ where: { id: patientId }, data: { allergyStatus: "not_reviewed" } });
@@ -88,6 +91,7 @@ export async function removeAllergy(patientId: string, allergyId: string) {
 }
 
 export async function markNoKnownAllergies(patientId: string) {
+  await requirePermission("editAllergies");
   const count = await db.allergyIntolerance.count({ where: { patientId } });
   if (count > 0) return;
   await db.patient.update({ where: { id: patientId }, data: { allergyStatus: "no_known_allergies" } });
@@ -95,6 +99,7 @@ export async function markNoKnownAllergies(patientId: string) {
 }
 
 export async function addProblem(patientId: string, form: FormData) {
+  await requirePermission("editProblems");
   const display = str(form, "display");
   if (!display) return;
   const max = await db.condition.aggregate({ where: { patientId, status: "active" }, _max: { priority: true } });
@@ -114,6 +119,7 @@ export async function addProblem(patientId: string, form: FormData) {
 }
 
 export async function resolveProblem(patientId: string, conditionId: string) {
+  await requirePermission("editProblems");
   await db.condition.update({
     where: { id: conditionId, patientId },
     data: { status: "resolved", resolvedAt: new Date() },
@@ -122,21 +128,25 @@ export async function resolveProblem(patientId: string, conditionId: string) {
 }
 
 export async function reactivateProblem(patientId: string, conditionId: string) {
+  await requirePermission("editProblems");
   await db.condition.update({ where: { id: conditionId, patientId }, data: { status: "active", resolvedAt: null } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
 export async function discontinueMed(patientId: string, medId: string) {
+  await requirePermission("editMeds");
   await db.medicationRequest.update({ where: { id: medId, patientId }, data: { status: "discontinued", end: new Date() } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
 export async function holdMed(patientId: string, medId: string, hold: boolean) {
+  await requirePermission("editMeds");
   await db.medicationRequest.update({ where: { id: medId, patientId }, data: { status: hold ? "on_hold" : "active" } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
 export async function addMed(patientId: string, form: FormData) {
+  const currentUser = await requirePermission("editMeds");
   const drug = str(form, "drug");
   if (!drug) return;
   await db.medicationRequest.create({

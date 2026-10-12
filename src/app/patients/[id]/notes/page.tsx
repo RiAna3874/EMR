@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { NoteStatus, NoteType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
 import { editorContext } from "@/lib/notes/server";
 import { blankTemplate, noteTypes, noteTypeShort, templateById, templates } from "@/lib/notes/library";
@@ -39,6 +40,8 @@ export default async function Notes({ params, searchParams }: { params: Promise<
   const { id } = await params;
   const sp = await searchParams;
   const base = `/patients/${id}/notes`;
+  const currentUser = await requirePermission("viewClinical");
+  const canWrite = can(currentUser.role, "writeNotes");
 
   // Filters live in the URL so a filtered list survives opening a note.
   const filters = new URLSearchParams();
@@ -64,7 +67,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
     include: { author: true, _count: { select: { addenda: true } } },
   });
 
-  const creating = sp.new === "1";
+  const creating = sp.new === "1" && canWrite;
   const selectedId = creating ? null : (sp.note ?? notes[0]?.id);
   const selected = selectedId
     ? await db.note.findFirst({
@@ -73,12 +76,13 @@ export default async function Notes({ params, searchParams }: { params: Promise<
       })
     : null;
   const editingDraft = !!selected && selected.status === "draft" && selected.authorId === currentUser.id;
-  const addending = !!selected && sp.addend === "1" && selected.status !== "draft";
-  const cosigning = !!selected && sp.cosign === "1" && selected.status === "pending_cosign" && selected.cosignerId === currentUser.id;
+  const addending = !!selected && canWrite && sp.addend === "1" && selected.status !== "draft";
+  const canCosign = !!selected && can(currentUser.role, "cosignNotes") && selected.status === "pending_cosign" && selected.cosignerId === currentUser.id;
+  const cosigning = canCosign && sp.cosign === "1";
   const template = creating ? (sp.copy ? undefined : templateById(sp.template)) : undefined;
   const copyFrom = creating && sp.copy ? await db.note.findFirst({ where: { id: sp.copy, patientId: id } }) : null;
   const needsEditor = editingDraft || addending || cosigning || !!template || !!copyFrom;
-  const ctx = needsEditor ? await editorContext(id) : null;
+  const ctx = needsEditor ? await editorContext(id, currentUser) : null;
   const todayEncounter = ctx?.encounters.find((e) => new Date(e.start).toDateString() === new Date().toDateString());
 
   let pane: React.ReactNode;
@@ -111,13 +115,12 @@ export default async function Notes({ params, searchParams }: { params: Promise<
       />
     );
   } else if (selected) {
-    const canCosign = selected.status === "pending_cosign" && selected.cosignerId === currentUser.id;
     pane = (
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-panel-muted px-4 py-1.5">
           {canCosign && !cosigning && <ToolbarLink href={withFilters({ note: selected.id, cosign: "1" })} primary>Cosign</ToolbarLink>}
-          {selected.status !== "draft" && !addending && <ToolbarLink href={withFilters({ note: selected.id, addend: "1" })}>Addend</ToolbarLink>}
-          <ToolbarLink href={`${base}?new=1&copy=${selected.id}`}>Copy to new note</ToolbarLink>
+          {canWrite && selected.status !== "draft" && !addending && <ToolbarLink href={withFilters({ note: selected.id, addend: "1" })}>Addend</ToolbarLink>}
+          {canWrite && <ToolbarLink href={`${base}?new=1&copy=${selected.id}`}>Copy to new note</ToolbarLink>}
           <ToolbarLink href={`/print/note?id=${selected.id}`}>Print</ToolbarLink>
           {selected.status === "draft" && <span className="ml-auto text-[12px] text-ink-3">Pended by {selected.author.name}; only the author can edit it.</span>}
         </div>
@@ -157,9 +160,11 @@ export default async function Notes({ params, searchParams }: { params: Promise<
       <aside className="flex w-80 shrink-0 flex-col border-r border-line bg-panel">
         <div className="space-y-2 border-b border-line p-2">
           <div className="flex items-center gap-2">
-            <Link href={`${base}?new=1`} className="whitespace-nowrap rounded bg-accent px-2.5 py-1 text-[12.5px] font-medium text-white hover:bg-accent/90">
-              New note
-            </Link>
+            {canWrite && (
+              <Link href={`${base}?new=1`} className="whitespace-nowrap rounded bg-accent px-2.5 py-1 text-[12.5px] font-medium text-white hover:bg-accent/90">
+                New note
+              </Link>
+            )}
             <form action={base} className="flex min-w-0 flex-1 gap-1">
               {type && <input type="hidden" name="type" value={type} />}
               {sp.status && <input type="hidden" name="status" value={sp.status} />}

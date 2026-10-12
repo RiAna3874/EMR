@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 
 import { ORDERABLES } from "../src/lib/orders/catalog";
+import { hashPassword } from "../src/lib/password";
 
 const prisma = new PrismaClient();
 const orderables = new Map(ORDERABLES.map((o) => [o.code, o]));
@@ -268,13 +269,16 @@ const patients: PatientDef[] = [
   },
 ];
 
+// Synthetic staff. Every account signs in with DEMO_PASSWORD; the sign-in page
+// lists them outside production.
+const DEMO_PASSWORD = "meridian";
 const practitioners = [
-  { id: "prac_chen", name: "Dana Chen", role: "physician" as const, credentials: "MD" },
-  { id: "prac_ibarra", name: "Rafael Ibarra", role: "physician" as const, credentials: "DO" },
-  { id: "prac_brandt", name: "Leo Brandt", role: "resident" as const, credentials: "MD" },
-  { id: "prac_marsh", name: "Helena Marsh", role: "physician" as const, credentials: "MD" },
-  { id: "prac_lund", name: "Kirsten Lund", role: "nurse" as const, credentials: "RN" },
-  { id: "prac_mbeki", name: "Thandi Mbeki", role: "front_desk" as const, credentials: null },
+  { id: "prac_chen", username: "dchen", name: "Dana Chen", role: "physician" as const, credentials: "MD" },
+  { id: "prac_ibarra", username: "ribarra", name: "Rafael Ibarra", role: "physician" as const, credentials: "DO" },
+  { id: "prac_brandt", username: "lbrandt", name: "Leo Brandt", role: "resident" as const, credentials: "MD" },
+  { id: "prac_marsh", username: "hmarsh", name: "Helena Marsh", role: "physician" as const, credentials: "MD" },
+  { id: "prac_lund", username: "klund", name: "Kirsten Lund", role: "nurse" as const, credentials: "RN" },
+  { id: "prac_mbeki", username: "tmbeki", name: "Thandi Mbeki", role: "front_desk" as const, credentials: null },
 ];
 
 // Reference ranges are adult values; LOINC codes are real so filed results line up
@@ -352,7 +356,9 @@ async function main() {
     prisma.practitioner.deleteMany(),
   ]);
 
-  await prisma.practitioner.createMany({ data: practitioners });
+  await prisma.practitioner.createMany({
+    data: await Promise.all(practitioners.map(async (p) => ({ ...p, passwordHash: await hashPassword(DEMO_PASSWORD) }))),
+  });
   const pcps = ["prac_chen", "prac_ibarra"];
 
   for (const [i, p] of patients.entries()) {

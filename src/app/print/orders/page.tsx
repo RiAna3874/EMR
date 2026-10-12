@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { OrderType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { age, fmtDateOnly, fmtDateTime, fmtDob, sexShort } from "@/lib/format";
 import { orderableByCode } from "@/lib/orders/catalog";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
@@ -17,6 +17,7 @@ const sections: { title: string; types: OrderType[] }[] = [
 // A requisition for a patient's active (signed, not yet done) orders.
 export default async function PrintOrders({ searchParams }: { searchParams: Promise<{ patient?: string; order?: string | string[] }> }) {
   const sp = await searchParams;
+  const currentUser = await requirePermission("viewClinical");
   const only = [sp.order ?? []].flat();
   const patient = sp.patient ? await db.patient.findUnique({ where: { id: sp.patient }, include: { pcp: true, allergies: true } }) : null;
   if (!patient) notFound();

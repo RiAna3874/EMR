@@ -27,6 +27,7 @@ export function ReviewEditor({
   patientId,
   jobId,
   readOnly,
+  canFile,
   initialDraft,
   docs,
   patient,
@@ -35,6 +36,8 @@ export function ReviewEditor({
   patientId: string;
   jobId: string;
   readOnly: boolean;
+  // Nurses prepare the review; a physician or resident verifies and files it.
+  canFile: boolean;
   initialDraft: Draft;
   docs: Doc[];
   patient: PatientFacts;
@@ -136,9 +139,13 @@ export function ReviewEditor({
               >
                 Discard
               </Button>
-              <Button onClick={file_} disabled={pending || assessment.blockers.length > 0} className="px-4 disabled:cursor-not-allowed disabled:opacity-50">
-                {pending ? "Filing…" : "Verify & file"}
-              </Button>
+              {canFile ? (
+                <Button onClick={file_} disabled={pending || assessment.blockers.length > 0} className="px-4 disabled:cursor-not-allowed disabled:opacity-50">
+                  {pending ? "Filing…" : "Verify & file"}
+                </Button>
+              ) : (
+                <span className="rounded bg-panel-muted px-2 py-1 text-[12px] text-ink-2">Ready for a physician or resident to verify and file</span>
+              )}
             </div>
             {blockers.length > 0 && (
               <ul className="mt-1.5 flex flex-wrap gap-x-4 text-[12px] text-crit">

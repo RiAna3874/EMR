@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { fmtDateTime, toUrlDate } from "@/lib/format";
 import { DraftSchema, emptyDraft } from "@/lib/labs/draft";
 import { labHistory, STALE_EXTRACTION_MS } from "@/lib/labs/jobs";
@@ -12,6 +14,7 @@ import { JobActions } from "@/components/import/job-actions";
 
 export default async function ImportJobPage({ params }: { params: Promise<{ id: string; jobId: string }> }) {
   const { id, jobId } = await params;
+  const currentUser = await requirePermission("importReports");
   const job = await db.importJob.findUnique({
     where: { id: jobId, patientId: id },
     include: {
@@ -100,6 +103,7 @@ export default async function ImportJobPage({ params }: { params: Promise<{ id: 
         patientId={id}
         jobId={jobId}
         readOnly={job.status === "filed"}
+        canFile={can(currentUser.role, "fileImports")}
         initialDraft={draft}
         docs={docs}
         patient={{ firstName: p.firstName, lastName: p.lastName, dob: toUrlDate(p.dob), sex: p.sex, mrn: p.mrn }}

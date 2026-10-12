@@ -1,5 +1,7 @@
 import type { MedStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { fmtDateOnly } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { Button, Field, inputCls } from "@/components/form";
@@ -12,6 +14,8 @@ const groups: { status: MedStatus[]; title: string }[] = [
 
 export default async function Meds({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const currentUser = await requirePermission("viewClinical");
+  const canEdit = can(currentUser.role, "editMeds");
   const meds = await db.medicationRequest.findMany({
     where: { patientId: id },
     orderBy: [{ drug: "asc" }],
@@ -62,17 +66,17 @@ export default async function Meds({ params }: { params: Promise<{ id: string }>
                         {g.status[0] === "active" ? m.prescriber?.name : fmtDateOnly(m.end)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-1.5 text-right">
-                        {m.status === "active" && (
+                        {canEdit && m.status === "active" && (
                           <form action={holdMed.bind(null, id, m.id, true)} className="inline">
                             <Button variant="ghost">Hold</Button>
                           </form>
                         )}
-                        {m.status === "on_hold" && (
+                        {canEdit && m.status === "on_hold" && (
                           <form action={holdMed.bind(null, id, m.id, false)} className="inline">
                             <Button variant="ghost">Resume</Button>
                           </form>
                         )}
-                        {(m.status === "active" || m.status === "on_hold") && (
+                        {canEdit && (m.status === "active" || m.status === "on_hold") && (
                           <form action={discontinueMed.bind(null, id, m.id)} className="inline">
                             <Button variant="danger">Discontinue</Button>
                           </form>
@@ -87,31 +91,33 @@ export default async function Meds({ params }: { params: Promise<{ id: string }>
         );
       })}
 
-      <form action={addMed.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
-        <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add medication</h2>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label="Medication" className="min-w-64 flex-1">
-            <input name="drug" required placeholder="e.g. Amlodipine 5 mg tablet" className={inputCls} />
-          </Field>
-          <Field label="Dose">
-            <input name="dose" required placeholder="5 mg" className={`${inputCls} w-24`} />
-          </Field>
-          <Field label="Route">
-            <select name="route" className={inputCls} defaultValue="oral">
-              {["oral", "inhaled", "subcutaneous", "intramuscular", "topical", "intravenous", "sublingual"].map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Frequency">
-            <input name="frequency" required placeholder="once daily" className={`${inputCls} w-36`} />
-          </Field>
-          <Field label="Indication">
-            <input name="indication" className={`${inputCls} w-40`} />
-          </Field>
-          <Button type="submit">Add</Button>
-        </div>
-      </form>
+      {canEdit && (
+        <form action={addMed.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
+          <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add medication</h2>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Medication" className="min-w-64 flex-1">
+              <input name="drug" required placeholder="e.g. Amlodipine 5 mg tablet" className={inputCls} />
+            </Field>
+            <Field label="Dose">
+              <input name="dose" required placeholder="5 mg" className={`${inputCls} w-24`} />
+            </Field>
+            <Field label="Route">
+              <select name="route" className={inputCls} defaultValue="oral">
+                {["oral", "inhaled", "subcutaneous", "intramuscular", "topical", "intravenous", "sublingual"].map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Frequency">
+              <input name="frequency" required placeholder="once daily" className={`${inputCls} w-36`} />
+            </Field>
+            <Field label="Indication">
+              <input name="indication" className={`${inputCls} w-40`} />
+            </Field>
+            <Button type="submit">Add</Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

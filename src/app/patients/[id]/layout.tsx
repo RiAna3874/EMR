@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
+import { can, PERMISSIONS, type Permission } from "@/lib/roles";
 import { latestVitals } from "@/lib/chart";
 import { fullName } from "@/lib/format";
 import { PatientRail } from "@/components/chart/patient-rail";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ChartLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const currentUser = await requireUser();
+  const allowed = (Object.keys(PERMISSIONS) as Permission[]).filter((p) => can(currentUser.role, p));
   const patient = await db.patient.findUnique({
     where: { id },
     include: {
@@ -39,9 +42,9 @@ export default async function ChartLayout({ children, params }: { children: Reac
 
   return (
     <div className="flex h-full">
-      <PatientRail patient={patient} vitals={vitals} />
+      <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, notes: drafts, orders: unsignedOrders, import: toVerify }} />
+        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, notes: drafts, orders: unsignedOrders, import: toVerify }} allowed={allowed} />
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       </div>
     </div>

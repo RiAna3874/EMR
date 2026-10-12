@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { fmtDate, fmtDateOnly } from "@/lib/format";
 import { orderableByCode, typeLabels } from "@/lib/orders/catalog";
 import { orderWarnings } from "@/lib/orders/checks";
@@ -13,6 +15,9 @@ import { addOrder, addOrderSet, completeOrder, discontinueOrder, removePendingOr
 
 export default async function Orders({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ add?: string; history?: string }> }) {
   const { id } = await params;
+  const currentUser = await requirePermission("viewClinical");
+  const canPend = can(currentUser.role, "pendOrders");
+  const canSign = can(currentUser.role, "signOrders");
   const sp = await searchParams;
   const [orders, problems, ctx] = await Promise.all([
     db.serviceRequest.findMany({
@@ -40,6 +45,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
       indication: o.indication,
       sig: medSig(o.details),
       orderSet: o.orderSet,
+      pendedBy: o.orderedById === currentUser.id ? null : o.orderedBy.name,
       warnings: def ? orderWarnings(def, others) : [],
     };
   });
@@ -47,14 +53,16 @@ export default async function Orders({ params, searchParams }: { params: Promise
   return (
     <div className="flex flex-col gap-4 p-4 xl:flex-row xl:items-start">
       <div className="min-w-0 flex-1 space-y-4">
-        <OrderComposer
-          key={sp.add ?? ""}
-          ctx={ctx}
-          problems={problems.map((p) => p.display)}
-          initialCode={sp.add}
-          addOrder={addOrder.bind(null, id)}
-          addOrderSet={addOrderSet.bind(null, id)}
-        />
+        {canPend && (
+          <OrderComposer
+            key={sp.add ?? ""}
+            ctx={ctx}
+            problems={problems.map((p) => p.display)}
+            initialCode={sp.add}
+            addOrder={addOrder.bind(null, id)}
+            addOrderSet={addOrderSet.bind(null, id)}
+          />
+        )}
 
         <section className="rounded-md border border-line bg-panel">
           <header className="flex items-center justify-between border-b border-line px-3 py-2">
@@ -65,7 +73,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
               </Link>
             )}
           </header>
-          {active.length === 0 ? <Empty>No active orders.</Empty> : <OrderTable orders={active} patientId={id} showActions />}
+          {active.length === 0 ? <Empty>No active orders.</Empty> : <OrderTable orders={active} patientId={id} showActions={canSign} />}
         </section>
 
         <section className="rounded-md border border-line bg-panel">
@@ -82,12 +90,14 @@ export default async function Orders({ params, searchParams }: { params: Promise
       </div>
 
       <div className="xl:sticky xl:top-4 xl:w-[380px]">
-        <PendingOrders
-          rows={rows}
-          remove={removePendingOrder.bind(null, id)}
-          setPriority={updatePendingOrder.bind(null, id)}
-          sign={signOrders.bind(null, id)}
-        />
+        {canPend && (
+          <PendingOrders
+            rows={rows}
+            remove={removePendingOrder.bind(null, id)}
+            setPriority={updatePendingOrder.bind(null, id)}
+            sign={canSign ? signOrders.bind(null, id) : undefined}
+          />
+        )}
       </div>
     </div>
   );

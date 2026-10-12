@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { needsCosign, type SessionUser } from "@/lib/roles";
 import { smartTextFor } from "@/lib/smart-text";
 import { fmtDate } from "@/lib/format";
 import { systemPhrases } from "./library";
@@ -17,14 +17,14 @@ export async function phrasesFor(userId: string): Promise<Phrase[]> {
 export type EditorProblem = { id: string; display: string; code: string; lastPlan: string | null; lastPlanDate: string | null };
 
 // Everything the note editor needs besides the note itself.
-export async function editorContext(patientId: string) {
+export async function editorContext(patientId: string, currentUser: SessionUser) {
   const [links, phrases, conditions, recent, encounters, cosigners] = await Promise.all([
-    smartTextFor(patientId),
+    smartTextFor(patientId, currentUser),
     phrasesFor(currentUser.id),
     db.condition.findMany({ where: { patientId, status: "active" }, orderBy: { priority: "asc" } }),
     db.note.findMany({ where: { patientId, status: { not: "draft" } }, orderBy: { serviceAt: "desc" }, take: 10, select: { body: true, serviceAt: true } }),
     db.encounter.findMany({ where: { patientId, status: { not: "cancelled" }, start: { lte: new Date(new Date().setHours(24, 0, 0, 0)) } }, orderBy: { start: "desc" }, take: 8 }),
-    db.practitioner.findMany({ where: { role: "physician", id: { not: currentUser.id } }, orderBy: { name: "asc" } }),
+    db.practitioner.findMany({ where: { role: "physician", active: true, id: { not: currentUser.id } }, orderBy: { name: "asc" } }),
   ]);
 
   // Problem-based charting: show what was last written for each problem so it can be carried forward.
@@ -42,6 +42,7 @@ export async function editorContext(patientId: string) {
     problems,
     encounters: encounters.map((e) => ({ id: e.id, label: `${fmtDate(e.start)} · ${e.type === "office" ? "Office visit" : e.type === "telehealth" ? "Telehealth" : "Phone"}${e.reason ? ` · ${e.reason}` : ""}`, start: e.start.toISOString() })),
     cosigners: cosigners.map((p) => ({ id: p.id, label: `${p.name}, ${p.credentials ?? ""}`.replace(/, $/, "") })),
+    cosignRequired: needsCosign(currentUser.role),
   };
 }
 

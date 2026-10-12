@@ -57,3 +57,8 @@ export function subscribeOpenPatients(cb: () => void) {
     window.removeEventListener("storage", cb);
   };
 }
+
+// Charts open for one user shouldn't greet the next one at a shared workstation.
+export function clearOpenPatients() {
+  write([]);
+}

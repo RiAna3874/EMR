@@ -38,7 +38,8 @@ function isTyping(el: EventTarget | null) {
 
 // ⌘K / Ctrl+K: find a patient, jump to a chart activity, or start an order.
 // "g" then a letter jumps directly (g r = Results, g o = Orders, g i = Inbox...).
-export function CommandPalette() {
+// `clinical` false (front desk) limits it to finding patients and their Summary.
+export function CommandPalette({ clinical }: { clinical: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -97,7 +98,7 @@ export function CommandPalette() {
     const needle = q.trim().toLowerCase();
     const match = (c: Command) => !needle || c.label.toLowerCase().includes(needle);
     const chart: Command[] = chartId
-      ? CHART.map((c) => ({
+      ? CHART.filter((c) => clinical || c.slug === "").map((c) => ({
           id: `c:${c.slug}`,
           label: c.label,
           group: "This chart",
@@ -107,11 +108,12 @@ export function CommandPalette() {
       : [];
     const orderQuery = needle.replace(/^order\s+/, "");
     const orders: Command[] =
-      chartId && orderQuery.length >= 2
+      clinical && chartId && orderQuery.length >= 2
         ? searchOrderables(orderQuery, 5).map((o) => ({ id: `o:${o.code}`, label: `Order ${o.display}`, group: "Order", href: `/patients/${chartId}/orders?add=${encodeURIComponent(o.code)}` }))
         : [];
-    return [...chart.filter(match), ...patients, ...orders, ...GLOBAL.filter(match)];
-  }, [q, chartId, patients]);
+    const global = GLOBAL.filter((c) => clinical || (c.id !== "inbox" && c.id !== "phrases"));
+    return [...chart.filter(match), ...patients, ...orders, ...global.filter(match)];
+  }, [q, chartId, patients, clinical]);
 
   function go(c: Command | undefined) {
     if (!c) return;

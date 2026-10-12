@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { latestVitals, pivot } from "@/lib/chart";
 import { age, fmtDate, fmtDob, fmtRange, fmtShortDate, fmtValue, isAbnormal, unitLabel } from "@/lib/format";
-import { currentUser } from "@/lib/session";
+import { displayName, type SessionUser } from "@/lib/roles";
 import { problemBlock } from "@/lib/notes/smarttext";
 
 // Builds the value of each chart link (@VITALS@, @MEDS@, ...) for the note editor.
 // See chartLinks in src/lib/notes/library.ts for the list.
-export async function smartTextFor(patientId: string): Promise<Record<string, string>> {
+export async function smartTextFor(patientId: string, currentUser: SessionUser): Promise<Record<string, string>> {
   const [vitals, meds, conditions, allergies, patient, labs, today] = await Promise.all([
     latestVitals(patientId),
     db.medicationRequest.findMany({ where: { patientId, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
@@ -75,7 +75,7 @@ export async function smartTextFor(patientId: string): Promise<Record<string, st
     PCP: patient.pcp ? `${patient.pcp.name}, ${patient.pcp.credentials ?? ""}`.replace(/, $/, "") : "no PCP on file",
     CC: today?.reason ?? "***",
     TODAY: fmtDate(new Date()),
-    ME: `${currentUser.name}, ${currentUser.credentials}`,
+    ME: displayName(currentUser),
     VITALS: vitalsText,
     MEDS: medsText,
     PROBLEMS: problemsText,

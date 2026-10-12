@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
 import { chartLinks, systemPhrases } from "@/lib/notes/library";
 import { Button, Field, inputCls } from "@/components/form";
 import { Empty } from "@/components/panel";
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 // The clinician's own dot phrases, plus the shared library to copy from.
 export default async function Phrases({ searchParams }: { searchParams: Promise<{ edit?: string; new?: string; copy?: string; error?: string; saved?: string }> }) {
   const sp = await searchParams;
+  const currentUser = await requirePermission("writeNotes");
   const mine = await db.smartPhrase.findMany({ where: { ownerId: currentUser.id }, orderBy: { name: "asc" } });
   const editing = sp.edit ? mine.find((p) => p.id === sp.edit) : undefined;
   const copying = sp.copy ? systemPhrases.find((p) => p.name === sp.copy) : undefined;

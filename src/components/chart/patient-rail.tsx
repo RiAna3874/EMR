@@ -10,7 +10,8 @@ type RailPatient = Patient & {
   encounters: Encounter[];
 };
 
-export function PatientRail({ patient: p, vitals }: { patient: RailPatient; vitals: Observation[] }) {
+// `clinical` false (front desk) keeps demographics, allergies and the next visit only.
+export function PatientRail({ patient: p, vitals, clinical }: { patient: RailPatient; vitals: Observation[]; clinical: boolean }) {
   const base = `/patients/${p.id}`;
   const v = Object.fromEntries(vitals.map((o) => [o.code, o]));
   const bp = v["8480-6"] && v["8462-4"] ? `${v["8480-6"].valueNum}/${v["8462-4"].valueNum}` : null;
@@ -52,7 +53,7 @@ export function PatientRail({ patient: p, vitals }: { patient: RailPatient; vita
         </div>
       </div>
 
-      <RailSection title="Allergies" href={`${base}/allergies`}>
+      <RailSection title="Allergies" href={clinical ? `${base}/allergies` : undefined}>
         {p.allergyStatus === "not_reviewed" ? (
           <div className="rounded bg-warn-soft px-2 py-1 font-medium text-warn">Not reviewed</div>
         ) : p.allergies.length === 0 ? (
@@ -69,46 +70,50 @@ export function PatientRail({ patient: p, vitals }: { patient: RailPatient; vita
         )}
       </RailSection>
 
-      <RailSection title="Active problems" href={`${base}/problems`}>
-        {p.conditions.length === 0 ? (
-          <div className="text-ink-3">None recorded</div>
-        ) : (
-          <ul className="space-y-0.5">
-            {p.conditions.slice(0, 3).map((c) => (
-              <li key={c.id} className="leading-snug">
-                {c.display}
-              </li>
-            ))}
-            {p.conditions.length > 3 && <li className="text-ink-3">+{p.conditions.length - 3} more</li>}
-          </ul>
-        )}
-      </RailSection>
+      {clinical && (
+        <RailSection title="Active problems" href={`${base}/problems`}>
+          {p.conditions.length === 0 ? (
+            <div className="text-ink-3">None recorded</div>
+          ) : (
+            <ul className="space-y-0.5">
+              {p.conditions.slice(0, 3).map((c) => (
+                <li key={c.id} className="leading-snug">
+                  {c.display}
+                </li>
+              ))}
+              {p.conditions.length > 3 && <li className="text-ink-3">+{p.conditions.length - 3} more</li>}
+            </ul>
+          )}
+        </RailSection>
+      )}
 
-      <RailSection title={vitals[0] ? `Last vitals · ${fmtShortDate(vitals[0].effectiveAt)}` : "Last vitals"} href={`${base}/vitals`}>
-        {vitals.length === 0 ? (
-          <div className="text-ink-3">None recorded</div>
-        ) : (
-          <dl className="tabular grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-            {bp && (
-              <>
-                <dt className="text-ink-3">BP</dt>
-                <dd className={flagText(v["8480-6"]?.flag === "N" ? v["8462-4"]?.flag : v["8480-6"]?.flag)}>{bp}</dd>
-              </>
-            )}
-            {[
-              ["8867-4", "HR"],
-              ["59408-5", "SpO₂"],
-              ["8310-5", "Temp"],
-              ["29463-7", "Wt"],
-              ["39156-5", "BMI"],
-            ].map(([code, label]) =>
-              v[code] ? (
-                <RailVital key={code} label={label} o={v[code]} />
-              ) : null,
-            )}
-          </dl>
-        )}
-      </RailSection>
+      {clinical && (
+        <RailSection title={vitals[0] ? `Last vitals · ${fmtShortDate(vitals[0].effectiveAt)}` : "Last vitals"} href={`${base}/vitals`}>
+          {vitals.length === 0 ? (
+            <div className="text-ink-3">None recorded</div>
+          ) : (
+            <dl className="tabular grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {bp && (
+                <>
+                  <dt className="text-ink-3">BP</dt>
+                  <dd className={flagText(v["8480-6"]?.flag === "N" ? v["8462-4"]?.flag : v["8480-6"]?.flag)}>{bp}</dd>
+                </>
+              )}
+              {[
+                ["8867-4", "HR"],
+                ["59408-5", "SpO₂"],
+                ["8310-5", "Temp"],
+                ["29463-7", "Wt"],
+                ["39156-5", "BMI"],
+              ].map(([code, label]) =>
+                v[code] ? (
+                  <RailVital key={code} label={label} o={v[code]} />
+                ) : null,
+              )}
+            </dl>
+          )}
+        </RailSection>
+      )}
 
       <RailSection title="Next appointment">
         {next ? (

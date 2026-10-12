@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { pivot } from "@/lib/chart";
 import { fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
@@ -19,6 +21,7 @@ export default async function Results({
   searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string }>;
 }) {
   const { id } = await params;
+  const currentUser = await requirePermission("viewClinical");
   const sp = await searchParams;
   const base = `/patients/${id}/results`;
   const reports = await db.diagnosticReport.findMany({
@@ -60,7 +63,7 @@ export default async function Results({
       ) : view === "graph" ? (
         <GraphView reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
-        <ReportView reports={reports} selected={sp.report} base={base} />
+        <ReportView reports={reports} selected={sp.report} base={base} canReview={can(currentUser.role, "reviewResults")} />
       )}
     </div>
   );
@@ -163,7 +166,7 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
   );
 }
 
-function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; selected?: string; base: string }) {
+function ReportView({ reports, selected, base, canReview }: { reports: ReportWithObs[]; selected?: string; base: string; canReview: boolean }) {
   const current = reports.find((r) => r.id === selected) ?? reports[0];
   return (
     <div className="flex gap-3">
@@ -227,7 +230,7 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
               </dd>
             </div>
           </dl>
-          <ReviewLine report={current} next={`${base}?view=reports&report=${current.id}`} />
+          <ReviewLine report={current} next={`${base}?view=reports&report=${current.id}`} canReview={canReview} />
           {current.source === "imported" && (
             <p className="mt-2 text-[12px] text-ink-3">
               Transcribed from an outside report
@@ -313,7 +316,7 @@ function printQuery(reports: ReportWithObs[], current: ReportWithObs) {
   return together.map((r) => `report=${r.id}`).join("&");
 }
 
-function ReviewLine({ report, next }: { report: ReportWithObs; next: string }) {
+function ReviewLine({ report, next, canReview }: { report: ReportWithObs; next: string; canReview: boolean }) {
   if (report.reviewedAt) {
     return (
       <p className="mt-2 text-[12px] text-ink-3">
@@ -322,6 +325,7 @@ function ReviewLine({ report, next }: { report: ReportWithObs; next: string }) {
       </p>
     );
   }
+  if (!canReview) return <p className="mt-2 text-[12px] text-warn">Not yet acknowledged by a clinician.</p>;
   return (
     <form action={acknowledgeResult.bind(null, report.id, next)} className="mt-2 flex items-center gap-2 text-[12px]">
       <span className="rounded bg-warn-soft px-1.5 py-0.5 font-semibold text-warn">Not yet acknowledged</span>

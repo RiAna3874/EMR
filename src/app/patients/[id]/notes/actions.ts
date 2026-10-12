@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { NoteType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/session";
+import { requirePermission } from "@/lib/session";
+import { COSIGNER_REQUIRED, needsCosign } from "@/lib/roles";
 import { noteTypes, templateById } from "@/lib/notes/library";
 import { signBlocker } from "@/lib/notes/smarttext";
 
@@ -15,15 +16,19 @@ const notesPath = (patientId: string, query = "") => `/patients/${patientId}/not
 // signing. Signing is refused while blanks or pick lists remain; the work is
 // pended instead so nothing typed is lost.
 export async function saveNote(patientId: string, noteId: string | null, form: FormData) {
+  const currentUser = await requirePermission("writeNotes");
   const wantsSign = form.get("intent") === "sign";
   const body = String(form.get("body") ?? "");
-  const blocker = wantsSign ? signBlocker(body) : null;
-  const sign = wantsSign && !blocker;
   const typeInput = str(form, "type");
   const type = (noteTypes.some((t) => t.id === typeInput) ? typeInput : "progress") as NoteType;
   const encounterId = str(form, "encounterId") || null;
+  // Only attendings can be cosigners; a resident must pick one before signing.
   const cosignerInput = str(form, "cosignerId");
-  const cosignerId = cosignerInput && cosignerInput !== currentUser.id ? cosignerInput : null;
+  const cosigner =
+    cosignerInput && cosignerInput !== currentUser.id ? await db.practitioner.findFirst({ where: { id: cosignerInput, role: "physician", active: true } }) : null;
+  const cosignerId = cosigner?.id ?? null;
+  const blocker = wantsSign ? (signBlocker(body) ?? (needsCosign(currentUser.role) && !cosignerId ? COSIGNER_REQUIRED : null)) : null;
+  const sign = wantsSign && !blocker;
   const encounter = encounterId ? await db.encounter.findFirst({ where: { id: encounterId, patientId } }) : null;
   const templateId = str(form, "templateId");
 
@@ -50,13 +55,15 @@ export async function saveNote(patientId: string, noteId: string | null, form: F
 }
 
 export async function deleteDraft(patientId: string, noteId: string) {
+  const currentUser = await requirePermission("writeNotes");
   await db.note.delete({ where: { id: noteId, patientId, status: "draft", authorId: currentUser.id } });
   revalidatePath(`/patients/${patientId}`, "layout");
   redirect(notesPath(patientId));
 }
 
-// Anyone can addend a signed note; the original text never changes.
+// Anyone who writes notes can addend a signed note; the original text never changes.
 export async function addAddendum(patientId: string, noteId: string, form: FormData) {
+  const currentUser = await requirePermission("writeNotes");
   const body = String(form.get("body") ?? "");
   const blocker = signBlocker(body);
   if (blocker) redirect(notesPath(patientId, `note=${noteId}&addend=1&error=${encodeURIComponent(blocker)}`));
@@ -71,6 +78,7 @@ export async function addAddendum(patientId: string, noteId: string, form: FormD
 
 // The supervising clinician's signature, with an optional attestation.
 export async function cosignNote(patientId: string, noteId: string, next: string | null, form: FormData) {
+  const currentUser = await requirePermission("cosignNotes");
   const text = String(form.get("body") ?? "").trim();
   if (text) {
     const blocker = signBlocker(text);

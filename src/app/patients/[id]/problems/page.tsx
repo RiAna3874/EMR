@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { fmtDateOnly } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { Button, Field, inputCls } from "@/components/form";
@@ -6,6 +8,8 @@ import { addProblem, reactivateProblem, resolveProblem } from "../actions";
 
 export default async function Problems({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const currentUser = await requirePermission("viewClinical");
+  const canEdit = can(currentUser.role, "editProblems");
   const conditions = await db.condition.findMany({ where: { patientId: id }, orderBy: [{ priority: "asc" }] });
   const active = conditions.filter((c) => c.status === "active");
   const resolved = conditions.filter((c) => c.status === "resolved");
@@ -42,9 +46,11 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
                   <td className="px-3 py-1.5 font-mono text-[12px]">{c.code}</td>
                   <td className="tabular px-3 py-1.5 text-ink-2">{fmtDateOnly(c.onset)}</td>
                   <td className="px-3 py-1.5 text-right">
-                    <form action={resolveProblem.bind(null, id, c.id)}>
-                      <Button variant="ghost">Resolve</Button>
-                    </form>
+                    {canEdit && (
+                      <form action={resolveProblem.bind(null, id, c.id)}>
+                        <Button variant="ghost">Resolve</Button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -53,24 +59,26 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
         )}
       </section>
 
-      <form action={addProblem.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
-        <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add problem</h2>
-        <div className="flex flex-wrap items-end gap-2">
-          <Field label="Problem" className="min-w-64 flex-1">
-            <input name="display" required placeholder="e.g. Essential hypertension" className={inputCls} />
-          </Field>
-          <Field label="ICD-10">
-            <input name="code" placeholder="I10" className={`${inputCls} w-24 font-mono`} />
-          </Field>
-          <Field label="Onset">
-            <input name="onset" type="date" className={inputCls} />
-          </Field>
-          <Field label="Comment">
-            <input name="comment" className={`${inputCls} w-56`} />
-          </Field>
-          <Button type="submit">Add</Button>
-        </div>
-      </form>
+      {canEdit && (
+        <form action={addProblem.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
+          <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add problem</h2>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Problem" className="min-w-64 flex-1">
+              <input name="display" required placeholder="e.g. Essential hypertension" className={inputCls} />
+            </Field>
+            <Field label="ICD-10">
+              <input name="code" placeholder="I10" className={`${inputCls} w-24 font-mono`} />
+            </Field>
+            <Field label="Onset">
+              <input name="onset" type="date" className={inputCls} />
+            </Field>
+            <Field label="Comment">
+              <input name="comment" className={`${inputCls} w-56`} />
+            </Field>
+            <Button type="submit">Add</Button>
+          </div>
+        </form>
+      )}
 
       <section className="rounded-md border border-line bg-panel">
         <header className="border-b border-line px-3 py-2">
@@ -91,9 +99,11 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
                     {fmtDateOnly(c.onset)} – {fmtDateOnly(c.resolvedAt)}
                   </td>
                   <td className="px-3 py-1.5 text-right">
-                    <form action={reactivateProblem.bind(null, id, c.id)}>
-                      <Button variant="ghost">Reactivate</Button>
-                    </form>
+                    {canEdit && (
+                      <form action={reactivateProblem.bind(null, id, c.id)}>
+                        <Button variant="ghost">Reactivate</Button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}

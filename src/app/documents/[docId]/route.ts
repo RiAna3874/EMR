@@ -1,8 +1,12 @@
 import { db } from "@/lib/db";
+import { getCurrentUser } from "@/lib/session";
+import { can } from "@/lib/roles";
 
-// Serves an uploaded document's bytes. There is no sign-in yet, so this is as open
-// as the rest of the app; it must sit behind auth once that exists.
+// Serves an uploaded document's bytes to clinical staff.
 export async function GET(_req: Request, { params }: { params: Promise<{ docId: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return new Response("Not signed in", { status: 401 });
+  if (!can(user.role, "viewClinical")) return new Response("Forbidden", { status: 403 });
   const { docId } = await params;
   const doc = await db.documentReference.findUnique({ where: { id: docId } });
   if (!doc) return new Response("Not found", { status: 404 });

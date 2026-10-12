@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requirePermission } from "@/lib/session";
 import { fmtDateTime } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { UploadForm } from "@/components/import/upload-form";
@@ -7,6 +8,7 @@ import { ImportStatusChip } from "@/components/import/status-chip";
 
 export default async function ImportReport({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await requirePermission("importReports");
   const jobs = await db.importJob.findMany({
     where: { patientId: id },
     orderBy: { createdAt: "desc" },

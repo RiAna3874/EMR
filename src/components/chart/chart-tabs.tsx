@@ -5,19 +5,22 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { touchOpenPatient } from "@/lib/open-patients";
 
-export const chartTabs = [
+import type { Permission } from "@/lib/roles";
+
+// `needs` is the permission a tab's page checks; tabs the user lacks it for are hidden.
+export const chartTabs: { slug: string; label: string; needs?: Permission }[] = [
   { slug: "", label: "Summary" },
-  { slug: "results", label: "Results" },
-  { slug: "vitals", label: "Vitals" },
-  { slug: "meds", label: "Medications" },
-  { slug: "problems", label: "Problems" },
-  { slug: "allergies", label: "Allergies" },
-  { slug: "notes", label: "Notes" },
-  { slug: "orders", label: "Orders" },
-  { slug: "import", label: "Import Report" },
+  { slug: "results", label: "Results", needs: "viewClinical" },
+  { slug: "vitals", label: "Vitals", needs: "viewClinical" },
+  { slug: "meds", label: "Medications", needs: "viewClinical" },
+  { slug: "problems", label: "Problems", needs: "viewClinical" },
+  { slug: "allergies", label: "Allergies", needs: "viewClinical" },
+  { slug: "notes", label: "Notes", needs: "viewClinical" },
+  { slug: "orders", label: "Orders", needs: "viewClinical" },
+  { slug: "import", label: "Import Report", needs: "importReports" },
 ];
 
-export function ChartTabs({ patientId, label, counts }: { patientId: string; label: string; counts: Record<string, number> }) {
+export function ChartTabs({ patientId, label, counts, allowed }: { patientId: string; label: string; counts: Record<string, number>; allowed: Permission[] }) {
   const pathname = usePathname();
   const base = `/patients/${patientId}`;
 
@@ -28,7 +31,7 @@ export function ChartTabs({ patientId, label, counts }: { patientId: string; lab
 
   return (
     <nav className="flex shrink-0 gap-0.5 border-b border-line bg-panel px-3">
-      {chartTabs.map((t) => {
+      {chartTabs.filter((t) => !t.needs || allowed.includes(t.needs)).map((t) => {
         const href = t.slug ? `${base}/${t.slug}` : base;
         const active = t.slug ? pathname.startsWith(href) : pathname === base;
         const count = counts[t.slug];
