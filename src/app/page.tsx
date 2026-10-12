@@ -1,103 +1,133 @@
-import Image from "next/image";
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { recentAbnormalLabs, todaysSchedule } from "@/lib/queries";
+import { currentUser } from "@/lib/session";
+import { age, fmtDate, fmtTime, fmtValue, fullName, sexShort, unitLabel } from "@/lib/format";
+import { Empty, Panel } from "@/components/panel";
+import { FlagBadge, flagText } from "@/components/flag";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+const statusStyles: Record<string, string> = {
+  planned: "bg-panel-muted text-ink-2 border-line",
+  arrived: "bg-accent-soft text-accent border-accent/30",
+  in_progress: "bg-warn-soft text-warn border-warn/30",
+  finished: "bg-panel-muted text-ink-3 border-line",
+};
+
+export default async function Home() {
+  const [schedule, abnormal, draftNotes] = await Promise.all([
+    todaysSchedule(),
+    recentAbnormalLabs(30),
+    db.note.count({ where: { authorId: currentUser.id, status: "draft" } }),
+  ]);
+  const mine = schedule.filter((e) => e.providerId === currentUser.id);
+  const arrived = schedule.filter((e) => e.status === "arrived").length;
+  const abnormalPatients = new Set(abnormal.map((o) => o.patientId)).size;
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-7xl p-5">
+        <div className="mb-4 flex items-end justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">Good {greeting()}, Dr. {currentUser.name.split(" ")[1]}</h1>
+            <p className="text-ink-2">{fmtDate(new Date())} · Lakeview Family Medicine</p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Stat label="Clinic visits today" value={schedule.length} sub={`${mine.length} on your schedule`} />
+          <Stat label="Arrived and waiting" value={arrived} sub="checked in" />
+          <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />
+          <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <Panel title="Today's schedule" className="lg:col-span-3">
+            {schedule.length === 0 ? (
+              <Empty>No appointments today.</Empty>
+            ) : (
+              <table className="w-full">
+                <thead className="text-left text-[11.5px] text-ink-3">
+                  <tr>
+                    <th className="px-3 py-1.5 font-medium">Time</th>
+                    <th className="px-3 py-1.5 font-medium">Patient</th>
+                    <th className="px-3 py-1.5 font-medium">Reason</th>
+                    <th className="px-3 py-1.5 font-medium">Provider</th>
+                    <th className="px-3 py-1.5 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.map((e) => (
+                    <tr key={e.id} className="border-t border-line hover:bg-accent-soft/40">
+                      <td className="tabular whitespace-nowrap px-3 py-2 text-ink-2">{fmtTime(e.start)}</td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        <Link href={`/patients/${e.patientId}`} className="font-medium text-ink hover:text-accent">
+                          {fullName(e.patient)}
+                        </Link>
+                        <span className="ml-2 text-ink-3">
+                          {age(e.patient.dob)} {sexShort(e.patient.sex)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {e.reason}
+                        {e.type !== "office" && <span className="ml-1.5 text-[11px] text-ink-3">({e.type})</span>}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.provider?.name}</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded border px-1.5 py-0.5 text-[11px] capitalize ${statusStyles[e.status] ?? ""}`}>
+                          {e.status.replace("_", " ")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Panel>
+
+          <Panel title="Abnormal results" className="lg:col-span-2">
+            {abnormal.length === 0 ? (
+              <Empty>Nothing abnormal in the last 30 days.</Empty>
+            ) : (
+              <ul className="max-h-[480px] overflow-y-auto">
+                {abnormal.slice(0, 40).map((o) => (
+                  <li key={o.id} className="border-t border-line first:border-t-0">
+                    <Link
+                      href={`/patients/${o.patientId}/results#${o.code}`}
+                      className="flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-accent-soft/40"
+                    >
+                      <span className="min-w-0 truncate">
+                        <span className="font-medium">{fullName(o.patient)}</span>
+                        <span className="text-ink-3"> · {o.display}</span>
+                      </span>
+                      <span className={`tabular shrink-0 ${flagText(o.flag)}`}>
+                        {fmtValue(o)} {unitLabel(o.unit)}
+                        <FlagBadge flag={o.flag} />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
+}
+
+function Stat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone?: "high" }) {
+  return (
+    <div className="rounded-md border border-line bg-panel px-4 py-3">
+      <div className="text-[11.5px] font-medium uppercase tracking-wide text-ink-3">{label}</div>
+      <div className={`tabular mt-1 text-2xl font-semibold ${tone === "high" && value > 0 ? "text-high" : ""}`}>{value}</div>
+      <div className="text-[12px] text-ink-2">{sub}</div>
     </div>
   );
 }
