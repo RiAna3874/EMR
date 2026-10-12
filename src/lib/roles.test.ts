@@ -30,3 +30,12 @@ test("residents otherwise act as prescribers", () => {
     assert.equal(can("resident", p), true, p);
   }
 });
+
+test("the clinic day splits by role", () => {
+  for (const r of ["physician", "resident", "nurse", "front_desk"] as const) assert.equal(can(r, "bookAppointments"), true, r);
+  assert.equal(can("front_desk", "checkIn"), true);
+  assert.equal(can("front_desk", "roomPatients"), false);
+  assert.equal(can("nurse", "roomPatients"), true);
+  assert.equal(can("nurse", "seePatients"), false);
+  assert.equal(can("physician", "checkIn"), false);
+});

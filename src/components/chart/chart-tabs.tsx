@@ -18,6 +18,7 @@ export const chartTabs: { slug: string; label: string; needs?: Permission }[] = 
   { slug: "notes", label: "Notes", needs: "viewClinical" },
   { slug: "orders", label: "Orders", needs: "viewClinical" },
   { slug: "import", label: "Import Report", needs: "importReports" },
+  { slug: "appointments", label: "Appointments" },
 ];
 
 export function ChartTabs({ patientId, label, counts, allowed }: { patientId: string; label: string; counts: Record<string, number>; allowed: Permission[] }) {

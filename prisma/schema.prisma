@@ -37,11 +37,17 @@ enum EncounterType {
   phone
 }
 
+// The appointment's place in the clinic day: scheduled, checked in at the front
+// desk, roomed by a nurse, with the provider, visit done, checked out. See
+// src/lib/scheduling/workflow.ts for the allowed transitions.
 enum EncounterStatus {
   planned
   arrived
+  roomed
   in_progress
   finished
+  checked_out
+  no_show
   cancelled
 }
 
@@ -167,6 +173,9 @@ model Practitioner {
   filedImports     ImportJob[]        @relation("ImportFiledBy")
   reviewedReports  DiagnosticReport[] @relation("ReviewedReports")
   orders           ServiceRequest[]
+  scheduleSessions ScheduleSession[]
+  scheduleBlocks   ScheduleBlock[]    @relation("BlockProvider")
+  encounterEvents  EncounterEvent[]
 }
 
 // A signed-in browser. The cookie holds a random token; only its SHA-256 is stored.
@@ -195,6 +204,9 @@ model Patient {
   allergyStatus AllergyReviewStatus @default(not_reviewed)
   pcpId         String?
   pcp           Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
+  // Confirmed or updated by the front desk at check-in.
+  insurancePayer    String?
+  insuranceMemberId String?
   createdAt     DateTime            @default(now())
 
   encounters   Encounter[]
@@ -223,11 +235,71 @@ model Encounter {
   providerId String?
   provider   Practitioner?   @relation(fields: [providerId], references: [id])
 
+  // Scheduling. An appointment is an Encounter from booking on (FHIR keeps
+  // Appointment separate; one row is enough for an outpatient clinic).
+  visitType      String    @default("follow_up") // src/lib/scheduling/visit-types.ts
+  bookingNote    String?
+  statusAt       DateTime? // when the current status began, for wait timers
+  arrivedAt      DateTime?
+  room           String?
+  chiefComplaint String?
+  allergiesReviewedAt DateTime?
+  medsReviewedAt DateTime?
+  copayCents     Int?
+  copayMethod    String? // cash, card, waived
+  cancelReason   String?
+  // A rescheduled appointment is cancelled and points at its replacement.
+  rescheduledToId String?    @unique
+  rescheduledTo   Encounter? @relation("Reschedule", fields: [rescheduledToId], references: [id])
+  rescheduledFrom Encounter? @relation("Reschedule")
+
   observations Observation[]
   notes        Note[]
+  events       EncounterEvent[]
 
   @@index([patientId, start])
   @@index([start])
+  @@index([providerId, start])
+}
+
+// Who did what to an appointment, and when: booked, checked in, roomed, cancelled...
+model EncounterEvent {
+  id          String       @id @default(cuid())
+  encounterId String
+  encounter   Encounter    @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  action      String // see eventLabel in src/lib/scheduling/workflow.ts
+  detail      String?
+  at          DateTime     @default(now())
+  byId        String
+  by          Practitioner @relation(fields: [byId], references: [id])
+
+  @@index([encounterId, at])
+}
+
+// A provider's recurring clinic session, e.g. Mondays 08:00-12:00 in 20-minute slots.
+model ScheduleSession {
+  id             String       @id @default(cuid())
+  practitionerId String
+  practitioner   Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  weekday        Int // 0 = Sunday
+  startMin       Int // minutes after midnight
+  endMin         Int
+  slotMinutes    Int          @default(20)
+
+  @@index([practitionerId, weekday])
+}
+
+// Time taken off a provider's schedule: vacation, meetings, admin time.
+model ScheduleBlock {
+  id             String       @id @default(cuid())
+  practitionerId String
+  practitioner   Practitioner @relation("BlockProvider", fields: [practitionerId], references: [id], onDelete: Cascade)
+  start          DateTime
+  end            DateTime
+  reason         String
+  createdAt      DateTime     @default(now())
+
+  @@index([practitionerId, start])
 }
 
 model Condition {
