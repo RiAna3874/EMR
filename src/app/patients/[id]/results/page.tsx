@@ -21,7 +21,7 @@ export default async function Results({
   const reports = await db.diagnosticReport.findMany({
     where: { patientId: id },
     orderBy: { effectiveAt: "desc" },
-    include: { observations: { orderBy: { sortOrder: "asc" } } },
+    include: { observations: { orderBy: { sortOrder: "asc" } }, verifiedBy: true },
   });
   const view = sp.view === "reports" ? "reports" : "grid";
 
@@ -55,7 +55,7 @@ export default async function Results({
   );
 }
 
-type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ include: { observations: true } }>>>[number];
+type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ include: { observations: true; verifiedBy: true } }>>>[number];
 
 function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }) {
   // One section per panel type, newest results on the left.
@@ -70,6 +70,7 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
         const obs = group.flatMap((r) => r.observations);
         const { rows } = pivot(obs);
         const reportAt = new Map(group.map((r) => [r.effectiveAt.getTime(), r.id]));
+        const imported = new Set(group.filter((r) => r.source === "imported").map((r) => r.effectiveAt.getTime()));
         return (
           <section key={group[0].code} className="overflow-x-auto rounded-md border border-line bg-panel">
             <table className="w-full min-w-[860px] table-fixed">
@@ -89,6 +90,7 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
                     <th key={t} className="tabular px-3 py-2 text-right font-medium">
                       {reportAt.has(t) ? (
                         <Link href={`${base}?view=reports&report=${reportAt.get(t)}`} className="hover:text-accent">
+                          {imported.has(t) && <ImportedMark />}
                           {fmtShortDate(new Date(t))}
                           <div className="font-normal">{fmtTime(new Date(t))}</div>
                         </Link>
@@ -158,7 +160,10 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
                 className={`block border-l-[3px] px-3 py-2 ${r.id === current.id ? "border-accent bg-accent-soft" : "border-transparent hover:bg-panel-muted"}`}
               >
                 <div className="flex justify-between gap-2">
-                  <span className="font-medium">{r.display}</span>
+                  <span className="font-medium">
+                    {r.source === "imported" && <ImportedMark />}
+                    {r.display}
+                  </span>
                   {abnormal > 0 && <span className="shrink-0 text-[11px] font-semibold text-high">{abnormal} abn</span>}
                 </div>
                 <div className="tabular text-ink-3">{fmtDateTime(r.effectiveAt)}</div>
@@ -192,6 +197,23 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
               </dd>
             </div>
           </dl>
+          {current.source === "imported" && (
+            <p className="mt-2 text-[12px] text-ink-3">
+              Transcribed from an outside report
+              {current.verifiedBy && current.verifiedAt && (
+                <>
+                  {" "}
+                  and verified by {current.verifiedBy.name} on {fmtDateTime(current.verifiedAt)}
+                </>
+              )}
+              .
+              {current.importJobId && (
+                <Link href={`/patients/${current.patientId}/import/${current.importJobId}`} className="ml-2 font-medium text-accent hover:underline">
+                  View source document →
+                </Link>
+              )}
+            </p>
+          )}
         </header>
         <table className="w-full">
           <thead className="text-left text-[11.5px] text-ink-3">
@@ -224,6 +246,14 @@ function ReportView({ reports, selected, base }: { reports: ReportWithObs[]; sel
   );
 }
 
+function ImportedMark() {
+  return (
+    <span title="Imported from an outside report" className="mr-1 inline-block rounded bg-low-soft px-1 align-[1px] text-[9.5px] font-bold leading-[14px] text-low">
+      IMP
+    </span>
+  );
+}
+
 function Legend() {
   return (
     <div className="ml-auto flex items-center gap-3 text-[11.5px] text-ink-3">
@@ -235,6 +265,10 @@ function Legend() {
       </span>
       <span>
         <FlagBadge flag="HH" /> Critical
+      </span>
+      <span>
+        <ImportedMark />
+        Imported
       </span>
     </div>
   );

@@ -55,6 +55,12 @@ export function fmtRange(o: { refLow: number | null; refHigh: number | null; ref
 // UCUM codes are precise but not friendly; show common ones the way clinicians write them.
 const unitLabels: Record<string, string> = {
   "10*3/uL": "K/µL",
+  "10*6/uL": "M/µL",
+  "/uL": "/µL",
+  "ug/dL": "µg/dL",
+  "umol/L": "µmol/L",
+  "meq/L": "mEq/L",
+  "mm/h": "mm/hr",
   "mm[Hg]": "mmHg",
   "/min": "/min",
   Cel: "°C",
@@ -67,4 +73,9 @@ export const unitLabel = (u: string | null) => (u ? (unitLabels[u] ?? u) : "");
 
 export function toUrlDate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+// YYYY-MM-DD in local time (toUrlDate is UTC).
+export function toLocalDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

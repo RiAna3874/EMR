@@ -13,6 +13,7 @@ export const chartTabs = [
   { slug: "problems", label: "Problems" },
   { slug: "allergies", label: "Allergies" },
   { slug: "notes", label: "Notes" },
+  { slug: "import", label: "Import Report" },
 ];
 
 export function ChartTabs({ patientId, label, counts }: { patientId: string; label: string; counts: Record<string, number> }) {
