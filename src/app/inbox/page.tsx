@@ -12,7 +12,10 @@ import { Sparkline } from "@/components/sparkline";
 import { Button, inputCls } from "@/components/form";
 import { ImportStatusChip } from "@/components/import/status-chip";
 import { medSig, OrderTypeIcon, PriorityChip, WarningList } from "@/components/orders/order-bits";
-import { acknowledgeAllNormal, acknowledgeResult, signDraftNote } from "./actions";
+import { NoteBody } from "@/components/notes/note-view";
+import { noteTypeShort } from "@/lib/notes/library";
+import { unresolvedCount } from "@/lib/notes/smarttext";
+import { acknowledgeAllNormal, acknowledgeResult, cosignFromInbox, signDraftNote } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +24,7 @@ const FOLDERS = [
   { id: "normal", label: "Normal results" },
   { id: "imports", label: "Imported reports to verify" },
   { id: "notes", label: "Notes to sign" },
+  { id: "cosign", label: "Notes to cosign" },
   { id: "orders", label: "Orders to sign" },
 ] as const;
 type FolderId = (typeof FOLDERS)[number]["id"];
@@ -72,20 +76,80 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     }
   } else if (folder === "notes") {
     const notes = await db.note.findMany({ where: { authorId: currentUser.id, status: "draft" }, orderBy: { createdAt: "asc" }, include: { patient: true } });
-    items = notes.map((n) => ({ id: n.id, href: href(n.id), patient: n.patient, title: n.title, at: n.createdAt, sub: `Draft started ${relativeDays(n.createdAt)}` }));
+    items = notes.map((n) => {
+      const left = unresolvedCount(n.body);
+      return {
+        id: n.id,
+        href: href(n.id),
+        patient: n.patient,
+        title: n.title,
+        at: n.createdAt,
+        sub: (
+          <span>
+            {noteTypeShort[n.type]} · pended {relativeDays(n.updatedAt)}
+            {left > 0 && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">{left} to finish</span>}
+          </span>
+        ),
+      };
+    });
+    const current = notes.find((n) => n.id === sp.item) ?? notes[0];
+    if (current) {
+      const next = notes[notes.indexOf(current) + 1];
+      const left = unresolvedCount(current.body);
+      detail = (
+        <div className="flex h-full flex-col">
+          <DetailHeader patient={current.patient} title={current.title} meta={`Pended · last saved ${fmtDateTime(current.updatedAt)}`} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{current.body ? <NoteBody text={current.body} /> : "(empty)"}</div>
+          <div className="flex items-center gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+            {left === 0 && (
+              <form action={signDraftNote.bind(null, current.id, next ? href(next.id) : href())}>
+                <Button type="submit">Sign note</Button>
+              </form>
+            )}
+            <Link href={`/patients/${current.patientId}/notes?note=${current.id}`} className={`rounded border px-2.5 py-1 text-[12.5px] font-medium ${left ? "border-accent bg-accent text-white hover:bg-accent/90" : "border-line bg-panel hover:bg-panel-muted"}`}>
+              {left ? "Finish in chart" : "Edit in chart"}
+            </Link>
+            {left > 0 && <span className="text-[12px] text-warn">{left} blank{left === 1 ? "" : "s"} or pick list{left === 1 ? "" : "s"} still to complete before signing.</span>}
+          </div>
+        </div>
+      );
+    }
+  } else if (folder === "cosign") {
+    const notes = await db.note.findMany({
+      where: { cosignerId: currentUser.id, status: "pending_cosign" },
+      orderBy: { signedAt: "asc" },
+      include: { patient: true, author: true },
+    });
+    items = notes.map((n) => ({
+      id: n.id,
+      href: href(n.id),
+      patient: n.patient,
+      title: n.title,
+      at: n.signedAt ?? n.createdAt,
+      sub: `${noteTypeShort[n.type]} · ${n.author.name}, ${n.author.credentials ?? ""}`,
+    }));
     const current = notes.find((n) => n.id === sp.item) ?? notes[0];
     if (current) {
       const next = notes[notes.indexOf(current) + 1];
       detail = (
         <div className="flex h-full flex-col">
-          <DetailHeader patient={current.patient} title={current.title} meta={`Draft · started ${fmtDateTime(current.createdAt)}`} />
-          <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap px-4 py-3 font-sans text-[13px] leading-relaxed">{current.body || "(empty)"}</pre>
+          <DetailHeader
+            patient={current.patient}
+            title={current.title}
+            meta={`Written by ${current.author.name}, ${current.author.credentials ?? ""} · signed ${current.signedAt ? fmtDateTime(current.signedAt) : ""}`}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <NoteBody text={current.body} />
+          </div>
           <div className="flex gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
-            <form action={signDraftNote.bind(null, current.id, next ? href(next.id) : href())}>
-              <Button type="submit">Sign note</Button>
+            <form action={cosignFromInbox.bind(null, current.id, next ? href(next.id) : href())}>
+              <Button type="submit">Cosign</Button>
             </form>
-            <Link href={`/patients/${current.patientId}/notes?note=${current.id}`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
-              Edit in chart
+            <Link href={`/patients/${current.patientId}/notes?note=${current.id}&cosign=1`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Cosign with attestation
+            </Link>
+            <Link href={`/patients/${current.patientId}/notes?note=${current.id}&addend=1`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Addend
             </Link>
           </div>
         </div>

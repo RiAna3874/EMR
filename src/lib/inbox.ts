@@ -27,12 +27,13 @@ export async function inboxResults(userId: string) {
 }
 
 export async function inboxCounts(userId: string) {
-  const [results, abnormal, notes, imports, orders] = await Promise.all([
+  const [results, abnormal, notes, cosign, imports, orders] = await Promise.all([
     db.diagnosticReport.count({ where: resultsWhere(userId) }),
     db.diagnosticReport.count({ where: { ...resultsWhere(userId), observations: { some: { flag: { in: ["L", "H", "LL", "HH", "A"] } } } } }),
     db.note.count({ where: { authorId: userId, status: "draft" } }),
+    db.note.count({ where: { cosignerId: userId, status: "pending_cosign" } }),
     db.importJob.count({ where: { status: { in: ["needs_review", "failed"] } } }),
     db.serviceRequest.groupBy({ by: ["patientId"], where: { orderedById: userId, status: "pending" } }),
   ]);
-  return { abnormal, normal: results - abnormal, notes, imports, orders: orders.length, total: results + notes + imports + orders.length };
+  return { abnormal, normal: results - abnormal, notes, cosign, imports, orders: orders.length, total: results + notes + cosign + imports + orders.length };
 }

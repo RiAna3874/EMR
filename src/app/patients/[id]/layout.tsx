@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { currentUser } from "@/lib/session";
 import { latestVitals } from "@/lib/chart";
 import { fullName } from "@/lib/format";
 import { PatientRail } from "@/components/chart/patient-rail";
@@ -30,7 +31,8 @@ export default async function ChartLayout({ children, params }: { children: Reac
         effectiveAt: { gte: new Date(Date.now() - 30 * 86_400_000) },
       },
     }),
-    db.note.count({ where: { patientId: id, status: "draft" } }),
+    // Notes waiting on the current user: their pended notes and notes to cosign.
+    db.note.count({ where: { patientId: id, OR: [{ status: "draft", authorId: currentUser.id }, { status: "pending_cosign", cosignerId: currentUser.id }] } }),
     db.importJob.count({ where: { patientId: id, status: "needs_review" } }),
     db.serviceRequest.count({ where: { patientId: id, status: "pending" } }),
   ]);

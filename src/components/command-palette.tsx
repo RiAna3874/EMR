@@ -10,6 +10,7 @@ const GLOBAL: Command[] = [
   { id: "home", label: "My Day", group: "Go to", href: "/", hint: "g h" },
   { id: "inbox", label: "Inbox", group: "Go to", href: "/inbox", hint: "g i" },
   { id: "lists", label: "Patient Lists", group: "Go to", href: "/patients", hint: "g l" },
+  { id: "phrases", label: "My phrases", group: "Go to", href: "/phrases" },
 ];
 
 const CHART: { slug: string; label: string; key?: string }[] = [
@@ -22,6 +23,8 @@ const CHART: { slug: string; label: string; key?: string }[] = [
   { slug: "allergies", label: "Allergies", key: "a" },
   { slug: "notes", label: "Notes", key: "n" },
   { slug: "notes?new=1", label: "New note" },
+  { slug: "notes?new=1&template=progress_soap", label: "New office visit note" },
+  { slug: "notes?status=cosign", label: "Notes needing cosign" },
   { slug: "orders", label: "Orders", key: "o" },
   { slug: "import", label: "Import report" },
 ];

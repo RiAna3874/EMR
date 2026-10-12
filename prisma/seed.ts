@@ -271,6 +271,8 @@ const patients: PatientDef[] = [
 const practitioners = [
   { id: "prac_chen", name: "Dana Chen", role: "physician" as const, credentials: "MD" },
   { id: "prac_ibarra", name: "Rafael Ibarra", role: "physician" as const, credentials: "DO" },
+  { id: "prac_brandt", name: "Leo Brandt", role: "resident" as const, credentials: "MD" },
+  { id: "prac_marsh", name: "Helena Marsh", role: "physician" as const, credentials: "MD" },
   { id: "prac_lund", name: "Kirsten Lund", role: "nurse" as const, credentials: "RN" },
   { id: "prac_mbeki", name: "Thandi Mbeki", role: "front_desk" as const, credentials: null },
 ];
@@ -339,7 +341,9 @@ async function main() {
     prisma.serviceRequest.deleteMany(),
     prisma.documentReference.deleteMany(),
     prisma.importJob.deleteMany(),
+    prisma.noteAddendum.deleteMany(),
     prisma.note.deleteMany(),
+    prisma.smartPhrase.deleteMany(),
     prisma.encounter.deleteMany(),
     prisma.medicationRequest.deleteMany(),
     prisma.allergyIntolerance.deleteMany(),
@@ -496,7 +500,7 @@ async function main() {
           patientId: patient.id, encounterId: encounter.id, type: "progress",
           title: "Office visit",
           body: progressNote(p, vitalRows),
-          status: "signed", authorId: pcpId, createdAt: start,
+          status: "signed", authorId: pcpId, createdAt: start, serviceAt: start, templateId: "progress_soap",
           signedAt: new Date(start.getTime() + 3 * 3_600_000),
         },
       });
@@ -508,14 +512,14 @@ async function main() {
         data: {
           patientId: patient.id, type: "phone", title: "Telephone encounter",
           body: `Patient called regarding recent lab results. Reviewed values with patient. Questions answered; will discuss further at the next visit.`,
-          status: "signed", authorId: "prac_lund", createdAt: daysAgo(14, 15, 20), signedAt: daysAgo(14, 15, 32),
+          status: "signed", authorId: "prac_lund", createdAt: daysAgo(14, 15, 20), serviceAt: daysAgo(14, 15, 20), signedAt: daysAgo(14, 15, 32),
         },
       });
     }
 
     if (p.reasonToday) {
       const start = daysAgo(0, p.visitHour ?? 9, (i * 15) % 60);
-      await prisma.encounter.create({
+      const todayVisit = await prisma.encounter.create({
         data: {
           patientId: patient.id,
           type: p.telehealth ? "telehealth" : "office",
@@ -523,7 +527,9 @@ async function main() {
           reason: p.reasonToday, start, end: new Date(start.getTime() + 20 * 60_000), providerId: pcpId,
         },
       });
+      await todayNotes(i, p, patient.id, todayVisit.id, start);
     }
+    await historyNotes(i, p, patient.id);
     for (const o of p.orders ?? []) {
       const def = orderables.get(o.code)!;
       const signed = o.status !== "pending";
@@ -545,8 +551,148 @@ async function main() {
     });
   }
 
+  await prisma.smartPhrase.createMany({
+    data: [
+      {
+        ownerId: "prac_chen", name: "dmfoot", description: "Diabetic foot exam",
+        body: "Diabetic foot exam: skin {Skin:intact|callus ***|ulcer ***}. Monofilament sensation {Monofilament:intact bilaterally|decreased ***}. Dorsalis pedis pulses {Pulses:2+ bilaterally|diminished ***}.",
+      },
+      {
+        ownerId: "prac_chen", name: "uri", description: "Viral URI plan",
+        body: "Likely viral upper respiratory infection. Supportive care with fluids, rest and {Symptomatic:acetaminophen|saline nasal spray|honey for cough}. Antibiotics not indicated. Return if fever over 3 days, shortness of breath or worsening symptoms.",
+      },
+    ],
+  });
+
   const counts = await Promise.all([prisma.patient.count(), prisma.observation.count(), prisma.note.count()]);
   console.log(`Seeded ${counts[0]} patients, ${counts[1]} observations, ${counts[2]} notes.`);
+}
+
+// Notes that show the documentation workflow: a resident's notes waiting on
+// Dr. Chen's cosignature and a pended note of hers with blanks still to fill.
+async function todayNotes(i: number, p: PatientDef, patientId: string, encounterId: string, start: Date) {
+  const problems = p.conditions.filter((c) => c.status !== "resolved");
+  const ap = problems.map((c, n) => `${n + 1}. ${c.display} (${c.code})`);
+  if (i === 0 || i === 2) {
+    const signedAt = new Date(start.getTime() + 50 * 60_000);
+    await prisma.note.create({
+      data: {
+        patientId, encounterId, type: "progress", templateId: "progress_soap", title: "Office visit (resident)",
+        body: [
+          "CHIEF COMPLAINT", p.reasonToday ?? "Follow-up", "",
+          "SUBJECTIVE",
+          i === 0
+            ? `${p.firstName} reports checking glucose twice daily, fasting readings mostly 130s to 150s. No hypoglycemia. Occasional tingling in both feet at night.`
+            : `${p.firstName} reports 3 months of fatigue, worse in the afternoon, with cold intolerance and dry skin. Sleeping 8 hours. No weight change.`,
+          "",
+          "OBJECTIVE", "Vitals reviewed and stable. General: well appearing.",
+          i === 0 ? "Feet: monofilament sensation decreased at both great toes. Pulses 2+." : "Thyroid: not enlarged, no nodules. Skin: dry.",
+          "",
+          "ASSESSMENT AND PLAN",
+          ...ap.flatMap((l, n) => (n === 0 ? [l, i === 0 ? "   A1c above goal. Increase metformin; recheck A1c in 3 months. Refer for diabetic foot care." : "   Check TSH and free T4 today; adjust levothyroxine if needed."] : [l, "   Stable, continue current management."])),
+          "",
+          "Discussed with attending Dr. Chen.",
+          "Return to clinic in 3 months or sooner as needed.",
+        ].join("\n"),
+        status: "pending_cosign", authorId: "prac_brandt", cosignerId: "prac_chen",
+        createdAt: start, serviceAt: start, signedAt,
+      },
+    });
+  }
+  if (i === 8) {
+    await prisma.note.create({
+      data: {
+        patientId, encounterId, type: "progress", templateId: "progress_soap", title: "Office visit",
+        body: [
+          "CHIEF COMPLAINT", "Back pain", "",
+          "SUBJECTIVE",
+          `${p.firstName} reports low back pain for 2 weeks after lifting boxes, worse with bending. No leg weakness, numbness, or bladder or bowel changes.`,
+          "Tried ibuprofen with {Relief:no relief|partial relief|good relief}.", "",
+          "OBJECTIVE", "General: in mild distress.",
+          "Back: paraspinal tenderness at L4-L5. Straight leg raise ***. Strength 5/5 bilaterally.", "",
+          "ASSESSMENT AND PLAN",
+          "1. Acute low back pain without sciatica (M54.50)",
+          "Assessment: likely mechanical strain, no red flags.",
+          "Plan: ***", "",
+          "Return to clinic in {Return:1 week|2 weeks|1 month} or sooner as needed.",
+        ].join("\n"),
+        status: "draft", authorId: "prac_chen", createdAt: start, serviceAt: start,
+      },
+    });
+  }
+}
+
+// Older notes of other kinds: a cardiology consult, a procedure, a new-patient H&P, an addendum.
+async function historyNotes(i: number, p: PatientDef, patientId: string) {
+  if (i === 1) {
+    const at = daysAgo(95, 14, 0);
+    await prisma.note.create({
+      data: {
+        patientId, type: "consult", templateId: "consult", title: "Cardiology consult",
+        body: [
+          "REASON FOR CONSULTATION", "Asked by Rafael Ibarra, DO to evaluate heart failure with reduced ejection fraction and medication optimization.", "",
+          "HISTORY OF PRESENT ILLNESS",
+          `${p.firstName} is a ${p.age} y.o. male with HFrEF (EF 35% on last echo) reporting stable NYHA class II symptoms. Sleeps on two pillows. No syncope.`, "",
+          "IMPRESSION", "Chronic HFrEF, euvolemic today, on partial guideline-directed therapy.", "",
+          "RECOMMENDATIONS",
+          "1. Continue current beta blocker; titrate as heart rate allows.",
+          "2. Consider adding an SGLT2 inhibitor if eGFR permits.",
+          "3. Daily weights; call for a gain of more than 2 lb in a day or 5 lb in a week.",
+          "4. Repeat echocardiogram in 6 months.", "",
+          "Thank you for this consultation. We will see the patient again in clinic in 3 months.",
+        ].join("\n"),
+        status: "signed", authorId: "prac_marsh", createdAt: at, serviceAt: at, signedAt: new Date(at.getTime() + 2 * 3_600_000),
+      },
+    });
+  }
+  if (i === 4) {
+    const at = daysAgo(150, 11, 30);
+    await prisma.note.create({
+      data: {
+        patientId, type: "procedure", templateId: "procedure_joint", title: "Joint injection",
+        body: [
+          "PROCEDURE", "Right knee corticosteroid injection.", "",
+          "INDICATION", "Right knee osteoarthritis with persistent pain despite acetaminophen and physical therapy.", "",
+          "CONSENT",
+          "Risks including bleeding, infection, pain and damage to surrounding structures, benefits and alternatives were discussed. Verbal informed consent obtained from the patient. A time-out was performed confirming patient, site and procedure.", "",
+          "DESCRIPTION",
+          "Landmarks identified via palpation. The site was prepped with chlorhexidine. Using a 22 gauge needle, 40 mg triamcinolone mixed with 4 mL 1% lidocaine was injected without resistance.",
+          "Complications: none. Patient tolerated the procedure well.", "",
+          "AFTERCARE", "Ice as needed, avoid strenuous use for 48 hours. Watch for redness, warmth or fever. No repeat injection in this joint for at least 3 months.",
+        ].join("\n"),
+        status: "signed", authorId: "prac_chen", createdAt: at, serviceAt: at, signedAt: new Date(at.getTime() + 3_600_000),
+      },
+    });
+  }
+  if (i === 10) {
+    const at = daysAgo(540, 9, 40);
+    await prisma.note.create({
+      data: {
+        patientId, type: "history_physical", templateId: "hp_new", title: "New patient history and physical",
+        body: [
+          "CHIEF COMPLAINT", "Establish care.", "",
+          "HISTORY OF PRESENT ILLNESS", `${p.firstName} is a ${p.age} y.o. female establishing care after moving to the area. Feels well. No acute concerns.`, "",
+          "PAST MEDICAL HISTORY", ...p.conditions.map((c, n) => `${n + 1}. ${c.display} (${c.code})`), "",
+          "SOCIAL HISTORY", "Tobacco: never. Alcohol: social. Occupation: graduate student.", "",
+          "FAMILY HISTORY", "Mother with hypertension. Father with type 2 diabetes.", "",
+          "PHYSICAL EXAM", "General: alert, oriented, in no acute distress. Cardiovascular: regular rate and rhythm. Lungs: clear bilaterally.", "",
+          "ASSESSMENT AND PLAN", "1. Encounter to establish care (Z76.89): records requested, routine labs ordered.", "",
+          "Return to clinic in 1 year or sooner as needed.",
+        ].join("\n"),
+        status: "signed", authorId: "prac_chen", createdAt: at, serviceAt: at, signedAt: new Date(at.getTime() + 2 * 3_600_000),
+      },
+    });
+  }
+  if (i === 0) {
+    // Addend the most recent office visit once its labs came back.
+    const last = await prisma.note.findFirst({ where: { patientId, type: "progress", status: "signed" }, orderBy: { serviceAt: "desc" } });
+    if (last) {
+      await prisma.noteAddendum.create({
+        data: { noteId: last.id, authorId: "prac_chen", signedAt: new Date(last.serviceAt.getTime() + 2 * DAY), body: "Labs from this visit reviewed. A1c above goal; will intensify therapy at the next visit. Patient notified through the portal." },
+      });
+      await prisma.note.update({ where: { id: last.id }, data: { status: "addended" } });
+    }
+  }
 }
 
 function progressNote(p: PatientDef, vitals: { display: string; value: number; unit: string }[]) {

@@ -19,6 +19,7 @@ enum Sex {
 
 enum Role {
   physician
+  resident
   nurse
   front_desk
 }
@@ -128,11 +129,15 @@ enum NoteType {
   progress
   history_physical
   consult
+  procedure
   phone
 }
 
+// draft = pended (saved, unsigned); pending_cosign = signed by the author, waiting
+// on a supervising clinician; addended = signed, with one or more addenda.
 enum NoteStatus {
   draft
+  pending_cosign
   signed
   addended
 }
@@ -147,7 +152,10 @@ model Practitioner {
   primaryPatients  Patient[]           @relation("PCP")
   encounters       Encounter[]
   prescriptions    MedicationRequest[]
-  notes            Note[]
+  notes            Note[]             @relation("NoteAuthor")
+  cosignNotes      Note[]             @relation("NoteCosigner")
+  addenda          NoteAddendum[]
+  phrases          SmartPhrase[]
   verifiedReports  DiagnosticReport[] @relation("VerifiedReports")
   uploads          DocumentReference[]
   importJobs       ImportJob[]        @relation("ImportCreatedBy")
@@ -314,15 +322,55 @@ model Note {
   encounterId String?
   encounter   Encounter?    @relation(fields: [encounterId], references: [id])
   type        NoteType
+  templateId  String? // src/lib/notes/library.ts
   title       String
   body        String
   status      NoteStatus
   authorId    String
-  author      Practitioner  @relation(fields: [authorId], references: [id])
+  author      Practitioner  @relation("NoteAuthor", fields: [authorId], references: [id])
+  serviceAt   DateTime      @default(now()) // date of service
   createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
   signedAt    DateTime?
+  // Supervision: a note routed for cosignature stays pending_cosign until the
+  // cosigner signs, optionally adding an attestation.
+  cosignerId  String?
+  cosigner    Practitioner? @relation("NoteCosigner", fields: [cosignerId], references: [id])
+  cosignedAt  DateTime?
+  cosignText  String?
 
-  @@index([patientId, createdAt])
+  addenda NoteAddendum[]
+
+  @@index([patientId, serviceAt])
+  @@index([authorId, status])
+  @@index([cosignerId, status])
+}
+
+// Signed notes are never edited; later information is appended as an addendum.
+model NoteAddendum {
+  id        String       @id @default(cuid())
+  noteId    String
+  note      Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  body      String
+  authorId  String
+  author    Practitioner @relation(fields: [authorId], references: [id])
+  signedAt  DateTime     @default(now())
+
+  @@index([noteId])
+}
+
+// A clinician's own dot phrase. It overrides a system phrase with the same name.
+model SmartPhrase {
+  id          String       @id @default(cuid())
+  ownerId     String
+  owner       Practitioner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  description String       @default("")
+  body        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([ownerId, name])
 }
 
 // An uploaded file (photo, scan or PDF). Bytes live in Postgres for v1; move to
