@@ -8,6 +8,7 @@ import { fmtDate, fmtDob, fmtRange, fmtShortDate, fmtTime, fmtValue, relativeDay
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
+import { sigText } from "@/lib/meds/sig";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5"];
 
@@ -54,7 +55,11 @@ export default async function Summary({ params }: { params: Promise<{ id: string
         )}
       </Panel>
 
-      <Panel title="Active medications" href={`${base}/meds`}>
+      <Panel
+        title="Active medications"
+        href={`${base}/meds`}
+        action={<MedsReviewed patientId={id} />}
+      >
         {meds.length === 0 ? (
           <Empty>No active medications.</Empty>
         ) : (
@@ -65,9 +70,7 @@ export default async function Summary({ params }: { params: Promise<{ id: string
                   {m.drug}
                   {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
                 </div>
-                <div className="text-ink-2">
-                  {m.dose} {m.route}, {m.frequency}
-                </div>
+                <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
               </li>
             ))}
           </ul>
@@ -247,5 +250,16 @@ async function FrontDeskSummary({ patientId }: { patientId: string }) {
         )}
       </Panel>
     </div>
+  );
+}
+
+async function MedsReviewed({ patientId }: { patientId: string }) {
+  const p = await db.patient.findUnique({ where: { id: patientId }, select: { medsReviewedAt: true, medsReviewedBy: { select: { name: true } } } });
+  if (!p?.medsReviewedAt) return <span className="text-[11.5px] text-warn">Not reviewed</span>;
+  return (
+    <span className="text-[11.5px] text-ink-3">
+      Reviewed {relativeDays(p.medsReviewedAt)}
+      {p.medsReviewedBy && ` by ${p.medsReviewedBy.name}`}
+    </span>
   );
 }

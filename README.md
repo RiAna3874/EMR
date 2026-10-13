@@ -10,22 +10,36 @@ An outpatient electronic medical record that follows the workflows clinicians kn
   - **Summary**: problems, medications, allergies, vitals with sparkline trends, recent abnormal results, recent notes, upcoming visits.
   - **Results**: trend table (tests by date, H/L/critical flags, reference ranges, sparklines), a single-report view with acknowledgement, and a **graph** view: pick any components, see them over time against the shaded reference range, with imported results drawn as diamonds. Click a test name in the table to graph it.
   - **Vitals**: flowsheet by visit, with a quick-entry row that computes BMI and flags, and graphs (blood pressure, heart rate, weight, BMI, SpO₂, temperature).
-  - **Medications**: current and discontinued lists; add, hold, resume, discontinue.
+  - **Medications**: see [Medications and prescribing](#medications-and-prescribing) below.
   - **Problems**: active and resolved problems with ICD-10 codes; add, resolve, reactivate.
   - **Allergies**: allergen, reaction, severity, verified status. "No known allergies" is a reviewed state, distinct from "not reviewed".
   - **Notes**: progress, H&P, consult, procedure and phone notes, started from templates (office visit, chronic care, annual wellness, new patient H&P, consult, procedure, joint injection, telephone) or by copying the last note.
     - Smart text: `.name` phrases (shared library plus your own, managed at `/phrases`), `@NAME@` chart data (`@VITALS@`, `@MEDS@`, `@APPROBLEMS@`, `@ABNLABS@`...), `{Label:a|b|c}` pick lists (`::` for multi-select) and `***` blanks. Typing `.` or `@` opens suggestions; `F2` / `Shift+F2` walk the blanks and pick lists; number keys answer a pick list. A note can't be signed until every blank and pick list is resolved.
     - Problem-based assessment and plan: a side panel lists active problems with the plan last written for each, to add a fresh block or carry the old one forward.
     - States: pended (saved, unsigned, editable by the author), signed, routed for cosign (the cosigner signs with an optional attestation), and addended (signed notes never change; addenda are appended with their own signature). Notes can be filtered by type, status, author and text, and printed.
-  - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), metformin/NSAID/contrast with low eGFR, NSAIDs with an anticoagulant. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
+  - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), contrast with low eGFR, and for prescriptions the full prescribing checks below. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
   - **Import Report**: turn a photo, scan or PDF of an outside lab report into filed, flagged results. See below.
-- **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), imported reports to verify, notes to sign, notes to cosign and orders to sign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
-- **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; and an order requisition for active labs, imaging and referrals.
+- **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), imported reports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
+- **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; an order requisition for active labs, imaging and referrals; a paper **prescription** for print-class medications; and the patient's own **medication list**.
 - **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g h` My Day.
 
 - **Sign-in and roles**: see below.
 
 Not built yet: the Documents tab.
+
+## Medications and prescribing
+
+The **Medications** tab is the medication list and the place to prescribe (the Orders tab uses the same prescription composer).
+
+- **The list**: each current medication shows its sig, indication and the prescription behind it (quantity, refills left, e-prescribed / printed / phoned in, pharmacy, prescriber), plus pharmacy fill history: last fill, when the supply runs out, and a red flag when it ran out with no refill (a missed-refill gap). A **History** fold shows every earlier prescription for the same therapy and why it changed. Outside and over-the-counter medications are kept on the list, marked, with nothing sent anywhere. Residents' prescriptions show **Awaiting cosign** until the attending cosigns.
+- **Medication review** (rooming): Taking / Not taking / Taking differently per medication with a note, add an outside or OTC medication, and **Mark as reviewed**, which shows on the tab and the Summary. The preferred pharmacy is set here.
+- **Interactions among current medications**: a panel at the top lists interactions and duplicate therapy already on the list (e.g. levothyroxine with iron).
+- **Prescribing**: search the formulary by name, brand or use. The composer fills the sig, works out the quantity and days supply from dose × frequency × duration (and keeps them in step until you type your own), limits refills by controlled-substance schedule (none for C-II, five for C-III to V), and sends by e-prescribe, print or phone. A live sig preview reads back exactly what will be sent. **Reorder** and **Modify** start from a current medication; signing replaces it and keeps the therapy's start date and history.
+- **Checks** while writing, in the pending list, and again when signing: allergy (by class and by name), interactions with current and other pending medications (major ones are hard stops, e.g. NSAID + anticoagulant, ACE inhibitor + ARB, clarithromycin + atorvastatin), duplicate therapy, maximum daily dose (lower for 65 and over where it applies, e.g. acetaminophen 3 g), kidney function (eGFR), older-adult cautions, and controlled-substance rules. A hard stop needs an override reason (pick one or type one); a controlled substance needs the prescription monitoring program attested; a resident names a cosigning attending.
+- **Refill requests** from pharmacies land in the Inbox. Each shows the current prescription, recent fills, a **refill protocol** (visit in the last 12 months plus the drug's monitoring labs, e.g. potassium and creatinine for lisinopril, A1c for metformin, TSH for levothyroxine) and the same checks. A nurse can pend it with a protocol note; a prescriber approves (choosing quantity and refills), denies with a reason, or opens the chart to change the dose. Approving writes a new prescription that replaces the old one.
+- **Printing**: a paper prescription (quantity and refills also in words, schedule shown) and a plain-language medication list for the patient.
+
+The drug knowledge (ingredients, classes, interactions, dose limits, monitoring) is a small hand-written table in `src/lib/meds/drugs.ts` for a synthetic clinic, not a licensed drug database. The formulary is `src/lib/meds/formulary.ts`. Pharmacies and fills are simulated; nothing is sent to a real pharmacy.
 
 ## Sign-in and roles
 
@@ -38,7 +52,12 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Patient lists, schedule, demographics, allergies | ✓ | ✓ | ✓ | ✓ |
 | Clinical chart (results, vitals, notes, orders), printing | ✓ | ✓ | ✓ | |
 | Record vitals, edit allergies | ✓ | ✓ | ✓ | |
-| Edit problems and the medication list | ✓ | ✓ | | |
+| Edit problems, discontinue and hold medications | ✓ | ✓ | | |
+| Medication review: taking / not taking, outside and OTC meds, mark reviewed | ✓ | ✓ | ✓ | |
+| Write prescriptions (pended for a prescriber when a nurse writes them) | ✓ | ✓ | ✓ | |
+| Sign prescriptions, approve or deny refill requests | ✓ | ✓, routed for cosign | | |
+| Prepare refill requests against the protocol | ✓ | ✓ | ✓ | |
+| Cosign residents' prescriptions | ✓ | | | |
 | Write and sign notes, addenda, phrases | ✓ | ✓, routed for cosign | ✓ | |
 | Cosign notes | ✓ | | | |
 | Pend orders | ✓ | ✓ | ✓ | |
