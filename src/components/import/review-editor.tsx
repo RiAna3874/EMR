@@ -12,6 +12,7 @@ import {
   type Draft,
   type DraftRow,
   type History,
+  type IdentityCheck,
   type Issue,
   type PatientFacts,
   type RowAssessment,
@@ -327,18 +328,23 @@ function DocViewer({
 
 // ---------- cards ----------
 
-function IdentityCard({
+type PrintedIdentity = Pick<Draft, "printedName" | "printedDob" | "printedAge" | "printedSex" | "printedId" | "identityConfirmed">;
+
+// Shared with the clinical document review (components/documents/doc-review-editor.tsx).
+export function IdentityCard({
   draft,
   set,
   patient,
   identity,
   readOnly,
+  noun = "report",
 }: {
-  draft: Draft;
-  set: (p: Partial<Draft>) => void;
+  draft: PrintedIdentity;
+  set: (p: Partial<PrintedIdentity>) => void;
   patient: PatientFacts;
-  identity: ReturnType<typeof assessDraft>["identity"];
+  identity: IdentityCheck;
   readOnly: boolean;
+  noun?: string;
 }) {
   const pill =
     identity.status === "match"
@@ -347,12 +353,12 @@ function IdentityCard({
         ? ["Doesn't match chart", "bg-crit-soft text-crit"]
         : ["Couldn't check", "bg-warn-soft text-warn"];
   const dob = new Date(`${patient.dob}T00:00:00Z`);
-  const rows: [string, keyof Draft, string][] = [
+  const rows: [string, Exclude<keyof PrintedIdentity, "identityConfirmed">, string][] = [
     ["Name", "printedName", `${patient.firstName} ${patient.lastName}`],
     ["Date of birth", "printedDob", fmtDob(dob)],
     ["Age", "printedAge", ""],
     ["Sex", "printedSex", patient.sex],
-    ["ID on report", "printedId", `MRN ${patient.mrn}`],
+    [`ID on ${noun}`, "printedId", `MRN ${patient.mrn}`],
   ];
   return (
     <section className={`rounded-md border bg-panel ${identity.status === "mismatch" && !draft.identityConfirmed ? "border-crit/50" : "border-line"}`}>
@@ -364,7 +370,7 @@ function IdentityCard({
         <thead className="text-left text-[11px] text-ink-3">
           <tr>
             <th className="px-3 pt-1.5 font-medium" />
-            <th className="px-2 pt-1.5 font-medium">On report</th>
+            <th className="px-2 pt-1.5 font-medium">On {noun}</th>
             <th className="px-2 pt-1.5 font-medium">In chart</th>
           </tr>
         </thead>
@@ -376,7 +382,7 @@ function IdentityCard({
                 <input
                   className={`${inputCls} w-full py-0.5`}
                   type={key === "printedDob" ? "date" : "text"}
-                  value={draft[key] as string}
+                  value={draft[key]}
                   disabled={readOnly}
                   onChange={(e) => set({ [key]: e.target.value })}
                 />
@@ -395,7 +401,7 @@ function IdentityCard({
         {identity.status === "mismatch" && (
           <label className="mt-1 flex items-start gap-2 font-medium">
             <input type="checkbox" className="mt-0.5" checked={draft.identityConfirmed} disabled={readOnly} onChange={(e) => set({ identityConfirmed: e.target.checked })} />
-            I&apos;ve confirmed this report belongs to {patient.firstName} {patient.lastName} (e.g. a nickname or a different name at the outside lab).
+            I&apos;ve confirmed this {noun} belongs to {patient.firstName} {patient.lastName} (e.g. a nickname or a different name at the outside {noun === "report" ? "lab" : "facility"}).
           </label>
         )}
       </div>

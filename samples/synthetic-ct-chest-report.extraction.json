@@ -1,0 +1,128 @@
+{
+  "document_type": "imaging_report",
+  "title": "CT CHEST WITHOUT CONTRAST",
+  "organization": "Lakeview Imaging Associates",
+  "author": "Grace Lindqvist, MD",
+  "service_date": "2026-09-22",
+  "admission_date": null,
+  "discharge_date": null,
+  "patient_name": "TANABE, HIROSHI",
+  "patient_dob": "1965-02-08",
+  "patient_age": "61 Y",
+  "patient_sex": "M",
+  "patient_id": "LIA-190452",
+  "modality": "CT",
+  "body_part": "Chest",
+  "impression": "1. Moderate centrilobular emphysema.\n2. 7 mm solid right upper lobe pulmonary nodule in a high-risk patient. Recommend CT chest in 6-12 months (Fleischner Society 2017), then consider CT at 18-24 months.\n3. Mild coronary artery calcification.",
+  "notes": [
+    "Exam done without contrast; the report notes an iodinated contrast allergy."
+  ],
+  "sections": [
+    {
+      "heading": "Clinical history",
+      "text": "COPD, former smoker (40 pack-years, quit 2021). Worsening dyspnea.",
+      "box": {
+        "x0": 52,
+        "y0": 274,
+        "x1": 1048,
+        "y1": 327
+      },
+      "file": 1
+    },
+    {
+      "heading": "Technique",
+      "text": "Axial CT images of the chest without intravenous contrast. Low-dose protocol. Coronal and sagittal reformats.",
+      "box": {
+        "x0": 52,
+        "y0": 337,
+        "x1": 1048,
+        "y1": 390
+      },
+      "file": 1
+    },
+    {
+      "heading": "Comparison",
+      "text": "None available.",
+      "box": {
+        "x0": 52,
+        "y0": 400,
+        "x1": 1048,
+        "y1": 453
+      },
+      "file": 1
+    },
+    {
+      "heading": "Findings",
+      "text": "Lungs: Moderate centrilobular and paraseptal emphysema, upper lobe predominant. 7 mm solid nodule in the right upper lobe (series 3, image 48). No consolidation. No pleural effusion or pneumothorax.\nAirways: Mild bronchial wall thickening.\nMediastinum: No lymphadenopathy by size criteria. Heart size normal. Mild coronary artery calcification.\nUpper abdomen: Unremarkable.",
+      "box": {
+        "x0": 52,
+        "y0": 463,
+        "x1": 1048,
+        "y1": 622
+      },
+      "file": 1
+    },
+    {
+      "heading": "Impression",
+      "text": "1. Moderate centrilobular emphysema.\n2. 7 mm solid right upper lobe pulmonary nodule in a high-risk patient. Recommend CT chest in 6-12 months (Fleischner Society 2017), then consider CT at 18-24 months.\n3. Mild coronary artery calcification.",
+      "box": {
+        "x0": 52,
+        "y0": 632,
+        "x1": 1048,
+        "y1": 787
+      },
+      "file": 1
+    },
+    {
+      "heading": "Recommendation",
+      "text": "Non-contrast CT chest in 6-12 months for the right upper lobe nodule.",
+      "box": {
+        "x0": 52,
+        "y0": 797,
+        "x1": 1048,
+        "y1": 850
+      },
+      "file": 1
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "7 mm solid nodule in the right upper lobe (series 3, image 48).",
+      "kind": "finding",
+      "icd10": "R91.1",
+      "box": {
+        "x0": 52,
+        "y0": 489,
+        "x1": 1025,
+        "y1": 535
+      },
+      "file": 1
+    },
+    {
+      "text": "Moderate centrilobular emphysema.",
+      "kind": "finding",
+      "icd10": "J43.2",
+      "box": {
+        "x0": 81,
+        "y0": 668,
+        "x1": 363,
+        "y1": 691
+      },
+      "file": 1
+    }
+  ],
+  "medications": [],
+  "follow_ups": [
+    {
+      "text": "Non-contrast CT chest in 6-12 months for the right upper lobe nodule.",
+      "due": "6-12 months",
+      "box": {
+        "x0": 78,
+        "y0": 822,
+        "x1": 1048,
+        "y1": 850
+      },
+      "file": 1
+    }
+  ]
+}

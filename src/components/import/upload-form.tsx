@@ -10,7 +10,10 @@ type Picked = { key: string; file: File; preview: string | null };
 // stay well under the 5 MB image limit.
 const MAX_EDGE = 2000;
 
-export function UploadForm({ patientId }: { patientId: string }) {
+export type ImportKindChoice = "lab" | "document";
+
+export function UploadForm({ patientId, initialKind = "lab" }: { patientId: string; initialKind?: ImportKindChoice }) {
+  const [kind, setKind] = useState<ImportKindChoice>(initialKind);
   const [picked, setPicked] = useState<Picked[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -57,6 +60,7 @@ export function UploadForm({ patientId }: { patientId: string }) {
           sizes.push({ width, height });
         }
         fd.append("sizes", JSON.stringify(sizes));
+        fd.append("kind", kind);
         setStage("Uploading…");
         const res = await uploadReport(patientId, fd);
         if (res?.error) setError(res.error);
@@ -70,6 +74,21 @@ export function UploadForm({ patientId }: { patientId: string }) {
 
   return (
     <div>
+      <div role="radiogroup" aria-label="What are you importing?" className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {KINDS.map((k) => (
+          <button
+            key={k.id}
+            type="button"
+            role="radio"
+            aria-checked={kind === k.id}
+            onClick={() => setKind(k.id)}
+            className={`rounded-md border px-3 py-2 text-left ${kind === k.id ? "border-accent bg-accent-soft ring-2 ring-accent/15" : "border-line bg-panel hover:border-accent/50"}`}
+          >
+            <div className="font-semibold">{k.label}</div>
+            <div className="text-[12px] text-ink-3">{k.hint}</div>
+          </button>
+        ))}
+      </div>
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -87,8 +106,8 @@ export function UploadForm({ patientId }: { patientId: string }) {
         }`}
       >
         <UploadIcon />
-        <div className="font-medium">Drop a lab report here, or click to choose</div>
-        <div className="text-[12px] text-ink-3">Phone photo, scan or PDF. For a multi-page report, add every page.</div>
+        <div className="font-medium">Drop {kind === "lab" ? "a lab report" : "a document"} here, or click to choose</div>
+        <div className="text-[12px] text-ink-3">Phone photo, scan or PDF. For more than one page, add every page in order.</div>
         <input
           ref={input}
           type="file"
@@ -138,13 +157,18 @@ export function UploadForm({ patientId }: { patientId: string }) {
 
       <div className="mt-3 flex items-center gap-3">
         <Button type="button" onClick={submit} disabled={!picked.length || pending} className="px-4 py-1.5 disabled:opacity-50">
-          {pending ? (stage ?? "Working…") : `Read report${picked.length > 1 ? ` (${picked.length} pages)` : ""}`}
+          {pending ? (stage ?? "Working…") : `Read ${kind === "lab" ? "report" : "document"}${picked.length > 1 ? ` (${picked.length} pages)` : ""}`}
         </Button>
-        <span className="text-[12px] text-ink-3">Claude reads the values; nothing is filed until you verify them.</span>
+        <span className="text-[12px] text-ink-3">Claude transcribes it; nothing is filed until you verify it.</span>
       </div>
     </div>
   );
 }
+
+const KINDS: { id: ImportKindChoice; label: string; hint: string }[] = [
+  { id: "lab", label: "Lab results", hint: "Values go into Results with flags and trends." },
+  { id: "document", label: "Clinical document", hint: "Imaging report, discharge summary, referral or consult letter." },
+];
 
 // Applies EXIF rotation and shrinks photos; PDFs pass through untouched.
 async function prepare(file: File): Promise<{ file: File; width: number | null; height: number | null }> {

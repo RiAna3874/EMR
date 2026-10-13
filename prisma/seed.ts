@@ -13,6 +13,8 @@ import {
 import { ORDERABLES } from "../src/lib/orders/catalog";
 import { productFor } from "../src/lib/meds/formulary";
 import { hashPassword } from "../src/lib/password";
+import { docContent, docDraftFromExtraction, suggestOrder, type DocDraft, type ExtractedDocument } from "../src/lib/documents/draft";
+import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
 const orderables = new Map(ORDERABLES.map((o) => [o.code, o]));
@@ -352,6 +354,7 @@ async function main() {
   await prisma.$transaction([
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
+    prisma.clinicalDocument.deleteMany(),
     prisma.serviceRequest.deleteMany(),
     prisma.documentReference.deleteMany(),
     prisma.importJob.deleteMany(),
@@ -376,7 +379,8 @@ async function main() {
   const pcps = ["prac_chen", "prac_ibarra"];
 
   for (const [i, p] of patients.entries()) {
-    const dob = new Date(today.getFullYear() - p.age, Math.floor(rand() * 12), 1 + Math.floor(rand() * 27));
+    // UTC midnight: DOB is a date column, so a local midnight east of UTC would store the day before.
+    const dob = new Date(Date.UTC(today.getFullYear() - p.age, Math.floor(rand() * 12), 1 + Math.floor(rand() * 27)));
     const pcpId = pcps[i % 2];
     const patient = await prisma.patient.create({
       data: {
@@ -568,6 +572,7 @@ async function main() {
   });
 
   const counts = await Promise.all([prisma.patient.count(), prisma.observation.count(), prisma.note.count()]);
+  await seedOutsideDocuments();
   console.log(`Seeded ${counts[0]} patients, ${counts[1]} observations, ${counts[2]} notes.`);
 }
 
@@ -806,6 +811,106 @@ async function historyNotes(i: number, p: PatientDef, patientId: string) {
       await prisma.note.update({ where: { id: last.id }, data: { status: "addended" } });
     }
   }
+}
+
+// Outside documents from samples/, as if uploaded through Import: one filed and
+// reviewed, one filed by the resident and waiting in the PCP's Inbox, and one a
+// nurse has prepared that still needs a physician to verify it.
+async function seedOutsideDocuments() {
+  const pngSize = (b: Buffer) => ({ width: b.readUInt32BE(16), height: b.readUInt32BE(20) });
+  async function importDoc(o: {
+    lastName: string;
+    sample: string;
+    uploadedById: string;
+    createdAt: Date;
+    filed?: { byId: string; at: Date; reviewedById?: string };
+    edit?: (d: DocDraft) => void;
+  }) {
+    const patient = await prisma.patient.findFirstOrThrow({ where: { lastName: o.lastName } });
+    const data = readFileSync(`samples/${o.sample}.png`);
+    const size = pngSize(data);
+    const extraction = JSON.parse(readFileSync(`samples/${o.sample}.extraction.json`, "utf8")) as ExtractedDocument;
+    const draft = docDraftFromExtraction(extraction, [size]);
+    const orders = await prisma.serviceRequest.findMany({ where: { patientId: patient.id, status: "signed", type: { in: ["imaging", "referral", "procedure"] } } });
+    draft.orderId = suggestOrder(draft, orders.map((x) => ({ id: x.id, type: x.type, code: x.code, display: x.display, signedAt: (x.signedAt ?? x.createdAt).toISOString() })));
+    o.edit?.(draft);
+    const job = await prisma.importJob.create({
+      data: {
+        patientId: patient.id,
+        kind: "document",
+        status: o.filed ? "filed" : "needs_review",
+        model: "fixture",
+        extraction,
+        draft,
+        createdById: o.uploadedById,
+        createdAt: o.createdAt,
+        filedAt: o.filed?.at,
+        filedById: o.filed?.byId,
+        documents: {
+          create: {
+            patientId: patient.id,
+            kind: o.filed ? draft.type : "clinical_document",
+            fileName: `${o.sample}.png`,
+            mimeType: "image/png",
+            size: data.length,
+            ...size,
+            data,
+            uploadedById: o.uploadedById,
+            uploadedAt: o.createdAt,
+          },
+        },
+      },
+    });
+    if (!o.filed) return;
+    const serviceDate = new Date(`${draft.serviceDate}T00:00:00Z`);
+    for (const d of draft.diagnoses.filter((x) => x.addToProblems)) {
+      await prisma.condition.create({
+        data: { patientId: patient.id, code: d.icd10 || "R69", display: d.text, status: "active", onset: serviceDate, priority: 50, comment: `From imaging report: ${draft.title}, ${draft.organization}` },
+      });
+    }
+    if (draft.orderId) await prisma.serviceRequest.update({ where: { id: draft.orderId }, data: { status: "completed", completedAt: o.filed.at } });
+    await prisma.clinicalDocument.create({
+      data: {
+        patientId: patient.id,
+        type: draft.type,
+        title: draft.title,
+        organization: draft.organization || null,
+        author: draft.author || null,
+        serviceDate,
+        content: docContent(draft),
+        importJobId: job.id,
+        orderId: draft.orderId,
+        filedById: o.filed.byId,
+        filedAt: o.filed.at,
+        reviewedAt: o.filed.reviewedById ? o.filed.at : null,
+        reviewedById: o.filed.reviewedById ?? null,
+      },
+    });
+  }
+
+  await importDoc({
+    lastName: "Tanabe",
+    sample: "synthetic-ct-chest-report",
+    uploadedById: "prac_lund",
+    createdAt: daysAgo(20, 10, 5),
+    filed: { byId: "prac_ibarra", at: daysAgo(20, 12, 30), reviewedById: "prac_ibarra" },
+    edit: (d) => {
+      d.diagnoses.forEach((x) => (x.addToProblems = x.icd10 === "R91.1"));
+      d.diagnoses.forEach((x) => (x.text = x.icd10 === "R91.1" ? "Solitary pulmonary nodule, right upper lobe, 7 mm" : x.text));
+    },
+  });
+  await importDoc({
+    lastName: "Montenegro",
+    sample: "synthetic-ruq-ultrasound",
+    uploadedById: "prac_lund",
+    createdAt: daysAgo(1, 9, 10),
+    filed: { byId: "prac_brandt", at: daysAgo(1, 11, 45) },
+    edit: (d) => {
+      const stones = d.diagnoses.find((x) => x.icd10 === "K80.20")!;
+      Object.assign(stones, { addToProblems: true, text: "Calculus of gallbladder without cholecystitis" });
+    },
+  });
+  await importDoc({ lastName: "Brightwater", sample: "synthetic-eye-consult-letter", uploadedById: "prac_lund", createdAt: daysAgo(0, 7, 40) });
 }
 
 function progressNote(p: PatientDef, vitals: { display: string; value: number; unit: string }[]) {

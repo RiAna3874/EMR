@@ -1,0 +1,309 @@
+{
+  "document_type": "discharge_summary",
+  "title": "Discharge Summary",
+  "organization": "Riverbend General Hospital",
+  "author": "Priya Nandakumar, MD",
+  "service_date": "2026-10-09",
+  "admission_date": "2026-10-05",
+  "discharge_date": "2026-10-09",
+  "patient_name": "OKONKWO-HALE, MARCUS",
+  "patient_dob": "1959-03-21",
+  "patient_age": "67",
+  "patient_sex": "M",
+  "patient_id": "RGH-4471902",
+  "modality": null,
+  "body_part": null,
+  "impression": null,
+  "notes": [
+    "Dates are printed MM/DD/YYYY."
+  ],
+  "sections": [
+    {
+      "heading": "Discharge diagnoses",
+      "text": "PRINCIPAL\nAcute on chronic systolic (congestive) heart failure\nSECONDARY\nAtrial fibrillation, rate controlled\nChronic kidney disease, stage 3\nHypokalemia, resolved",
+      "box": {
+        "x0": 52,
+        "y0": 297,
+        "x1": 1048,
+        "y1": 469
+      },
+      "file": 1
+    },
+    {
+      "heading": "Reason for admission",
+      "text": "67-year-old man with HFrEF, persistent atrial fibrillation on apixaban and CKD stage 3 who presented with 5 days of progressive dyspnea, orthopnea and a 4.5 kg weight gain. BNP 1,840 pg/mL. Chest X-ray showed bilateral pleural effusions and pulmonary vascular congestion.",
+      "box": {
+        "x0": 52,
+        "y0": 479,
+        "x1": 1048,
+        "y1": 553
+      },
+      "file": 1
+    },
+    {
+      "heading": "Hospital course",
+      "text": "Treated with IV furosemide with net negative 5.2 L over 4 days; discharge weight 89.6 kg (dry weight estimate). Transthoracic echocardiogram on 10/06/2026 showed LVEF 30-35% (previously 40%), moderate functional mitral regurgitation and a mildly dilated left atrium. Guideline-directed therapy was advanced: spironolactone and empagliflozin were started and tolerated. Furosemide was changed to torsemide for more reliable absorption. Potassium fell to 3.2 mmol/L during diuresis and was repleted; 3.9 mmol/L at discharge. Creatinine peaked at 1.9 mg/dL and was 1.7 mg/dL at discharge (baseline 1.6). Heart rate 70-85 in atrial fibrillation on metoprolol.",
+      "box": {
+        "x0": 52,
+        "y0": 563,
+        "x1": 1048,
+        "y1": 705
+      },
+      "file": 1
+    },
+    {
+      "heading": "Procedures",
+      "text": "Transthoracic echocardiogram, 10/06/2026.",
+      "box": {
+        "x0": 52,
+        "y0": 715,
+        "x1": 1048,
+        "y1": 767
+      },
+      "file": 1
+    },
+    {
+      "heading": "Condition at discharge",
+      "text": "Stable. Ambulating independently. Room air SpO2 95%. No orthopnea.",
+      "box": {
+        "x0": 52,
+        "y0": 777,
+        "x1": 1048,
+        "y1": 830
+      },
+      "file": 1
+    },
+    {
+      "heading": "Discharge medications",
+      "text": "Status Medication Instructions\nNEW Torsemide 20 mg tablet Take 1 tablet (20 mg) by mouth once daily\nNEW Spironolactone 25 mg tablet Take ½ tablet (12.5 mg) by mouth once daily\nNEW Empagliflozin 10 mg tablet Take 1 tablet by mouth once daily\nCONTINUE Apixaban 5 mg tablet Take 1 tablet by mouth twice daily\nCONTINUE Metoprolol succinate ER 50 mg tablet Take 1 tablet by mouth once daily\nSTOP Furosemide 40 mg tablet Stop taking. Replaced by torsemide.",
+      "box": {
+        "x0": 52,
+        "y0": 132,
+        "x1": 1048,
+        "y1": 341
+      },
+      "file": 2
+    },
+    {
+      "heading": "Follow-up",
+      "text": "Basic metabolic panel (potassium, creatinine) in 1 week, ordered by PCP.\nPCP visit with Dr. Ibarra within 7 days of discharge (by 10/16/2026).\nCardiology clinic (Dr. Helena Marsh) in 2 weeks to titrate guideline-directed therapy and discuss repeat echo in 3 months.\nWeigh daily each morning. Call the clinic for a gain of more than 1 kg in a day or 2 kg in a week.",
+      "box": {
+        "x0": 52,
+        "y0": 351,
+        "x1": 1048,
+        "y1": 470
+      },
+      "file": 2
+    },
+    {
+      "heading": "Diet and activity",
+      "text": "2 g sodium diet. Fluid limit 1.5 L per day. Walk daily as tolerated; no heavy lifting for 1 week.",
+      "box": {
+        "x0": 52,
+        "y0": 480,
+        "x1": 1048,
+        "y1": 532
+      },
+      "file": 2
+    },
+    {
+      "heading": "Pending results",
+      "text": "None.",
+      "box": {
+        "x0": 52,
+        "y0": 542,
+        "x1": 1048,
+        "y1": 595
+      },
+      "file": 2
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Acute on chronic systolic (congestive) heart failure",
+      "kind": "principal",
+      "icd10": "I50.23",
+      "box": {
+        "x0": 78,
+        "y0": 345,
+        "x1": 1048,
+        "y1": 373
+      },
+      "file": 1
+    },
+    {
+      "text": "Atrial fibrillation, rate controlled",
+      "kind": "secondary",
+      "icd10": "I48.91",
+      "box": {
+        "x0": 78,
+        "y0": 396,
+        "x1": 1048,
+        "y1": 424
+      },
+      "file": 1
+    },
+    {
+      "text": "Chronic kidney disease, stage 3",
+      "kind": "secondary",
+      "icd10": "N18.30",
+      "box": {
+        "x0": 78,
+        "y0": 418,
+        "x1": 1048,
+        "y1": 447
+      },
+      "file": 1
+    },
+    {
+      "text": "Hypokalemia, resolved",
+      "kind": "secondary",
+      "icd10": "E87.6",
+      "box": {
+        "x0": 78,
+        "y0": 441,
+        "x1": 1048,
+        "y1": 469
+      },
+      "file": 1
+    }
+  ],
+  "medications": [
+    {
+      "text": "NEW Torsemide 20 mg tablet Take 1 tablet (20 mg) by mouth once daily",
+      "drug": "Torsemide 20 mg tablet",
+      "dose": "20 mg",
+      "route": "by mouth",
+      "frequency": "once daily",
+      "change": "new",
+      "box": {
+        "x0": 52,
+        "y0": 178,
+        "x1": 1048,
+        "y1": 210
+      },
+      "file": 2
+    },
+    {
+      "text": "NEW Spironolactone 25 mg tablet Take ½ tablet (12.5 mg) by mouth once daily",
+      "drug": "Spironolactone 25 mg tablet",
+      "dose": "12.5 mg",
+      "route": "by mouth",
+      "frequency": "once daily",
+      "change": "new",
+      "box": {
+        "x0": 52,
+        "y0": 204,
+        "x1": 1048,
+        "y1": 236
+      },
+      "file": 2
+    },
+    {
+      "text": "NEW Empagliflozin 10 mg tablet Take 1 tablet by mouth once daily",
+      "drug": "Empagliflozin 10 mg tablet",
+      "dose": "10 mg",
+      "route": "by mouth",
+      "frequency": "once daily",
+      "change": "new",
+      "box": {
+        "x0": 52,
+        "y0": 230,
+        "x1": 1048,
+        "y1": 262
+      },
+      "file": 2
+    },
+    {
+      "text": "CONTINUE Apixaban 5 mg tablet Take 1 tablet by mouth twice daily",
+      "drug": "Apixaban 5 mg tablet",
+      "dose": "5 mg",
+      "route": "by mouth",
+      "frequency": "twice daily",
+      "change": "continued",
+      "box": {
+        "x0": 52,
+        "y0": 256,
+        "x1": 1048,
+        "y1": 288
+      },
+      "file": 2
+    },
+    {
+      "text": "CONTINUE Metoprolol succinate ER 50 mg tablet Take 1 tablet by mouth once daily",
+      "drug": "Metoprolol succinate ER 50 mg tablet",
+      "dose": "50 mg",
+      "route": "by mouth",
+      "frequency": "once daily",
+      "change": "continued",
+      "box": {
+        "x0": 52,
+        "y0": 282,
+        "x1": 1048,
+        "y1": 314
+      },
+      "file": 2
+    },
+    {
+      "text": "STOP Furosemide 40 mg tablet Stop taking. Replaced by torsemide.",
+      "drug": "Furosemide 40 mg tablet",
+      "dose": null,
+      "route": null,
+      "frequency": null,
+      "change": "stopped",
+      "box": {
+        "x0": 52,
+        "y0": 308,
+        "x1": 1048,
+        "y1": 340
+      },
+      "file": 2
+    }
+  ],
+  "follow_ups": [
+    {
+      "text": "Basic metabolic panel (potassium, creatinine) in 1 week, ordered by PCP.",
+      "due": "1 week",
+      "box": {
+        "x0": 78,
+        "y0": 375,
+        "x1": 1048,
+        "y1": 403
+      },
+      "file": 2
+    },
+    {
+      "text": "PCP visit with Dr. Ibarra within 7 days of discharge (by 10/16/2026).",
+      "due": "2026-10-16",
+      "box": {
+        "x0": 78,
+        "y0": 397,
+        "x1": 1048,
+        "y1": 426
+      },
+      "file": 2
+    },
+    {
+      "text": "Cardiology clinic (Dr. Helena Marsh) in 2 weeks to titrate guideline-directed therapy and discuss repeat echo in 3 months.",
+      "due": "2 weeks",
+      "box": {
+        "x0": 78,
+        "y0": 420,
+        "x1": 1048,
+        "y1": 448
+      },
+      "file": 2
+    },
+    {
+      "text": "Weigh daily each morning. Call the clinic for a gain of more than 1 kg in a day or 2 kg in a week.",
+      "due": null,
+      "box": {
+        "x0": 78,
+        "y0": 442,
+        "x1": 1048,
+        "y1": 470
+      },
+      "file": 2
+    }
+  ]
+}

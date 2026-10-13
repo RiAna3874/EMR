@@ -6,8 +6,9 @@ import { Empty, Panel } from "@/components/panel";
 import { UploadForm } from "@/components/import/upload-form";
 import { ImportStatusChip } from "@/components/import/status-chip";
 
-export default async function ImportReport({ params }: { params: Promise<{ id: string }> }) {
+export default async function ImportReport({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ kind?: string }> }) {
   const { id } = await params;
+  const { kind } = await searchParams;
   await requirePermission("importReports");
   const jobs = await db.importJob.findMany({
     where: { patientId: id },
@@ -21,13 +22,13 @@ export default async function ImportReport({ params }: { params: Promise<{ id: s
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-5">
-      <Panel title="Import a lab report" className="xl:col-span-3">
+      <Panel title="Import an outside record" className="xl:col-span-3">
         <div className="p-3">
-          <UploadForm patientId={id} />
+          <UploadForm patientId={id} initialKind={kind === "document" ? "document" : "lab"} />
           <ol className="mt-4 grid grid-cols-1 gap-2 text-[12px] text-ink-2 sm:grid-cols-3">
-            <Step n={1} title="Upload">A photo, scan or PDF from any outside lab.</Step>
-            <Step n={2} title="Review">Claude transcribes each test. Check every value against the image, side by side.</Step>
-            <Step n={3} title="File">Verified results join the Results trend table with flags, marked as imported.</Step>
+            <Step n={1} title="Upload">A photo, scan or PDF from an outside lab, hospital, imaging center or practice.</Step>
+            <Step n={2} title="Review">Claude transcribes it word for word. Check it against the pages, side by side, and pick what joins the problem and medication lists.</Step>
+            <Step n={3} title="File">Lab values join the Results table; documents go to the Documents tab and the PCP&apos;s Inbox.</Step>
           </ol>
         </div>
       </Panel>
@@ -43,10 +44,10 @@ export default async function ImportReport({ params }: { params: Promise<{ id: s
                 <li key={j.id} className="border-t border-line first:border-t-0">
                   <Link href={`/patients/${id}/import/${j.id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-accent-soft/40">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{draftTitle(j.draft) ?? "Lab report"}</div>
+                      <div className="truncate font-medium">{draftTitle(j.draft) ?? (j.kind === "document" ? "Clinical document" : "Lab report")}</div>
                       <div className="text-[12px] text-ink-3">
                         {fmtDateTime(j.createdAt)} · {j.documents.length} {j.documents.length === 1 ? "page" : "pages"} · {j.createdBy.name}
-                        {j.status === "filed" && ` · ${results} results filed`}
+                        {j.status === "filed" && (j.kind === "document" ? ` · filed to Documents` : ` · ${results} results filed`)}
                       </div>
                     </div>
                     <ImportStatusChip status={j.status} />
@@ -62,8 +63,8 @@ export default async function ImportReport({ params }: { params: Promise<{ id: s
 }
 
 function draftTitle(draft: unknown) {
-  const d = draft as { labName?: string; reportTitle?: string } | null;
-  const parts = [d?.reportTitle, d?.labName].filter(Boolean);
+  const d = draft as { labName?: string; reportTitle?: string; title?: string; organization?: string } | null;
+  const parts = [d?.reportTitle ?? d?.title, d?.labName ?? d?.organization].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
 

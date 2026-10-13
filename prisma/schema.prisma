@@ -122,6 +122,23 @@ enum ReportSource {
   imported
 }
 
+// What an import is read as: lab results, or an outside clinical document
+// (imaging report, discharge summary, letter...) filed as a ClinicalDocument.
+enum ImportKind {
+  lab
+  document
+}
+
+enum ClinicalDocType {
+  imaging_report
+  discharge_summary
+  referral_letter
+  consult_note
+  procedure_note
+  pathology_report
+  other
+}
+
 enum ImportStatus {
   extracting
   needs_review
@@ -181,24 +198,26 @@ model Practitioner {
   active       Boolean   @default(true)
   sessions     Session[]
 
-  primaryPatients Patient[]           @relation("PCP")
-  encounters      Encounter[]
-  prescriptions   MedicationRequest[]
-  notes           Note[]              @relation("NoteAuthor")
-  cosignNotes     Note[]              @relation("NoteCosigner")
-  addenda         NoteAddendum[]
-  phrases         SmartPhrase[]
-  verifiedReports DiagnosticReport[]  @relation("VerifiedReports")
-  uploads         DocumentReference[]
-  importJobs      ImportJob[]         @relation("ImportCreatedBy")
-  filedImports    ImportJob[]         @relation("ImportFiledBy")
-  reviewedReports DiagnosticReport[]  @relation("ReviewedReports")
-  orders          ServiceRequest[]
-  cosignMeds      MedicationRequest[] @relation("MedCosigner")
-  endedMeds       MedicationRequest[] @relation("MedEndedBy")
-  medsReviewed    Patient[]           @relation("MedsReviewer")
-  refillsPended   RefillRequest[]     @relation("RefillPendedBy")
-  refillsDecided  RefillRequest[]     @relation("RefillDecidedBy")
+  primaryPatients   Patient[]           @relation("PCP")
+  encounters        Encounter[]
+  prescriptions     MedicationRequest[]
+  notes             Note[]              @relation("NoteAuthor")
+  cosignNotes       Note[]              @relation("NoteCosigner")
+  addenda           NoteAddendum[]
+  phrases           SmartPhrase[]
+  verifiedReports   DiagnosticReport[]  @relation("VerifiedReports")
+  uploads           DocumentReference[]
+  importJobs        ImportJob[]         @relation("ImportCreatedBy")
+  filedImports      ImportJob[]         @relation("ImportFiledBy")
+  reviewedReports   DiagnosticReport[]  @relation("ReviewedReports")
+  orders            ServiceRequest[]
+  cosignMeds        MedicationRequest[] @relation("MedCosigner")
+  endedMeds         MedicationRequest[] @relation("MedEndedBy")
+  medsReviewed      Patient[]           @relation("MedsReviewer")
+  refillsPended     RefillRequest[]     @relation("RefillPendedBy")
+  refillsDecided    RefillRequest[]     @relation("RefillDecidedBy")
+  filedDocuments    ClinicalDocument[]  @relation("DocFiledBy")
+  reviewedDocuments ClinicalDocument[]  @relation("DocReviewedBy")
 }
 
 // A signed-in browser. The cookie holds a random token; only its SHA-256 is stored.
@@ -247,6 +266,7 @@ model Patient {
   orders         ServiceRequest[]
   dispenses      MedicationDispense[]
   refillRequests RefillRequest[]
+  clinicalDocs   ClinicalDocument[]
 
   @@index([lastName, firstName])
 }
@@ -552,6 +572,7 @@ model ImportJob {
   id          String        @id @default(cuid())
   patientId   String
   patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  kind        ImportKind    @default(lab)
   status      ImportStatus  @default(extracting)
   model       String?
   extraction  Json? // raw model output, kept for audit
@@ -565,8 +586,9 @@ model ImportJob {
   filedById   String?
   filedBy     Practitioner? @relation("ImportFiledBy", fields: [filedById], references: [id])
 
-  documents DocumentReference[]
-  reports   DiagnosticReport[]
+  documents   DocumentReference[]
+  reports     DiagnosticReport[]
+  clinicalDoc ClinicalDocument?
 
   @@index([patientId, createdAt])
   @@index([status])
@@ -596,8 +618,41 @@ model ServiceRequest {
   discontinuedAt DateTime?
   medicationId   String? // the MedicationRequest a signed prescription created
 
-  reports DiagnosticReport[]
+  reports      DiagnosticReport[]
+  clinicalDocs ClinicalDocument[]
 
   @@index([patientId, status])
   @@index([orderedById, status])
+}
+
+// An outside clinical document filed from a verified import: an imaging report,
+// discharge summary, referral or consult letter. `content` holds the reviewed
+// structure (sections, diagnoses, medications, follow-ups; see
+// src/lib/documents/draft.ts DocContent). The source pages stay on the import job.
+model ClinicalDocument {
+  id            String          @id @default(cuid())
+  patientId     String
+  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type          ClinicalDocType
+  title         String
+  organization  String?
+  author        String?
+  serviceDate   DateTime        @db.Date
+  content       Json
+  importJobId   String?         @unique
+  importJob     ImportJob?      @relation(fields: [importJobId], references: [id])
+  // The imaging or referral order this document answers, if any.
+  orderId       String?
+  order         ServiceRequest? @relation(fields: [orderId], references: [id])
+  filedById     String
+  filedBy       Practitioner    @relation("DocFiledBy", fields: [filedById], references: [id])
+  filedAt       DateTime        @default(now())
+  // Inbox acknowledgement by the PCP (or the ordering clinician).
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewedBy    Practitioner?   @relation("DocReviewedBy", fields: [reviewedById], references: [id])
+  reviewComment String?
+
+  @@index([patientId, serviceDate])
+  @@index([reviewedAt])
 }

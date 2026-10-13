@@ -18,14 +18,14 @@ An outpatient electronic medical record that follows the workflows clinicians kn
     - Problem-based assessment and plan: a side panel lists active problems with the plan last written for each, to add a fresh block or carry the old one forward.
     - States: pended (saved, unsigned, editable by the author), signed, routed for cosign (the cosigner signs with an optional attestation), and addended (signed notes never change; addenda are appended with their own signature). Notes can be filtered by type, status, author and text, and printed.
   - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), contrast with low eGFR, and for prescriptions the full prescribing checks below. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
-  - **Import Report**: turn a photo, scan or PDF of an outside lab report into filed, flagged results. See below.
-- **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), imported reports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
+  - **Documents**: outside records in one list (imaging reports, discharge summaries, referral and consult letters, imported lab reports) with page thumbnails, filters by type, a reading view, and uploads still waiting for review. See [Outside document import](#outside-document-import).
+  - **Import**: turn a photo, scan or PDF of an outside lab report into filed, flagged results, or of any other outside document into a structured chart document. See below.
+- **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), outside documents to review, imports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
 - **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; an order requisition for active labs, imaging and referrals; a paper **prescription** for print-class medications; and the patient's own **medication list**.
 - **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g h` My Day.
 
 - **Sign-in and roles**: see below.
 
-Not built yet: the Documents tab.
 
 ## Medications and prescribing
 
@@ -63,7 +63,7 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Pend orders | ✓ | ✓ | ✓ | |
 | Sign and discontinue orders | ✓ | ✓ | | |
 | Upload and review outside reports | ✓ | ✓ | ✓ | |
-| Verify and file imported results | ✓ | ✓ | | |
+| Verify and file imported results and documents | ✓ | ✓ | | |
 | Acknowledge results (Inbox) | ✓ | ✓ | | |
 
 A resident can't sign a note without choosing an attending to cosign it; the note then waits in that attending's Inbox. Orders a nurse pends show "pended by" on the chart's Orders tab, and the physician or resident who signs them becomes the ordering clinician. Front desk opens a chart to a demographics and appointments view only.
@@ -83,7 +83,7 @@ The sign-in page lists them in development. In a production build they are hidde
 
 ## Lab report import
 
-1. **Upload** one or more pages (phone photos are rotated and shrunk in the browser first) on a patient's **Import Report** tab.
+1. **Upload** one or more pages (phone photos are rotated and shrunk in the browser first) on a patient's **Import** tab with **Lab results** chosen.
 2. **Read**: Claude (`claude-opus-5-5`, structured JSON output) transcribes every row exactly as printed: test name, value, unit, reference range, the lab's flag, and where on the page it was read. It does not compute or correct anything.
 3. **Review**, side by side with the image. The app then:
    - maps printed names (Haemoglobin, SGPT, S. Creatinine, RBS...) to LOINC codes and the chart's usual units, and files each test under the same panel as tests ordered here so trends line up;
@@ -96,6 +96,21 @@ The sign-in page lists them in development. In a production build they are hidde
 Pending imports show on My Day under "Imported reports to verify". If Claude can't read a report (or no API key is set), the clinician can type the results in next to the image instead.
 
 Set `ANTHROPIC_API_KEY` in `.env`. To work on the review screen without an API key, set `MERIDIAN_EXTRACTION_FIXTURE=samples/synthetic-lab-report.extraction.json` (development only) and upload `samples/synthetic-lab-report.png`.
+
+## Outside document import
+
+The same Import tab reads documents that aren't lab tables: imaging reports, hospital discharge summaries, referral letters and consult letters (plus procedure and pathology reports, or "other"). Choose **Clinical document** before uploading.
+
+1. **Read**: Claude transcribes the document word for word: title, facility, author, dates, the impression, every section's text, and the diagnoses, medications (marked new, changed, continued or stopped) and follow-up recommendations the document itself states, each with where it sits on the page. It doesn't summarize or add anything. If the pages turn out to be a lab report, a banner offers to read them as lab results instead (and the header link switches either way).
+2. **Review**, side by side with the pages; clicking a highlight finds the item in the form and the reverse. The app:
+   - checks the printed name, date of birth, age and sex against the chart and blocks filing on a mismatch until confirmed;
+   - compares each diagnosis with the problem list (on the list, related by ICD-10 category, or new) and each medication with the medication list, and warns when a document starts a drug that isn't listed or stops one that's still active here;
+   - suggests the open imaging or referral order the document answers (by its words, never by type alone).
+3. **Verify & file** (physician or resident) creates a `ClinicalDocument` with the reviewed content and where each part came from. Diagnoses the reviewer ticks are added to the problem list and ticked medications are added as outside medications (nothing is prescribed); a linked order is completed. A stopped medication is never removed automatically: the reviewer is told to act on it in Medications.
+
+A nurse can upload and prepare a document but not file it. Filed documents show on the Documents tab and the Summary ("Outside records"), print in our own layout with their provenance, and wait in the Inbox under "Outside documents" for the clinician who ordered them or, with no order, the PCP, unless that clinician filed it.
+
+To work without an API key, set `MERIDIAN_DOCUMENT_FIXTURES=samples` (development only) and upload one of the synthetic documents in `samples/` (`synthetic-discharge-summary-p1.png` with `-p2.png`, `synthetic-dxa-report.png`, `synthetic-ct-chest-report.png`, `synthetic-ruq-ultrasound.png`, `synthetic-eye-consult-letter.png`); the saved transcription is matched by file name. The seed files a CT and an ultrasound and leaves an eye consult letter waiting for review.
 
 ## Stack
 

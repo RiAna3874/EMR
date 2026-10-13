@@ -3,13 +3,14 @@
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { toUrlDate } from "@/lib/format";
 import { assessDraft, blankRow, DraftSchema, emptyDraft, panelFor } from "@/lib/labs/draft";
 import { labHistory, runExtraction } from "@/lib/labs/jobs";
 import { completeLabOrder } from "@/lib/orders/server";
+import { emptyDocDraft } from "@/lib/documents/draft";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // Claude's per-image limit
@@ -22,6 +23,7 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
   const currentUser = await requirePermission("importReports");
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const sizes: { width: number | null; height: number | null }[] = JSON.parse(String(form.get("sizes") ?? "[]"));
+  const kind = form.get("kind") === "document" ? "document" : "lab";
   if (files.length === 0) return { error: "Choose a photo or PDF of the report." };
   if (files.length > MAX_FILES) return { error: `Upload at most ${MAX_FILES} pages at a time.` };
   for (const f of files) {
@@ -40,10 +42,12 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
   const job = await db.importJob.create({
     data: {
       patientId,
+      kind,
       createdById: currentUser.id,
       documents: {
         create: files.map((f, i) => ({
           patientId,
+          kind: kind === "document" ? "clinical_document" : "lab_report",
           fileName: f.name.slice(0, 200),
           mimeType: f.type,
           size: f.size,
@@ -75,9 +79,10 @@ export async function retryExtraction(patientId: string, jobId: string) {
 
 export async function enterManually(patientId: string, jobId: string) {
   await requirePermission("importReports");
+  const job = await db.importJob.findUniqueOrThrow({ where: { id: jobId, patientId }, select: { kind: true } });
   await db.importJob.update({
     where: { id: jobId, patientId, status: { in: ["failed", "extracting"] } },
-    data: { status: "needs_review", error: null, model: null, draft: json({ ...emptyDraft(), rows: [blankRow("m1")] }) },
+    data: { status: "needs_review", error: null, model: null, draft: json(job.kind === "document" ? emptyDocDraft() : { ...emptyDraft(), rows: [blankRow("m1")] }) },
   });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
@@ -85,7 +90,20 @@ export async function enterManually(patientId: string, jobId: string) {
 export async function saveDraft(patientId: string, jobId: string, draftJson: string) {
   await requirePermission("importReports");
   const draft = DraftSchema.parse(JSON.parse(draftJson));
-  await db.importJob.update({ where: { id: jobId, patientId, status: "needs_review" }, data: { draft: json(draft) } });
+  await db.importJob.update({ where: { id: jobId, patientId, status: "needs_review", kind: "lab" }, data: { draft: json(draft) } });
+}
+
+// Reads the same pages again as the other kind, e.g. a "document" that turned out
+// to be a table of lab results. Any review work on the current draft is dropped.
+export async function rereadAs(patientId: string, jobId: string, kind: "lab" | "document") {
+  await requirePermission("importReports");
+  await db.importJob.update({
+    where: { id: jobId, patientId, status: { in: ["needs_review", "failed"] } },
+    data: { kind, status: "extracting", error: null, draft: Prisma.DbNull, extraction: Prisma.DbNull, model: null },
+  });
+  await db.documentReference.updateMany({ where: { importJobId: jobId }, data: { kind: kind === "document" ? "clinical_document" : "lab_report" } });
+  after(() => runExtraction(jobId));
+  revalidatePath(`/patients/${patientId}`, "layout");
 }
 
 export async function discardImport(patientId: string, jobId: string) {
@@ -112,6 +130,7 @@ export async function fileImport(patientId: string, jobId: string, draftJson: st
   ]);
   if (!job || !patient) return { errors: ["Import not found."] };
   if (job.status !== "needs_review") return { errors: ["This import has already been filed or discarded."] };
+  if (job.kind !== "lab") return { errors: ["This import is being read as a document, not lab results. Reload the page."] };
 
   const history = await labHistory(patientId, draft.rows.flatMap((r) => (r.loinc ? [r.loinc] : [])));
   const facts = { firstName: patient.firstName, lastName: patient.lastName, dob: toUrlDate(patient.dob), sex: patient.sex, mrn: patient.mrn };
