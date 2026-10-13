@@ -4,20 +4,24 @@ This guide puts Meridian on the internet with an empty database: no synthetic pa
 
 ## The default setup: Render
 
-We use [Render](https://render.com): one **Web Service** (runs the Next.js app) and one **Render Postgres** database in the same region. It's a managed host, so there are no servers to patch, HTTPS certificates are automatic, and the database has managed backups. Render offers **HIPAA-enabled workspaces** with a signed Business Associate Agreement, which you need before any real US patient data goes in ([Render: HIPAA](https://render.com/docs/hipaa-compliance)). Create the workspace as HIPAA-enabled from the start, since moving later means migrating the database.
+We use [Render](https://render.com): one **Web Service** (runs the Next.js app) and one **Render Postgres** database, both in **Singapore**, the closest of Render's regions to Bangladesh ([Render regions](https://render.com/docs/regions)). It's a managed host, so there are no servers to patch, HTTPS certificates are automatic, and the database has managed backups. A region can't be changed after creation, so pick Singapore for both from the start.
+
+**Before real patients, check with a Bangladeshi lawyer whether patient records must be stored inside Bangladesh.** The Personal Data Protection Ordinance 2025 (since re-enacted as an Act in 2026) treats health data as sensitive and requires some categories of data to stay in the country; see [GO-LIVE.md](GO-LIVE.md). If it applies, Singapore is fine for training and test patients, and the live database moves to a host with a Bangladesh data centre before real patients go in. The steps below are the same on any host.
+
+For a clinic in the US, use a **HIPAA-enabled workspace** with a signed Business Associate Agreement instead ([Render: HIPAA](https://render.com/docs/hipaa-compliance)).
 
 Any host that runs Node 20+ and Postgres 16 works the same way (AWS, Azure, Google Cloud, Aptible, Fly.io); the commands below don't change.
 
-Rough cost: a Starter web service plus a paid Postgres plan with point-in-time recovery, plus the HIPAA workspace fee. Check Render's pricing page; the free tiers have no backups and must not be used.
+Rough cost: a Starter web service plus a paid Postgres plan with point-in-time recovery. Check Render's pricing page; the free tiers have no backups and must not be used.
 
 ## 1. Create the database
 
-1. In Render, **New → Postgres**. Name `meridian-db`, PostgreSQL **16**, region closest to the clinic, a **paid** plan (backups and point-in-time recovery).
+1. In Render, **New → Postgres**. Name `meridian-db`, PostgreSQL **16**, region **Singapore**, a **paid** plan (backups and point-in-time recovery).
 2. When it's ready, copy the **Internal Database URL**.
 
 ## 2. Create the web service
 
-**New → Web Service**, connect GitHub, pick `RiAna3874/EMR`, branch `main`, same region as the database.
+**New → Web Service**, connect GitHub, pick `RiAna3874/EMR`, branch `main`, region **Singapore** (the same as the database).
 
 | Setting | Value |
 |---|---|
@@ -36,7 +40,7 @@ Environment variables:
 |---|---|
 | `DATABASE_URL` | The Internal Database URL from step 1 |
 | `NODE_ENV` | `production` |
-| `TZ` | The clinic's time zone, e.g. `America/New_York`, `Europe/London`, `Asia/Dhaka`. **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. |
+| `TZ` | `Asia/Dhaka` (the clinic's time zone). **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. |
 | `MERIDIAN_SETUP_TOKEN` | A long random value, made with `openssl rand -base64 24`. Keep it private; you type it once to create the first administrator. |
 | `MERIDIAN_CLINIC_NAME`, `MERIDIAN_CLINIC_ADDRESS`, `MERIDIAN_CLINIC_PHONE`, `MERIDIAN_CLINIC_FAX` | Printed on letters, requisitions and prescriptions |
 | `ANTHROPIC_API_KEY` | **Leave unset** until you have a signed agreement with Anthropic (see GO-LIVE.md). Without it, the Import tab says import isn't configured and nothing leaves your server. |
