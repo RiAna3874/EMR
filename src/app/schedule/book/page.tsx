@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
+import { can } from "@/lib/roles";
 import { age, fmtDate, fmtDayShort, fmtDob, fmtTime, fullName, parseLocalDate, sexShort, toLocalDate, toLocalDateTime } from "@/lib/format";
 import { findSlots, isOpen, scheduledProviders } from "@/lib/scheduling/server";
 import { VISIT_TYPES, isVisitType, visitType } from "@/lib/scheduling/visit-types";
@@ -20,7 +21,7 @@ const DAYS = 14;
 // is a plain GET form, so each step is a link that can be shared or reloaded.
 export default async function Book({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
-  await requirePermission("bookAppointments");
+  const user = await requirePermission("bookAppointments");
 
   const moving = sp.reschedule
     ? await db.encounter.findUnique({ where: { id: sp.reschedule }, include: { provider: true } })
@@ -100,7 +101,19 @@ export default async function Book({ searchParams }: { searchParams: Promise<Par
                   </form>
                   {sp.q && (
                     <ul className="mt-2">
-                      {matches.length === 0 && <li className="py-1 text-ink-3">No patients found.</li>}
+                      {matches.length === 0 && (
+                        <li className="py-1 text-ink-3">
+                          No patients found.
+                          {can(user.role, "registerPatients") && (
+                            <>
+                              {" "}
+                              <Link href={`/patients/new?from=book&q=${encodeURIComponent(sp.q)}`} className="text-accent hover:underline">
+                                Register a new patient
+                              </Link>
+                            </>
+                          )}
+                        </li>
+                      )}
                       {matches.map((m) => (
                         <li key={m.id}>
                           <Link href={keep({ patient: m.id, q: undefined, provider: sp.provider })} className="-mx-1.5 block rounded px-1.5 py-1 hover:bg-accent-soft">

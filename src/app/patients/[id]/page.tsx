@@ -14,11 +14,18 @@ import { sigText } from "@/lib/meds/sig";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5"];
 
-export default async function Summary({ params }: { params: Promise<{ id: string }> }) {
+export default async function Summary({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ registered?: string }> }) {
   const { id } = await params;
   const base = `/patients/${id}`;
   const currentUser = await requireUser();
-  if (!can(currentUser.role, "viewClinical")) return <FrontDeskSummary patientId={id} />;
+  const registered = (await searchParams).registered === "1" && <Registered patientId={id} canBook={can(currentUser.role, "bookAppointments")} />;
+  if (!can(currentUser.role, "viewClinical"))
+    return (
+      <>
+        {registered}
+        <FrontDeskSummary patientId={id} />
+      </>
+    );
   const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
@@ -42,6 +49,8 @@ export default async function Summary({ params }: { params: Promise<{ id: string
   const latestAbnormal = abnormal.filter((o) => (seen.has(o.code) ? false : (seen.add(o.code), true)));
 
   return (
+    <>
+    {registered}
     <div className="grid grid-cols-1 gap-3 p-4 xl:grid-cols-3">
       <Panel title="Active problems" href={`${base}/problems`}>
         {conditions.length === 0 ? (
@@ -225,13 +234,14 @@ export default async function Summary({ params }: { params: Promise<{ id: string
         </Panel>
       )}
     </div>
+    </>
   );
 }
 
 // Front desk sees who the patient is and when they're coming in, not their clinical record.
 async function FrontDeskSummary({ patientId }: { patientId: string }) {
   const [patient, upcoming] = await Promise.all([
-    db.patient.findUniqueOrThrow({ where: { id: patientId }, include: { pcp: true } }),
+    db.patient.findUniqueOrThrow({ where: { id: patientId }, include: { pcp: true, preferredPharmacy: true, registeredBy: true } }),
     db.encounter.findMany({
       where: { patientId, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: { not: "cancelled" } },
       orderBy: { start: "asc" },
@@ -251,14 +261,54 @@ async function FrontDeskSummary({ patientId }: { patientId: string }) {
           <dd className="tabular">{fmtDob(patient.dob)}</dd>
           <dt className="text-ink-3">MRN</dt>
           <dd className="font-mono">{patient.mrn}</dd>
+          {patient.preferredName && (
+            <>
+              <dt className="text-ink-3">Preferred name</dt>
+              <dd>{patient.preferredName}</dd>
+            </>
+          )}
           <dt className="text-ink-3">Phone</dt>
           <dd className="tabular">{patient.phone ?? "—"}</dd>
+          {patient.email && (
+            <>
+              <dt className="text-ink-3">Email</dt>
+              <dd>{patient.email}</dd>
+            </>
+          )}
           <dt className="text-ink-3">Address</dt>
           <dd>{patient.address ?? "—"}</dd>
           <dt className="text-ink-3">Language</dt>
           <dd>{patient.preferredLanguage}</dd>
           <dt className="text-ink-3">PCP</dt>
           <dd>{patient.pcp ? `${patient.pcp.name}${patient.pcp.credentials ? `, ${patient.pcp.credentials}` : ""}` : "None"}</dd>
+          <dt className="text-ink-3">Pharmacy</dt>
+          <dd>{patient.preferredPharmacy?.name ?? "None"}</dd>
+          <dt className="text-ink-3">Emergency contact</dt>
+          <dd>
+            {patient.emergencyContactName
+              ? [patient.emergencyContactName, patient.emergencyContactRelation, patient.emergencyContactPhone].filter(Boolean).join(" · ")
+              : "—"}
+          </dd>
+          <dt className="text-ink-3">Coverage</dt>
+          <dd>
+            {patient.insurancePayer ? (
+              <>
+                {patient.insurancePayer} <span className="font-mono">{patient.insuranceMemberId}</span>
+                {patient.insuranceGroup && <span className="text-ink-3"> · group {patient.insuranceGroup}</span>}
+                {patient.subscriberName && <span className="text-ink-3"> · holder {patient.subscriberName} ({patient.subscriberRelation?.toLowerCase()})</span>}
+              </>
+            ) : (
+              "Self-pay"
+            )}
+          </dd>
+          {patient.registeredBy && (
+            <>
+              <dt className="text-ink-3">Registered</dt>
+              <dd>
+                {fmtDate(patient.createdAt)} by {patient.registeredBy.name}
+              </dd>
+            </>
+          )}
         </dl>
       </Panel>
       <Panel title="Upcoming appointments">
@@ -279,6 +329,24 @@ async function FrontDeskSummary({ patientId }: { patientId: string }) {
           </ul>
         )}
       </Panel>
+    </div>
+  );
+}
+
+// Shown once, right after registration: the new MRN and the usual next step.
+async function Registered({ patientId, canBook }: { patientId: string; canBook: boolean }) {
+  const p = await db.patient.findUnique({ where: { id: patientId }, select: { firstName: true, lastName: true, mrn: true } });
+  if (!p) return null;
+  return (
+    <div role="status" className="mx-4 mt-4 flex items-center gap-3 rounded-md border border-ok/30 bg-ok/10 px-3 py-2 text-ok">
+      <span>
+        Registered {p.firstName} {p.lastName}. MRN <span className="font-mono font-semibold">{p.mrn}</span>.
+      </span>
+      {canBook && (
+        <Link href={`/schedule/book?patient=${patientId}`} className="ml-auto rounded border border-accent bg-accent px-2.5 py-1 text-[12.5px] font-medium text-white hover:bg-accent/90">
+          Make appointment
+        </Link>
+      )}
     </div>
   );
 }

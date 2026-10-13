@@ -10,6 +10,7 @@ const GLOBAL: Command[] = [
   { id: "home", label: "My Day", group: "Go to", href: "/", hint: "g h" },
   { id: "schedule", label: "Schedule", group: "Go to", href: "/schedule", hint: "g d" },
   { id: "book", label: "Make appointment", group: "Go to", href: "/schedule/book" },
+  { id: "register", label: "Register new patient", group: "Go to", href: "/patients/new" },
   { id: "inbox", label: "Inbox", group: "Go to", href: "/inbox", hint: "g i" },
   { id: "messages", label: "Messages (secure chat)", group: "Go to", href: "/messages", hint: "g c" },
   { id: "new-message", label: "New message", group: "Go to", href: "/messages/new" },
@@ -46,7 +47,7 @@ function isTyping(el: EventTarget | null) {
 // ⌘K / Ctrl+K: find a patient, jump to a chart activity, or start an order.
 // "g" then a letter jumps directly (g r = Results, g o = Orders, g i = Inbox...).
 // `clinical` false (front desk) limits it to finding patients and their Summary.
-export function CommandPalette({ clinical }: { clinical: boolean }) {
+export function CommandPalette({ clinical, canRegister }: { clinical: boolean; canRegister: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -118,9 +119,9 @@ export function CommandPalette({ clinical }: { clinical: boolean }) {
       clinical && chartId && orderQuery.length >= 2
         ? searchOrderables(orderQuery, 5).map((o) => ({ id: `o:${o.code}`, label: `Order ${o.display}`, group: "Order", href: `/patients/${chartId}/orders?add=${encodeURIComponent(o.code)}` }))
         : [];
-    const global = GLOBAL.filter((c) => clinical || (c.id !== "inbox" && c.id !== "phrases"));
+    const global = GLOBAL.filter((c) => (clinical || (c.id !== "inbox" && c.id !== "phrases")) && (canRegister || c.id !== "register"));
     return [...chart.filter(match), ...patients, ...orders, ...global.filter(match)];
-  }, [q, chartId, patients, clinical]);
+  }, [q, chartId, patients, clinical, canRegister]);
 
   function go(c: Command | undefined) {
     if (!c) return;
