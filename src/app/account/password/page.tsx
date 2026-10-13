@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { displayName } from "@/lib/roles";
 import { PasswordForm } from "./password-form";
 
-export const metadata = { title: "Change password · Meridian EMR" };
+export const metadata = { title: "Change password" };
 
 export default async function ChangePassword() {
   const user = await getCurrentUser();

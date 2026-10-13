@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-/* Meridian palette: deep slate chrome, teal accent, clinical flag colors. */
+/* Default palette: deep slate chrome, teal accent, clinical flag colors.
+   MERIDIAN_ACCENT_COLOR overrides --accent and --accent-soft (src/lib/brand.ts). */
 :root {
   --bg: #f4f6f8;
   --panel: #ffffff;
