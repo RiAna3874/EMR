@@ -23,8 +23,9 @@ export type ChatBadge = { total: number; urgent: number; latestUrgent: { id: str
 // How often every screen checks for new secure chat messages.
 const CHAT_POLL_MS = 15_000;
 
-// inboxCount is null for roles without an Inbox (front desk).
-export function TopBar({ user, inboxCount, chat: initialChat }: { user: SessionUser; inboxCount: number | null; chat: ChatBadge }) {
+// inboxCount is null for roles without an Inbox (front desk). dataLabel warns what data this
+// system may hold ("Synthetic data", "Not for real patients"); null once cleared for real patients.
+export function TopBar({ user, inboxCount, chat: initialChat, dataLabel }: { user: SessionUser; inboxCount: number | null; chat: ChatBadge; dataLabel: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = useSyncExternalStore(subscribeOpenPatients, readOpenPatients, () => EMPTY);
@@ -107,11 +108,18 @@ export function TopBar({ user, inboxCount, chat: initialChat }: { user: SessionU
         <kbd className="rounded bg-white/10 px-1 font-sans text-[10.5px]">⌘/Ctrl K</kbd>
       </button>
       <div className="flex items-center gap-3 px-4 text-[12.5px] text-white/80">
-        <span className="rounded bg-warn px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">
-          Synthetic data
-        </span>
+        {dataLabel && (
+          <span className="rounded bg-warn px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">{dataLabel}</span>
+        )}
+        {user.isAdmin && (
+          <Link href="/admin/users" className={`rounded px-1.5 py-0.5 text-[12px] hover:bg-white/10 hover:text-white ${pathname.startsWith("/admin") ? "bg-white/10 text-white" : ""}`}>
+            Admin
+          </Link>
+        )}
         <span className="leading-tight">
-          <span className="block">{displayName(user)}</span>
+          <Link href="/account/password" className="block hover:underline" title="Change password">
+            {displayName(user)}
+          </Link>
           <span className="block text-[10.5px] text-white/55">{roleLabel[user.role]}</span>
         </span>
         <form action={signOut}>

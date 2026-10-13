@@ -210,10 +210,14 @@ model Practitioner {
   role         Role
   credentials  String?
   createdAt    DateTime  @default(now())
-  // Sign-in. Synthetic accounts only; see prisma/seed.ts.
-  username     String?   @unique
-  passwordHash String? // scrypt, see src/lib/password.ts
-  active       Boolean   @default(true)
+  // Sign-in. Accounts are made at /setup (the first admin) and /admin/users; the demo seed makes synthetic ones.
+  username           String?   @unique
+  passwordHash       String? // scrypt, see src/lib/password.ts
+  active             Boolean   @default(true)
+  // Manages staff accounts at /admin/users. Separate from the clinical role.
+  isAdmin            Boolean   @default(false)
+  // Set when an admin issues a temporary password; the user must pick their own before using the app.
+  mustChangePassword Boolean   @default(false)
   sessions     Session[]
 
   primaryPatients    Patient[]            @relation("PCP")

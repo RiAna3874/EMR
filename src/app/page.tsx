@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { clinic } from "@/lib/clinic";
 import { recentAbnormalLabs, todaysSchedule } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 import { can, isProvider, roleLabel } from "@/lib/roles";
@@ -48,13 +49,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             <h1 className="text-xl font-semibold">
               Good {greeting()}, {isProvider(currentUser.role) ? `Dr. ${currentUser.name.split(" ").at(-1)}` : currentUser.name.split(" ")[0]}
             </h1>
-            <p className="text-ink-2">{fmtDate(new Date())} · Lakeview Family Medicine</p>
+            <p className="text-ink-2">{fmtDate(new Date())} · {clinic.name}</p>
           </div>
         </div>
 
         {denied && (
           <p role="alert" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-warn">
-            Your role ({roleLabel[currentUser.role].toLowerCase()}) doesn&apos;t have access to that. Ask a clinician if you need it done.
+            {denied === "admin"
+              ? "Only an administrator can manage staff accounts."
+              : <>Your role ({roleLabel[currentUser.role].toLowerCase()}) doesn&apos;t have access to that. Ask a clinician if you need it done.</>}
           </p>
         )}
 

@@ -67,7 +67,7 @@ export const roleLabel: Record<Role, string> = {
 
 export const isProvider = (role: Role) => role === "physician" || role === "resident";
 
-export type SessionUser = { id: string; name: string; credentials: string | null; role: Role; username: string };
+export type SessionUser = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; mustChangePassword: boolean };
 
 export const displayName = (u: Pick<SessionUser, "name" | "credentials">) => (u.credentials ? `${u.name}, ${u.credentials}` : u.name);
 

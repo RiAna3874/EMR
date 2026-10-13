@@ -4,11 +4,12 @@ import { inboxCounts } from "@/lib/inbox";
 import { getCurrentUser } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { chatBadge } from "@/lib/chat/server";
+import { dataNotice } from "@/lib/deployment";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Meridian EMR",
-  description: "Outpatient electronic medical record (synthetic data only)",
+  description: "Outpatient electronic medical record",
 };
 
 // Every screen reads live chart data, and the Inbox count sits in the top bar.
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         {user && (
           <TopBar
             user={user}
+            dataLabel={dataNotice?.label ?? null}
             inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
             chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
           />

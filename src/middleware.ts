@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// First line of defence: no session cookie, no app. The cookie is only checked
+// First line of defence: no session cookie, no app (except sign-in and first-run /setup). The cookie is only checked
 // for presence here; pages, actions and routes validate it against the database.
 const SESSION_COOKIE = "meridian_session";
 
@@ -14,5 +14,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!login|setup|_next/static|_next/image|favicon.ico).*)"],
 };

@@ -2,6 +2,8 @@
 
 An outpatient electronic medical record that follows the workflows clinicians know from large EMRs (one chart per patient with activity tabs, results review, flowsheets, notes) with an original design. **All patient data is synthetic.** Do not enter real patient information.
 
+**Putting it online:** [docs/DEPLOY.md](docs/DEPLOY.md) deploys an empty copy with no demo data. [docs/GO-LIVE.md](docs/GO-LIVE.md) lists what must be done before it may hold real patient information.
+
 ## What's here
 
 - **My Day**: today's clinic as it happens (each visit's status, room and time in status, with the next step for your role as a button), abnormal results from the last 30 days, unsigned note count. Providers see their own visits, with a switch to the whole clinic.
@@ -89,7 +91,9 @@ Synthetic accounts (password `meridian` for all):
 | `klund` | Kirsten Lund, RN | Nurse |
 | `tmbeki` | Thandi Mbeki | Front desk |
 
-The sign-in page lists them in development. In a production build they are hidden unless `MERIDIAN_DEMO_ACCOUNTS=1`.
+The sign-in page lists them in development. In a production build they are hidden unless `MERIDIAN_DEMO_ACCOUNTS=1`. Dana Chen is also the demo administrator.
+
+**Staff accounts.** On an empty database the app opens **Set up Meridian** to create the first administrator (in production this asks for the `MERIDIAN_SETUP_TOKEN` set on the server); setup closes once any account exists. Administrators manage accounts at **Admin → Staff accounts** (`/admin/users`): add a person with a role, which issues a temporary password shown once; reset a password (signs them out everywhere); change name, credentials or role; make or remove another administrator; deactivate and reactivate. Accounts are never deleted, so the chart keeps its authors. Someone on a temporary password must choose their own (12+ characters, not the demo password, not containing the username) before using the app. Anyone can change their password by clicking their name in the top bar.
 
 ## Scheduling and the clinic day
 
@@ -168,7 +172,7 @@ npm run db:seed               # 12 synthetic patients with two years of history
 npm run dev                   # http://localhost:3000, sign in as dchen / meridian
 ```
 
-Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic day for whatever day you run it.
+Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic day for whatever day you run it. The seed wipes the database first, so it refuses when `NODE_ENV=production` or when the database has accounts other than the demo ones. To start empty instead, run `npm run db:empty -- --yes` and open the app to create the first administrator.
 
 ## Scripts
 
@@ -179,5 +183,6 @@ Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic 
 | `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
 | `npm test` | Unit tests for lab import parsing, order safety checks, roles and password hashing |
 | `npm run db:migrate` | Apply migrations and regenerate the database client (restart `npm run dev` afterwards) |
-| `npm run db:seed` | Wipe and reseed synthetic data |
-| `npm run db:reset` | Drop the database, migrate and seed |
+| `npm run db:seed` | Wipe and reseed synthetic data (refuses on a live database) |
+| `npm run db:reset` | Drop the database, migrate and seed (refuses on a live database) |
+| `npm run db:empty -- --yes` | Erase every row and keep the tables, for a clean first-run setup |

@@ -2,17 +2,19 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser, safeNext } from "@/lib/session";
 import { roleLabel } from "@/lib/roles";
+import { dataNotice, demoMode } from "@/lib/deployment";
+import { needsSetup } from "@/lib/setup";
 import { SignInForm } from "./sign-in-form";
 
 export const metadata = { title: "Sign in · Meridian EMR" };
 
-// Demo accounts are listed in development, or when MERIDIAN_DEMO_ACCOUNTS=1.
-const showDemo = process.env.NODE_ENV !== "production" || process.env.MERIDIAN_DEMO_ACCOUNTS === "1";
-
 export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
   if (await getCurrentUser()) redirect(safeNext(next));
-  const demo = showDemo
+  // A brand-new, empty database: make the first administrator.
+  if (await needsSetup()) redirect("/setup");
+  // The synthetic seed's accounts are listed in demo mode only (src/lib/deployment.ts).
+  const demo = demoMode
     ? (await db.practitioner.findMany({ where: { active: true, username: { not: null } }, orderBy: [{ role: "asc" }, { name: "asc" }] })).map((p) => ({
         username: p.username!,
         name: p.credentials ? `${p.name}, ${p.credentials}` : p.name,
@@ -32,7 +34,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
           <span className="text-lg font-semibold tracking-wide">Meridian</span>
         </div>
         <SignInForm next={safeNext(next)} demo={demo} />
-        <p className="mt-4 text-center text-[11.5px] text-white/60">Synthetic data only. Do not enter real patient information.</p>
+        {dataNotice && <p className="mt-4 text-center text-[11.5px] text-white/60">{dataNotice.text}</p>}
       </div>
     </main>
   );

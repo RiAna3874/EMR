@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:migrate": "prisma migrate deploy && prisma generate",
     "db:seed": "prisma db seed",
-    "db:reset": "prisma migrate reset --force",
+    "db:reset": "tsx scripts/db-empty.ts --guard && prisma migrate reset --force",
+    "db:empty": "tsx scripts/db-empty.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "test": "tsx --test 'src/**/*.test.ts'"
