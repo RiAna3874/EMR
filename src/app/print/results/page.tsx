@@ -5,6 +5,7 @@ import { clinic } from "@/lib/clinic";
 import { age, fmtDate, fmtDateTime, fmtDob, fmtRange, fmtValue, isAbnormal, sexShort, unitLabel } from "@/lib/format";
 import { aboutTest, resultInWords } from "@/lib/labs/plain-language";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ export default async function PrintResults({ searchParams }: { searchParams: Pro
   if (!reports.length) notFound();
   const patient = reports[0].patient;
   if (reports.some((r) => r.patientId !== patient.id)) notFound();
+  await logChartView(patient.id, "Lab report", "print");
 
   const patientCopy = sp.copy === "patient";
   const query = reports.map((r) => `report=${r.id}`).join("&");

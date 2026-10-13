@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { passwordError } from "@/lib/accounts";
 import { endOtherSessions, getCurrentUser } from "@/lib/session";
+import { logEvent } from "@/lib/audit/server";
 
 export type PasswordState = { error?: string; done?: boolean } | undefined;
 
@@ -23,6 +24,7 @@ export async function changePassword(_prev: PasswordState, form: FormData): Prom
   const wasTemporary = row.mustChangePassword;
   await db.practitioner.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next), mustChangePassword: false } });
   await endOtherSessions(user.id);
+  await logEvent({ action: "password_changed", subject: "Password", actor: { id: user.id, username: user.username }, detail: wasTemporary ? "Replaced a temporary password" : null });
   if (wasTemporary) redirect("/");
   return { done: true };
 }

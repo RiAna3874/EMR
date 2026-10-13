@@ -8,6 +8,7 @@ import { passwordError, usernameError } from "@/lib/accounts";
 import { roleLabel } from "@/lib/roles";
 import { startSession } from "@/lib/session";
 import { SETUP_LOCK, setupTokenMatches } from "@/lib/setup";
+import { logEvent } from "@/lib/audit/server";
 
 export type SetupState = { error?: string; values?: Record<string, string> } | undefined;
 
@@ -33,6 +34,7 @@ export async function createFirstAdmin(_prev: SetupState, form: FormData): Promi
     });
   });
   if (!created) redirect("/login");
+  await logEvent({ action: "setup", subject: "Staff account", actor: { id: created.id, username: created.username }, recordId: created.id, detail: "First administrator created" });
   await startSession(created.id);
   redirect("/admin/users?welcome=1");
 }

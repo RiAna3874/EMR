@@ -14,10 +14,12 @@ import { JobActions, RereadButton } from "@/components/import/job-actions";
 import { DocReviewEditor } from "@/components/documents/doc-review-editor";
 import { DocDraftSchema, emptyDocDraft } from "@/lib/documents/draft";
 import { chartFacts } from "@/lib/documents/server";
+import { logChartView } from "@/lib/audit/server";
 
 export default async function ImportJobPage({ params }: { params: Promise<{ id: string; jobId: string }> }) {
   const { id, jobId } = await params;
   const currentUser = await requirePermission("importReports");
+  await logChartView(id, "Import review");
   const job = await db.importJob.findUnique({
     where: { id: jobId, patientId: id },
     include: {

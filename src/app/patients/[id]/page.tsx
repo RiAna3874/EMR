@@ -11,6 +11,7 @@ import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
 import { sigText } from "@/lib/meds/sig";
+import { logChartView } from "@/lib/audit/server";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5"];
 
@@ -18,6 +19,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
   const { id } = await params;
   const base = `/patients/${id}`;
   const currentUser = await requireUser();
+  await logChartView(id, "Summary");
   const registered = (await searchParams).registered === "1" && <Registered patientId={id} canBook={can(currentUser.role, "bookAppointments")} />;
   if (!can(currentUser.role, "viewClinical"))
     return (

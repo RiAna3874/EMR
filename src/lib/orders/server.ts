@@ -1,6 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import { age } from "@/lib/format";
 import { orderableByCode, satisfyingCodes } from "./catalog";
 import { orderWarnings, type OrderContext, type OrderWarning } from "./checks";
@@ -34,7 +34,7 @@ export async function orderContext(patientId: string): Promise<OrderContext> {
 
 // A filed report completes the oldest active lab order it satisfies, and links to it.
 export async function completeLabOrder(
-  tx: Prisma.TransactionClient,
+  tx: Tx,
   report: { id: string; patientId: string; code: string; effectiveAt: Date },
   observationCodes: string[],
 ) {

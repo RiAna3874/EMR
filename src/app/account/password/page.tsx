@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { displayName } from "@/lib/roles";
@@ -19,6 +20,14 @@ export default async function ChangePassword() {
           </p>
         )}
         <PasswordForm />
+        {!user.mustChangePassword && (
+          <p className="mt-4 text-[12.5px] text-ink-2">
+            Two-step sign-in is {user.twoStepEnabled ? "on" : "off"}.{" "}
+            <Link href="/account/two-step" className="text-accent hover:underline">
+              {user.twoStepEnabled ? "Manage" : "Set it up"}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

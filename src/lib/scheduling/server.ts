@@ -1,6 +1,6 @@
 import "server-only";
 import type { EncounterStatus, Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import type { SessionUser } from "@/lib/roles";
 import { ACTIVE_STATUSES, canTransition, TRANSITIONS, type WorkflowAction } from "./workflow";
 import { fitsSchedule, openSlots, type Busy } from "./slots";
@@ -75,7 +75,7 @@ export async function advance(
   encounterId: string,
   action: WorkflowAction,
   user: SessionUser,
-  { data, detail, tx }: { data?: Prisma.EncounterUpdateManyMutationInput; detail?: string; tx?: Prisma.TransactionClient } = {},
+  { data, detail, tx }: { data?: Prisma.EncounterUpdateManyMutationInput; detail?: string; tx?: Tx } = {},
 ) {
   const t = TRANSITIONS[action];
   const client = tx ?? db;

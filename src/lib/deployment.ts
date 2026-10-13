@@ -15,3 +15,8 @@ export const dataNotice = demoMode
   : clearedForRealPatients
     ? null
     : { label: "Not for real patients", text: "This system is not yet approved for real patient information. Use test patients only." };
+
+// Two-step sign-in (password, then a code from an authenticator app). Required for every
+// account on a live site; optional in development and public demos, where anyone can still
+// turn it on at /account/two-step.
+export const twoStepRequired = !demoMode || process.env.MERIDIAN_REQUIRE_TWO_STEP === "1";

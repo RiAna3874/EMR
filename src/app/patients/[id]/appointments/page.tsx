@@ -7,12 +7,14 @@ import { visitType } from "@/lib/scheduling/visit-types";
 import { Empty, Panel } from "@/components/panel";
 import { VisitStatusChip } from "@/components/schedule/status-chip";
 import { NextStepButton } from "@/components/schedule/next-step";
+import { logChartView } from "@/lib/audit/server";
 
 // The patient's appointments: upcoming first, then past ones including
 // cancellations and no-shows. Every role can see and book these.
 export default async function Appointments({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
+  await logChartView(id, "Appointments");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const appts = await db.encounter.findMany({

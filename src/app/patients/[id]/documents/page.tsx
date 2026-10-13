@@ -11,6 +11,7 @@ import { Button, inputCls } from "@/components/form";
 import { DocTypeChip, DocView } from "@/components/documents/doc-view";
 import { ImportStatusChip } from "@/components/import/status-chip";
 import { acknowledgeDocument } from "../import/document-actions";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function Documents({ params, searchParams }: { params: Prom
   const { id } = await params;
   const sp = await searchParams;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Documents");
   const base = `/patients/${id}/documents`;
 
   const [docs, labJobs, waiting, patient] = await Promise.all([

@@ -5,6 +5,7 @@ import { age, fmtDate, fmtDateTime, fmtDob, sexShort } from "@/lib/format";
 import { noteTypeLabel } from "@/lib/notes/library";
 import { NoteBody } from "@/components/notes/note-view";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function PrintNote({ searchParams }: { searchParams: Promis
     : null;
   if (!note) notFound();
   const p = note.patient;
+  await logChartView(p.id, "Note", "print");
 
   return (
     <PrintShell back={`/patients/${p.id}/notes?note=${note.id}`}>

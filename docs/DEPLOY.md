@@ -56,7 +56,15 @@ Deploy. The pre-deploy step creates the tables; the database stays empty.
 3. On **Admin → Staff accounts**, add each staff member with their role. Each gets a temporary password, shown once: give it to them in person or by phone. They choose their own at first sign-in.
 4. Setup closes for good once an account exists. You can now delete `MERIDIAN_SETUP_TOKEN`.
 
+5. **Two-step sign-in.** On the live site every account needs it. At first sign-in each person installs Google Authenticator or Microsoft Authenticator on their phone, scans the code Meridian shows, types the 6-digit code, and saves ten one-time recovery codes (print them or write them down). From then on they sign in with their password and the code from their phone. If someone loses their phone they can sign in once with a recovery code; an administrator can also **Reset two-step** on Staff accounts so they set it up again.
+
 Administrators can reset a password (new temporary one, signed out everywhere), change a role, make or remove another administrator, and deactivate someone who leaves. Accounts are never deleted, so notes and orders keep their author.
+
+## Access log
+
+**Admin → Access log** lists every chart a person opened (each section, at most once per five minutes), printed or changed, plus every sign-in, failed sign-in, wrong two-step code and staff account change, with the time and the network address it came from. Filter by patient, staff member, type and dates, or **Download CSV** for a privacy complaint. Administrators see **Who has opened this chart** at the bottom of each patient's left-hand panel. The log keeps record types and field names, never the clinical content itself, and the database refuses to edit or delete its entries.
+
+Review it regularly, for example once a week: look at failed sign-ins and at anyone opening charts of patients they don't treat.
 
 ## 4. Your own domain
 

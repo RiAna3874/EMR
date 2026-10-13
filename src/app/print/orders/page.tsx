@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/session";
 import { age, fmtDateOnly, fmtDateTime, fmtDob, sexShort } from "@/lib/format";
 import { orderableByCode } from "@/lib/orders/catalog";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function PrintOrders({ searchParams }: { searchParams: Prom
   const only = [sp.order ?? []].flat();
   const patient = sp.patient ? await db.patient.findUnique({ where: { id: sp.patient }, include: { pcp: true, allergies: true } }) : null;
   if (!patient) notFound();
+  await logChartView(patient.id, "Order requisition", "print");
   const orders = await db.serviceRequest.findMany({
     where: { patientId: patient.id, status: "signed", type: { not: "medication" }, ...(only.length ? { id: { in: only } } : {}) },
     orderBy: { signedAt: "asc" },

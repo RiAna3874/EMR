@@ -12,6 +12,7 @@ import { inputCls } from "@/components/form";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NoteDocument, NoteStatusChip } from "@/components/notes/note-view";
 import { addAddendum, cosignNote, deleteDraft, saveNote } from "./actions";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
   const sp = await searchParams;
   const base = `/patients/${id}/notes`;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Notes");
   const canWrite = can(currentUser.role, "writeNotes");
 
   // Filters live in the URL so a filtered list survives opening a note.

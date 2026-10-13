@@ -17,6 +17,7 @@ import { RxComposer, type RxStart } from "@/components/meds/rx-composer";
 import { DiscontinueButton, TakingControl } from "@/components/meds/med-controls";
 import { addOrder, removePendingOrder, signOrders, updatePendingOrder } from "../orders/actions";
 import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMedsReviewed, setPreferredPharmacy, setTaking } from "./actions";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
   const { id } = await params;
   const sp = await searchParams;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Medications");
   const canEdit = can(currentUser.role, "editMeds");
   const canPend = can(currentUser.role, "pendOrders");
   const canSign = can(currentUser.role, "signOrders");

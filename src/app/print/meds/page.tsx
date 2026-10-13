@@ -5,6 +5,7 @@ import { age, fmtDate, fmtDateOnly, fmtDateTime, fmtDob } from "@/lib/format";
 import { sigText, unitsHint } from "@/lib/meds/sig";
 import { productFor } from "@/lib/meds/formulary";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function PrintMeds({ searchParams }: { searchParams: Promis
     ? await db.patient.findUnique({ where: { id: sp.patient }, include: { allergies: true, pcp: true, preferredPharmacy: true, medsReviewedBy: true } })
     : null;
   if (!patient) notFound();
+  await logChartView(patient.id, "Medication list", "print");
   const meds = await db.medicationRequest.findMany({
     where: { patientId: patient.id, status: { in: ["active", "on_hold"] } },
     orderBy: { drug: "asc" },

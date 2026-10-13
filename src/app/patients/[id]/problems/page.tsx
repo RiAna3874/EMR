@@ -5,10 +5,12 @@ import { fmtDateOnly } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { Button, Field, inputCls } from "@/components/form";
 import { addProblem, reactivateProblem, resolveProblem } from "../actions";
+import { logChartView } from "@/lib/audit/server";
 
 export default async function Problems({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Problems");
   const canEdit = can(currentUser.role, "editProblems");
   const conditions = await db.condition.findMany({ where: { patientId: id }, orderBy: [{ priority: "asc" }] });
   const active = conditions.filter((c) => c.status === "active");
