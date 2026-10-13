@@ -9,6 +9,7 @@ type Picked = { key: string; file: File; preview: string | null };
 // Long edge for photos sent to Claude: enough to read small print, small enough to
 // stay well under the 5 MB image limit.
 const MAX_EDGE = 2000;
+const UPLOAD_TIMEOUT_MS = 90_000;
 
 export type ImportKindChoice = "lab" | "document";
 
@@ -62,7 +63,14 @@ export function UploadForm({ patientId, initialKind = "lab" }: { patientId: stri
         fd.append("sizes", JSON.stringify(sizes));
         fd.append("kind", kind);
         setStage("Uploading…");
-        const res = await uploadReport(patientId, fd);
+        // The upload only stores the pages; Claude reads them afterwards on the next
+        // page. If even this stalls, say so instead of leaving the button spinning.
+        const res = await Promise.race([
+          uploadReport(patientId, fd),
+          new Promise<{ error: string }>((r) =>
+            setTimeout(() => r({ error: "The upload is taking too long. Check the terminal running npm run dev for errors, then try again." }), UPLOAD_TIMEOUT_MS),
+          ),
+        ]);
         if (res?.error) setError(res.error);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Upload failed.");

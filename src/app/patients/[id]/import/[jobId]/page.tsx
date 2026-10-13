@@ -6,6 +6,7 @@ import { can } from "@/lib/roles";
 import { fmtDateTime, toUrlDate } from "@/lib/format";
 import { DraftSchema, emptyDraft } from "@/lib/labs/draft";
 import { labHistory, STALE_EXTRACTION_MS } from "@/lib/labs/jobs";
+import { EXTRACTION_DEADLINE_MS } from "@/lib/labs/extract";
 import { analyteByLoinc } from "@/lib/labs/catalog";
 import { ReviewEditor } from "@/components/import/review-editor";
 import { ImportStatusChip } from "@/components/import/status-chip";
@@ -64,7 +65,11 @@ export default async function ImportJobPage({ params }: { params: Promise<{ id: 
               <Spinner />
               <h2 className="mt-3 font-semibold">Reading the {noun}…</h2>
               <p className="mt-1 text-ink-2">
-                Claude is transcribing {isDoc ? "every section" : "every test"} on {docs.length === 1 ? "the page" : `all ${docs.length} pages`}. This usually takes under a minute.
+                Claude is transcribing {isDoc ? "every section" : "every test"} on {docs.length === 1 ? "the page" : `all ${docs.length} pages`}. This usually takes a minute or two.
+              </p>
+              <p className="mt-2 text-[12px] text-ink-3">
+                Started {Math.max(0, Math.round((Date.now() - job.updatedAt.getTime()) / 1000))}s ago. If it hasn&apos;t finished in{" "}
+                {EXTRACTION_DEADLINE_MS / 60_000} minutes it stops and says why.
               </p>
             </>
           ) : (
