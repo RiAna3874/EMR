@@ -79,3 +79,17 @@ export function toUrlDate(d: Date) {
 export function toLocalDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+// YYYY-MM-DDTHH:mm in local time, as used in scheduling links and forms.
+export const toLocalDateTime = (d: Date) => `${toLocalDate(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+// A YYYY-MM-DD string as local midnight, or today if missing or malformed.
+export function parseLocalDate(s: string | undefined) {
+  const m = s?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export const fmtDayLong = (d: Date) => d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+export const fmtDayShort = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });

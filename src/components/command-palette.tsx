@@ -8,6 +8,8 @@ type Command = { id: string; label: string; hint?: string; group: string; href: 
 
 const GLOBAL: Command[] = [
   { id: "home", label: "My Day", group: "Go to", href: "/", hint: "g h" },
+  { id: "schedule", label: "Schedule", group: "Go to", href: "/schedule", hint: "g d" },
+  { id: "book", label: "Make appointment", group: "Go to", href: "/schedule/book" },
   { id: "inbox", label: "Inbox", group: "Go to", href: "/inbox", hint: "g i" },
   { id: "lists", label: "Patient Lists", group: "Go to", href: "/patients", hint: "g l" },
   { id: "phrases", label: "My phrases", group: "Go to", href: "/phrases" },
@@ -29,9 +31,10 @@ const CHART: { slug: string; label: string; key?: string }[] = [
   { slug: "notes?status=cosign", label: "Notes needing cosign" },
   { slug: "orders", label: "Orders", key: "o" },
   { slug: "import", label: "Import report" },
+  { slug: "appointments", label: "Appointments" },
 ];
 
-const globalKeys: Record<string, string> = { h: "/", i: "/inbox", l: "/patients" };
+const globalKeys: Record<string, string> = { h: "/", d: "/schedule", i: "/inbox", l: "/patients" };
 
 function isTyping(el: EventTarget | null) {
   const t = el as HTMLElement | null;
@@ -100,7 +103,7 @@ export function CommandPalette({ clinical }: { clinical: boolean }) {
     const needle = q.trim().toLowerCase();
     const match = (c: Command) => !needle || c.label.toLowerCase().includes(needle);
     const chart: Command[] = chartId
-      ? CHART.filter((c) => clinical || c.slug === "").map((c) => ({
+      ? CHART.filter((c) => clinical || c.slug === "" || c.slug === "appointments").map((c) => ({
           id: `c:${c.slug}`,
           label: c.label,
           group: "This chart",

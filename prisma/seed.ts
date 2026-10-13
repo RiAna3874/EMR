@@ -361,7 +361,10 @@ async function main() {
     prisma.noteAddendum.deleteMany(),
     prisma.note.deleteMany(),
     prisma.smartPhrase.deleteMany(),
+    prisma.encounterEvent.deleteMany(),
     prisma.encounter.deleteMany(),
+    prisma.scheduleBlock.deleteMany(),
+    prisma.scheduleSession.deleteMany(),
     prisma.refillRequest.deleteMany(),
     prisma.medicationDispense.deleteMany(),
     prisma.medicationRequest.deleteMany(),
@@ -377,6 +380,7 @@ async function main() {
     data: await Promise.all(practitioners.map(async (p) => ({ ...p, passwordHash: await hashPassword(DEMO_PASSWORD) }))),
   });
   const pcps = ["prac_chen", "prac_ibarra"];
+  await seedTemplates();
 
   for (const [i, p] of patients.entries()) {
     // UTC midnight: DOB is a date column, so a local midnight east of UTC would store the day before.
@@ -395,6 +399,8 @@ async function main() {
         codeStatus: p.codeStatus ?? "Full code",
         allergyStatus: p.allergies?.length ? "has_allergies" : p.nka ? "no_known_allergies" : "not_reviewed",
         pcpId,
+        insurancePayer: PAYERS[i % PAYERS.length],
+        insuranceMemberId: `${PAYERS[i % PAYERS.length].slice(0, 3).toUpperCase()}${(48213077 + i * 90731).toString()}`,
         preferredPharmacyId: pharmacies[i % pharmacies.length].id,
       },
     });
@@ -426,7 +432,7 @@ async function main() {
       const start = daysAgo(ago, 9 + (i % 7), (i * 10) % 60);
       const encounter = await prisma.encounter.create({
         data: {
-          patientId: patient.id, type: "office", status: "finished",
+          patientId: patient.id, type: "office", status: "checked_out", visitType: "follow_up",
           reason: vIdx === visitDaysAgo.length - 1 ? "Follow-up" : "Routine follow-up",
           start, end: new Date(start.getTime() + 25 * 60_000), providerId: pcpId,
         },
@@ -525,15 +531,10 @@ async function main() {
     }
 
     if (p.reasonToday) {
-      const start = daysAgo(0, p.visitHour ?? 9, (i * 15) % 60);
-      const todayVisit = await prisma.encounter.create({
-        data: {
-          patientId: patient.id,
-          type: p.telehealth ? "telehealth" : "office",
-          status: (p.visitHour ?? 9) <= 9 ? "arrived" : "planned",
-          reason: p.reasonToday, start, end: new Date(start.getTime() + 20 * 60_000), providerId: pcpId,
-        },
-      });
+      const start = daysAgo(0, p.visitHour ?? 9, [0, 20, 40][i % 3]);
+      const vt = p.telehealth ? "video" : p.reasonToday === "Annual wellness visit" ? "annual" : p.reasonToday === "Shortness of breath" ? "same_day" : "follow_up";
+      // Patient 3 didn't come in this morning.
+      const todayVisit = await clinicVisit({ patientId: patient.id, providerId: pcpId, start, visitType: vt, reason: p.reasonToday, noShow: i === 3 });
       await todayNotes(i, p, patient.id, todayVisit.id, start);
     }
     await historyNotes(i, p, patient.id);
@@ -550,13 +551,16 @@ async function main() {
       });
     }
 
-    await prisma.encounter.create({
-      data: {
-        patientId: patient.id, type: "office", status: "planned", reason: "Routine follow-up",
-        start: daysAgo(-(60 + i * 3), 10, 0), providerId: pcpId,
-      },
-    });
+    await clinicVisit({ patientId: patient.id, providerId: pcpId, start: weekday(daysAgo(-(60 + i * 3), 10, 0)), visitType: "follow_up", reason: "Routine follow-up" });
+    // A missed visit in the past for one patient.
+    if (i === 3) {
+      const missed = await prisma.encounter.create({
+        data: { patientId: patient.id, type: "office", status: "no_show", visitType: "follow_up", reason: "Follow-up", start: daysAgo(45, 9, 0), end: daysAgo(45, 9, 20), providerId: pcpId, statusAt: daysAgo(45, 9, 20) },
+      });
+      await prisma.encounterEvent.create({ data: { encounterId: missed.id, action: "noShow", byId: "prac_mbeki", at: daysAgo(45, 9, 20) } });
+    }
   }
+  await seedClinicDay();
 
   await prisma.smartPhrase.createMany({
     data: [
@@ -929,6 +933,130 @@ function progressNote(p: PatientDef, vitals: { display: string; value: number; u
     ``,
     `Return to clinic in 3 months or sooner as needed.`,
   ].join("\n");
+}
+
+// Provider templates: weekday sessions with a lunch break. Everyone also works
+// today's weekday, so the seeded clinic day always sits inside open sessions.
+const PAYERS = ["Cascade Health Plan", "Lakeview Medicare Advantage", "Pinecrest Community Medicaid", "Northstar PPO"];
+const TEMPLATES: { id: string; days: number[]; sessions: [number, number][]; slot: number }[] = [
+  { id: "prac_chen", days: [1, 2, 3, 4, 5], sessions: [[8 * 60, 12 * 60], [13 * 60, 17 * 60]], slot: 20 },
+  { id: "prac_ibarra", days: [1, 2, 3, 4, 5], sessions: [[8 * 60, 12 * 60], [13 * 60, 16 * 60 + 40]], slot: 20 },
+  { id: "prac_brandt", days: [1, 3, 4], sessions: [[8 * 60, 12 * 60], [13 * 60, 16 * 60]], slot: 20 },
+  { id: "prac_marsh", days: [2, 4], sessions: [[9 * 60, 12 * 60], [13 * 60, 16 * 60]], slot: 20 },
+];
+
+async function seedTemplates() {
+  await prisma.scheduleSession.createMany({
+    data: TEMPLATES.flatMap((t) =>
+      [...new Set([...t.days, today.getDay()])].flatMap((weekday) =>
+        t.sessions.map(([startMin, endMin]) => ({ practitionerId: t.id, weekday, startMin, endMin, slotMinutes: t.slot })),
+      ),
+    ),
+  });
+  const tomorrow = weekday(daysAgo(-1, 0, 0));
+  const nextFriday = daysAgo(-(((5 - today.getDay() + 7) % 7) + 7), 0, 0);
+  await prisma.scheduleBlock.createMany({
+    data: [
+      { practitionerId: "prac_marsh", start: daysAgo(0, 11, 0), end: daysAgo(0, 12, 0), reason: "Echo reading" },
+      { practitionerId: "prac_ibarra", start: new Date(tomorrow.getTime() + 13 * 3_600_000), end: new Date(tomorrow.getTime() + 15 * 3_600_000), reason: "Hospital committee" },
+      { practitionerId: "prac_chen", start: nextFriday, end: new Date(nextFriday.getTime() + DAY - 60_000), reason: "Vacation" },
+    ],
+  });
+}
+
+// Saturday and Sunday move to the following Monday.
+function weekday(d: Date) {
+  const out = new Date(d);
+  while (out.getDay() === 0 || out.getDay() === 6) out.setDate(out.getDate() + 1);
+  return out;
+}
+
+const VISIT_MINUTES: Record<string, number> = { follow_up: 20, same_day: 20, video: 20, new_patient: 40, annual: 40, procedure: 40, consult: 40 };
+const ROOMS = ["Exam 1", "Exam 2", "Exam 3", "Exam 4", "Exam 5", "Exam 6"];
+let roomTurn = 0;
+
+// An appointment booked by the front desk. One that falls today is walked through
+// the clinic day as far as the seed's clock allows: checked in a few minutes early,
+// roomed, seen, done and checked out, so My Day shows a clinic in progress.
+async function clinicVisit({
+  patientId, providerId, start, visitType, reason, noShow, cancelled,
+}: { patientId: string; providerId: string; start: Date; visitType: string; reason: string; noShow?: boolean; cancelled?: string }) {
+  const minutes = VISIT_MINUTES[visitType];
+  const end = new Date(start.getTime() + minutes * 60_000);
+  const video = visitType === "video";
+  const now = Date.now();
+  const at = (m: number) => new Date(start.getTime() + m * 60_000);
+  const isToday = start.toDateString() === today.toDateString();
+  const steps: { action: string; at: Date; by: string; status: "arrived" | "roomed" | "in_progress" | "finished" | "checked_out" }[] = isToday && !noShow && !cancelled
+    ? [
+        { action: "arrive", at: at(video ? -4 : -8), by: "prac_mbeki", status: "arrived" as const },
+        ...(video ? [] : [{ action: "room", at: at(5), by: "prac_lund", status: "roomed" as const }]),
+        { action: "start", at: at(video ? 2 : 12), by: providerId, status: "in_progress" as const },
+        { action: "complete", at: at(minutes + 8), by: providerId, status: "finished" as const },
+        { action: "checkOut", at: at(minutes + 15), by: "prac_mbeki", status: "checked_out" as const },
+      ].filter((s) => s.at.getTime() <= now)
+    : [];
+  const last = steps.at(-1);
+  const missed = noShow && isToday && now > at(20).getTime();
+  const roomed = steps.some((s) => s.action === "room");
+  const encounter = await prisma.encounter.create({
+    data: {
+      patientId, providerId, start, end, visitType, reason,
+      type: video ? "telehealth" : "office",
+      status: cancelled ? "cancelled" : missed ? "no_show" : (last?.status ?? "planned"),
+      statusAt: last?.at ?? (missed ? at(20) : daysAgo(12, 10)),
+      arrivedAt: steps[0]?.at ?? null,
+      copayCents: steps.length && !video ? 2500 : null,
+      copayMethod: steps.length && !video ? "card" : null,
+      room: roomed ? ROOMS[roomTurn++ % ROOMS.length] : null,
+      chiefComplaint: roomed ? reason : null,
+      allergiesReviewedAt: roomed ? steps[1].at : null,
+      medsReviewedAt: roomed ? steps[1].at : null,
+      cancelReason: cancelled ?? null,
+    },
+  });
+  await prisma.encounterEvent.createMany({
+    data: [
+      { encounterId: encounter.id, action: "booked", byId: "prac_mbeki", at: daysAgo(12, 10) },
+      ...steps.map((s) => ({ encounterId: encounter.id, action: s.action, byId: s.by, at: s.at, detail: s.action === "room" ? encounter.room : null })),
+      ...(missed ? [{ encounterId: encounter.id, action: "noShow", byId: "prac_mbeki", at: at(20) }] : []),
+      ...(cancelled ? [{ encounterId: encounter.id, action: "cancel", byId: "prac_mbeki", at: daysAgo(0, 7, 40), detail: cancelled }] : []),
+    ],
+  });
+  return encounter;
+}
+
+// The rest of the clinic: the resident's and the cardiologist's patients today,
+// a cancellation, and scattered bookings over the next two weeks so open-slot
+// search has a realistic mix of free and taken times.
+async function seedClinicDay() {
+  const all = await prisma.patient.findMany({ orderBy: { mrn: "asc" } });
+  const pt = (i: number) => all[i].id;
+  await clinicVisit({ patientId: pt(10), providerId: "prac_brandt", start: daysAgo(0, 8, 40), visitType: "follow_up", reason: "Acne follow-up" });
+  await clinicVisit({ patientId: pt(11), providerId: "prac_brandt", start: daysAgo(0, 13, 40), visitType: "same_day", reason: "Gout flare, right toe" });
+  await clinicVisit({ patientId: pt(1), providerId: "prac_marsh", start: daysAgo(0, 9, 20), visitType: "consult", reason: "Heart failure follow-up" });
+  await clinicVisit({ patientId: pt(4), providerId: "prac_marsh", start: daysAgo(0, 14, 0), visitType: "consult", reason: "Palpitations" });
+  await clinicVisit({ patientId: pt(10), providerId: "prac_chen", start: daysAgo(0, 16, 0), visitType: "follow_up", reason: "Rash", cancelled: "Patient ill" });
+
+  const providers = ["prac_chen", "prac_ibarra", "prac_chen", "prac_ibarra", "prac_brandt"];
+  const taken = new Set<string>();
+  for (let n = 0; n < 40; n++) {
+    const providerId = providers[n % providers.length];
+    const template = TEMPLATES.find((t) => t.id === providerId)!;
+    const day = weekday(daysAgo(-(1 + Math.floor(rand() * 13)), 0, 0));
+    if (!template.days.includes(day.getDay())) continue;
+    const [from, to] = template.sessions[Math.floor(rand() * template.sessions.length)];
+    const startMin = from + 20 * Math.floor(rand() * ((to - from) / 20));
+    const start = new Date(day.getTime() + startMin * 60_000);
+    const key = `${providerId}-${start.getTime()}`;
+    const blocked = await prisma.scheduleBlock.count({ where: { practitionerId: providerId, start: { lt: new Date(start.getTime() + 20 * 60_000) }, end: { gt: start } } });
+    if (taken.has(key) || blocked) continue;
+    taken.add(key);
+    const patientId = pt(Math.floor(rand() * all.length));
+    const clash = await prisma.encounter.count({ where: { patientId, start: { gte: day, lt: new Date(day.getTime() + DAY) } } });
+    if (clash) continue;
+    await clinicVisit({ patientId, providerId, start, visitType: rand() < 0.25 ? "same_day" : "follow_up", reason: rand() < 0.5 ? "Follow-up" : "Medication check" });
+  }
 }
 
 main()

@@ -7,18 +7,15 @@ import { age, fmtDate, fmtTime, fmtValue, fullName, sexShort, unitLabel } from "
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { ImportStatusChip } from "@/components/import/status-chip";
+import { RefreshWhile } from "@/components/import/refresh-while";
+import { VisitStatusChip } from "@/components/schedule/status-chip";
+import { NextStepButton } from "@/components/schedule/next-step";
+import { visitType } from "@/lib/scheduling/visit-types";
 
 export const dynamic = "force-dynamic";
 
-const statusStyles: Record<string, string> = {
-  planned: "bg-panel-muted text-ink-2 border-line",
-  arrived: "bg-accent-soft text-accent border-accent/30",
-  in_progress: "bg-warn-soft text-warn border-warn/30",
-  finished: "bg-panel-muted text-ink-3 border-line",
-};
-
-export default async function Home({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
-  const { denied } = await searchParams;
+export default async function Home({ searchParams }: { searchParams: Promise<{ denied?: string; view?: string }> }) {
+  const { denied, view } = await searchParams;
   const currentUser = await requireUser();
   // Front desk gets the schedule; clinical panels need clinical access.
   const clinical = can(currentUser.role, "viewClinical");
@@ -35,7 +32,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
       : [],
   ]);
   const mine = schedule.filter((e) => e.providerId === currentUser.id);
-  const arrived = schedule.filter((e) => e.status === "arrived").length;
+  // Providers see their own visits unless they ask for the whole clinic.
+  const showAll = view === "all" || mine.length === 0;
+  const shown = showAll ? schedule : mine;
+  const waiting = schedule.filter((e) => e.status === "arrived").length;
+  const roomed = schedule.filter((e) => e.status === "roomed").length;
+  const now = new Date();
   const abnormalPatients = new Set(abnormal.map((o) => o.patientId)).size;
 
   return (
@@ -58,7 +60,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
 
         <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Clinic visits today" value={schedule.length} sub={isProvider(currentUser.role) ? `${mine.length} on your schedule` : "all providers"} />
-          <Stat label="Arrived and waiting" value={arrived} sub="checked in" />
+          <Stat label="Waiting" value={waiting} sub={`checked in, not roomed${roomed ? ` · ${roomed} roomed` : ""}`} />
           {clinical && <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />}
           {can(currentUser.role, "writeNotes") && <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />}
         </div>
@@ -83,9 +85,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           </Panel>
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-          <Panel title="Today's schedule" className={clinical ? "lg:col-span-3" : "lg:col-span-5"}>
-            {schedule.length === 0 ? (
+        <div className="grid grid-cols-1 gap-4">
+          <Panel
+            title="Today's schedule"
+            className="overflow-x-auto"
+            action={
+              <span className="flex items-center gap-3 text-[12px]">
+                {mine.length > 0 && (
+                  <Link href={showAll ? "/" : "/?view=all"} className="text-accent hover:underline">
+                    {showAll ? "Show only mine" : "Show all providers"}
+                  </Link>
+                )}
+                <Link href="/schedule" className="text-accent hover:underline">
+                  Open schedule
+                </Link>
+              </span>
+            }
+          >
+            <RefreshWhile active intervalMs={30_000} />
+            {shown.length === 0 ? (
               <Empty>No appointments today.</Empty>
             ) : (
               <table className="w-full">
@@ -93,46 +111,60 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                   <tr>
                     <th className="px-3 py-1.5 font-medium">Time</th>
                     <th className="px-3 py-1.5 font-medium">Patient</th>
-                    <th className="px-3 py-1.5 font-medium">Reason</th>
-                    <th className="px-3 py-1.5 font-medium">Provider</th>
+                    <th className="px-3 py-1.5 font-medium">Visit</th>
+                    {showAll && <th className="px-3 py-1.5 font-medium">Provider</th>}
+                    <th className="px-3 py-1.5 font-medium">Room</th>
                     <th className="px-3 py-1.5 font-medium">Status</th>
+                    <th className="px-3 py-1.5" />
                   </tr>
                 </thead>
                 <tbody>
-                  {schedule.map((e) => (
-                    <tr key={e.id} className="border-t border-line hover:bg-accent-soft/40">
-                      <td className="tabular whitespace-nowrap px-3 py-2 text-ink-2">{fmtTime(e.start)}</td>
-                      <td className="whitespace-nowrap px-3 py-2">
-                        <Link href={`/patients/${e.patientId}`} className="font-medium text-ink hover:text-accent">
-                          {fullName(e.patient)}
-                        </Link>
-                        <span className="ml-2 text-ink-3">
-                          {age(e.patient.dob)} {sexShort(e.patient.sex)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        {e.reason}
-                        {e.type !== "office" && <span className="ml-1.5 text-[11px] text-ink-3">({e.type})</span>}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.provider?.name}</td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded border px-1.5 py-0.5 text-[11px] capitalize ${statusStyles[e.status] ?? ""}`}>
-                          {e.status.replace("_", " ")}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {shown.map((e) => {
+                    const done = e.status === "checked_out" || e.status === "no_show";
+                    return (
+                      <tr key={e.id} className={`border-t border-line hover:bg-accent-soft/40 ${done ? "text-ink-3" : ""}`}>
+                        <td className="tabular whitespace-nowrap px-3 py-2">
+                          <Link href={`/appointments/${e.id}`} className="text-ink-2 hover:text-accent">
+                            {fmtTime(e.start)}
+                          </Link>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <Link href={`/patients/${e.patientId}`} className={`font-medium hover:text-accent ${done ? "text-ink-3" : "text-ink"}`}>
+                            {fullName(e.patient)}
+                          </Link>
+                          <span className="ml-2 text-ink-3">
+                            {age(e.patient.dob)} {sexShort(e.patient.sex)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {e.chiefComplaint ?? e.reason}
+                          <span className="ml-1.5 text-[11px] text-ink-3">
+                            {visitType(e.visitType).label}
+                            {e.type === "telehealth" ? ", video" : ""}
+                          </span>
+                        </td>
+                        {showAll && <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.provider?.name}</td>}
+                        <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.status === "roomed" || e.status === "in_progress" ? e.room : ""}</td>
+                        <td className="px-3 py-2">
+                          <VisitStatusChip status={e.status} since={e.statusAt} now={now} />
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                          <NextStepButton appt={e} role={currentUser.role} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
           </Panel>
 
           {clinical && (
-            <Panel title="Abnormal results" className="lg:col-span-2">
+            <Panel title="Abnormal results">
               {abnormal.length === 0 ? (
                 <Empty>Nothing abnormal in the last 30 days.</Empty>
               ) : (
-                <ul className="max-h-[480px] overflow-y-auto">
+                <ul className="max-h-[360px] overflow-y-auto">
                   {abnormal.slice(0, 40).map((o) => (
                     <li key={o.id} className="border-t border-line first:border-t-0">
                       <Link

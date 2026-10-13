@@ -31,6 +31,16 @@ export const PERMISSIONS = {
   // Acknowledging results in the Inbox.
   reviewResults: ["physician", "resident"],
   useInbox: ["physician", "resident", "nurse"],
+  // Scheduling and the clinic day. Anyone can book, reschedule and cancel.
+  bookAppointments: ["physician", "resident", "nurse", "front_desk"],
+  // Check-in (demographics, insurance, copay), no-shows and check-out.
+  checkIn: ["nurse", "front_desk"],
+  // Rooming records vitals, so it needs a clinician.
+  roomPatients: ["physician", "resident", "nurse"],
+  // Starting and finishing the provider part of a visit.
+  seePatients: ["physician", "resident"],
+  // Provider session templates and blocked time.
+  editSchedules: ["physician", "front_desk"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

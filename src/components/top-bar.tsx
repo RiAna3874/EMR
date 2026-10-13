@@ -12,6 +12,7 @@ const EMPTY: OpenPatient[] = [];
 
 const nav = [
   { href: "/", label: "My Day" },
+  { href: "/schedule", label: "Schedule" },
   { href: "/inbox", label: "Inbox" },
   { href: "/patients", label: "Patient Lists" },
 ];
@@ -41,7 +42,7 @@ export function TopBar({ user, inboxCount }: { user: SessionUser; inboxCount: nu
       </Link>
       <nav className="flex items-stretch">
         {nav.filter((n) => n.href !== "/inbox" || inboxCount !== null).map((n) => {
-          const active = n.href === "/" ? pathname === "/" : pathname === n.href;
+          const active = n.href === "/" ? pathname === "/" : pathname === n.href || pathname.startsWith(`${n.href}/`);
           const count = n.href === "/inbox" ? (inboxCount ?? 0) : 0;
           return (
             <Link

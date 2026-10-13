@@ -7,7 +7,8 @@ import { fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
-import { Button, Field, inputCls } from "@/components/form";
+import { Button } from "@/components/form";
+import { VitalsFields } from "@/components/vitals-fields";
 import { TrendChart, type TrendSeries } from "@/components/trend-chart";
 import { recordVitals } from "../actions";
 
@@ -42,34 +43,7 @@ export default async function Vitals({ params, searchParams }: { params: Promise
             <span className="text-[11.5px] text-ink-3">Recorded now. Leave any field blank to skip it.</span>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <Field label="BP (mmHg)">
-              <div className="flex items-center gap-1">
-                <input name="sbp" inputMode="numeric" placeholder="120" className={`${inputCls} w-14`} />
-                <span className="text-ink-3">/</span>
-                <input name="dbp" inputMode="numeric" placeholder="80" className={`${inputCls} w-14`} />
-              </div>
-            </Field>
-            <Field label="HR (/min)">
-              <input name="hr" inputMode="numeric" className={`${inputCls} w-16`} />
-            </Field>
-            <Field label="RR (/min)">
-              <input name="rr" inputMode="numeric" className={`${inputCls} w-16`} />
-            </Field>
-            <Field label="Temp (°C)">
-              <input name="temp" inputMode="decimal" className={`${inputCls} w-16`} />
-            </Field>
-            <Field label="SpO₂ (%)">
-              <input name="spo2" inputMode="numeric" className={`${inputCls} w-16`} />
-            </Field>
-            <Field label="Weight (kg)">
-              <input name="weight" inputMode="decimal" className={`${inputCls} w-20`} />
-            </Field>
-            <Field label="Height (cm)">
-              <input name="height" inputMode="decimal" defaultValue={lastHeight ?? ""} className={`${inputCls} w-20`} />
-            </Field>
-            <Field label="Pain (0–10)">
-              <input name="pain" inputMode="numeric" className={`${inputCls} w-16`} />
-            </Field>
+            <VitalsFields lastHeight={lastHeight} />
             <Button type="submit">File vitals</Button>
           </div>
         </form>

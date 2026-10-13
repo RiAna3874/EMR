@@ -4,7 +4,8 @@ An outpatient electronic medical record that follows the workflows clinicians kn
 
 ## What's here
 
-- **My Day**: today's clinic schedule, abnormal results from the last 30 days, unsigned note count.
+- **My Day**: today's clinic as it happens (each visit's status, room and time in status, with the next step for your role as a button), abnormal results from the last 30 days, unsigned note count. Providers see their own visits, with a switch to the whole clinic.
+- **Schedule**: see below.
 - **Patient Lists**: Clinic Today, My Patients and All Patients, with search by name or MRN, sortable columns and alert badges (allergies, abnormal results, code status).
 - **Patient chart**: several charts can be open at once as tabs in the top bar, and each remembers its last activity. A patient rail stays on the left (demographics, code status, allergies, top problems, last vitals, next appointment).
   - **Summary**: problems, medications, allergies, vitals with sparkline trends, recent abnormal results, recent notes, upcoming visits.
@@ -18,6 +19,7 @@ An outpatient electronic medical record that follows the workflows clinicians kn
     - Problem-based assessment and plan: a side panel lists active problems with the plan last written for each, to add a fresh block or carry the old one forward.
     - States: pended (saved, unsigned, editable by the author), signed, routed for cosign (the cosigner signs with an optional attestation), and addended (signed notes never change; addenda are appended with their own signature). Notes can be filtered by type, status, author and text, and printed.
   - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), contrast with low eGFR, and for prescriptions the full prescribing checks below. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
+  - **Appointments**: upcoming and past visits, including cancellations (with reason) and no-shows, with **Make appointment**.
   - **Documents**: outside records in one list (imaging reports, discharge summaries, referral and consult letters, imported lab reports) with page thumbnails, filters by type, a reading view, and uploads still waiting for review. See [Outside document import](#outside-document-import).
   - **Import**: turn a photo, scan or PDF of an outside lab report into filed, flagged results, or of any other outside document into a structured chart document. See below.
 - **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), outside documents to review, imports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
@@ -65,6 +67,11 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Upload and review outside reports | ✓ | ✓ | ✓ | |
 | Verify and file imported results and documents | ✓ | ✓ | | |
 | Acknowledge results (Inbox) | ✓ | ✓ | | |
+| Book, reschedule and cancel appointments | ✓ | ✓ | ✓ | ✓ |
+| Check in, check out, mark no-show | | | ✓ | ✓ |
+| Room patients | ✓ | ✓ | ✓ | |
+| Start and finish visits | ✓ | ✓ | | |
+| Edit provider templates and blocked time | ✓ | | | ✓ |
 
 A resident can't sign a note without choosing an attending to cosign it; the note then waits in that attending's Inbox. Orders a nurse pends show "pended by" on the chart's Orders tab, and the physician or resident who signs them becomes the ordering clinician. Front desk opens a chart to a demographics and appointments view only.
 
@@ -80,6 +87,21 @@ Synthetic accounts (password `meridian` for all):
 | `tmbeki` | Thandi Mbeki | Front desk |
 
 The sign-in page lists them in development. In a production build they are hidden unless `MERIDIAN_DEMO_ACCOUNTS=1`.
+
+## Scheduling and the clinic day
+
+- **Schedule** (top bar, or `g d`): a day view with one column per provider. Each column shows the provider's sessions, blocked time (hatched, with the reason), appointments colored by visit type with their status, and a red line at the current time. Hover an open slot and click to book it. Overbooked visits sit side by side. Cancelled visits are listed on the right.
+- **Make appointment**: find the patient, pick a visit type (follow-up, same-day sick, new patient, annual wellness, procedure, consult, video visit; each has a length) and a provider (the patient's PCP by default, or any provider), then pick from the open times over the next two weeks. A time that isn't open (outside the provider's sessions, blocked, or already taken) can only be booked by ticking **Overbook**. A patient can't be double-booked, and past days can't be booked.
+- **Reschedule** releases the old time: the old appointment is cancelled with reason "Rescheduled" and links to the new one. **Cancel** asks for a reason. Both are kept in the appointment's history.
+- **Provider templates** (`/schedule/templates`): each provider's weekly sessions (days, hours and slot length) and blocked time such as vacation or meetings.
+- **The clinic day** follows one status path, and each step is recorded with who did it and when:
+
+  Scheduled → **Check in** (front desk: confirm identity, phone, address, language and insurance; collect the copay) → **Room** (nurse: exam room, chief complaint, vitals filed to the visit, allergies and medications reviewed) → **Start visit** (provider; opens the chart) → **Visit done** → **Check out** (front desk; offers a follow-up booking).
+
+  A provider can start a checked-in visit without waiting for rooming, and video visits skip rooming. A scheduled visit can be marked **No show**; a check-in or no-show can be undone. The rules are in `src/lib/scheduling/workflow.ts`.
+- **My Day** refreshes every 30 seconds. The status shows how long the patient has been in it, highlighted after 20 minutes of waiting to be roomed or seen.
+
+The seed gives every provider a weekly template, walks today's visits through the clinic day up to the time the seed runs (so seeding mid-morning shows a clinic in progress), adds a cancellation and a no-show, and scatters bookings over the next two weeks.
 
 ## Lab report import
 
