@@ -3,11 +3,12 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { toLocalDate } from "@/lib/format";
 import { draftFromExtraction, type History } from "./draft";
-import { describeExtractionError, extractLabReport } from "./extract";
+import { describeExtractionError, EXTRACTION_DEADLINE_MS, extractLabReport } from "./extract";
 import { runDocumentExtraction } from "@/lib/documents/server";
 
-// An extraction still "running" after this long was cut off (e.g. a server restart).
-export const STALE_EXTRACTION_MS = 10 * 60_000;
+// An extraction still "running" after this long was cut off (e.g. a server restart);
+// a live one always ends by EXTRACTION_DEADLINE_MS.
+export const STALE_EXTRACTION_MS = EXTRACTION_DEADLINE_MS + 60_000;
 
 export async function runExtraction(jobId: string) {
   const job = await db.importJob.findUnique({ where: { id: jobId }, select: { kind: true } });

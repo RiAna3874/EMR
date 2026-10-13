@@ -9,7 +9,7 @@ import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, type ExtractInput } from "@/lib/labs/extract";
+import { callClaude, EXTRACTION_MODEL, type ExtractInput } from "@/lib/labs/extract";
 import { DIAGNOSIS_KINDS, MED_CHANGES, type ExtractedDocument } from "./draft";
 
 const file = z.number().int().describe("Which file (1-based, in the order given) this is on; where it starts if it spans pages");
@@ -121,8 +121,7 @@ export async function extractDocument(files: ExtractInput, fileNames: string[]):
   });
   content.push({ type: "text", text: `${legend.join("\n")}\n\nTranscribe this clinical document.` });
 
-  const client = new Anthropic({ timeout: 5 * 60_000 });
-  const response = await client.beta.messages.parse({
+  const response = await callClaude("clinical document", {
     model: EXTRACTION_MODEL,
     max_tokens: 32000,
     betas: ["server-side-fallback-2026-07-01"],
