@@ -178,6 +178,6 @@ Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic 
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
 | `npm test` | Unit tests for lab import parsing, order safety checks, roles and password hashing |
-| `npm run db:migrate` | Apply migrations |
+| `npm run db:migrate` | Apply migrations and regenerate the database client (restart `npm run dev` afterwards) |
 | `npm run db:seed` | Wipe and reseed synthetic data |
 | `npm run db:reset` | Drop the database, migrate and seed |
