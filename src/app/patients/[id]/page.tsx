@@ -4,7 +4,9 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { pivot } from "@/lib/chart";
 import { recentAbnormalLabs } from "@/lib/queries";
-import { fmtDate, fmtDob, fmtRange, fmtShortDate, fmtTime, fmtValue, relativeDays, unitLabel } from "@/lib/format";
+import { readContent } from "@/lib/documents/draft";
+import { DocTypeChip } from "@/components/documents/doc-view";
+import { fmtDate, fmtDateOnly, fmtDob, fmtRange, fmtShortDate, fmtTime, fmtValue, relativeDays, unitLabel } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
@@ -17,7 +19,7 @@ export default async function Summary({ params }: { params: Promise<{ id: string
   const base = `/patients/${id}`;
   const currentUser = await requireUser();
   if (!can(currentUser.role, "viewClinical")) return <FrontDeskSummary patientId={id} />;
-  const [conditions, meds, allergies, vitals, abnormal, notes, upcoming] = await Promise.all([
+  const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
     db.allergyIntolerance.findMany({ where: { patientId: id } }),
@@ -30,6 +32,7 @@ export default async function Summary({ params }: { params: Promise<{ id: string
       take: 3,
       include: { provider: true },
     }),
+    db.clinicalDocument.findMany({ where: { patientId: id }, orderBy: { serviceDate: "desc" }, take: 4 }),
   ]);
   const vitalRows = pivot(vitals).rows;
   vitalRows.sort((a, b) => vitalCodes.indexOf(a.code) - vitalCodes.indexOf(b.code));
@@ -194,6 +197,33 @@ export default async function Summary({ params }: { params: Promise<{ id: string
           </ul>
         )}
       </Panel>
+
+      {outside.length > 0 && (
+        <Panel title="Outside records" href={`${base}/documents`}>
+          <ul>
+            {outside.map((d) => {
+              const c = readContent(d.content);
+              return (
+                <li key={d.id} className="border-t border-line first:border-t-0">
+                  <Link href={`${base}/documents?doc=${d.id}`} className="block px-3 py-1.5 hover:bg-accent-soft/40">
+                    <div className="flex items-center gap-2">
+                      <DocTypeChip type={d.type} />
+                      <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
+                      <span className="shrink-0 text-ink-3">{fmtDateOnly(d.serviceDate)}</span>
+                    </div>
+                    {c.impression && <div className="mt-0.5 line-clamp-2 text-[12px] text-ink-2">{c.impression}</div>}
+                    {c.followUps.length > 0 && (
+                      <div className="mt-0.5 text-[11.5px] text-warn">
+                        {c.followUps.length} follow-up {c.followUps.length === 1 ? "item" : "items"}
+                      </div>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      )}
     </div>
   );
 }

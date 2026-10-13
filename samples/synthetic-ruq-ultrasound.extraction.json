@@ -1,0 +1,104 @@
+{
+  "document_type": "imaging_report",
+  "title": "ULTRASOUND ABDOMEN, COMPLETE",
+  "organization": "Lakeview Imaging Associates",
+  "author": "Grace Lindqvist, MD",
+  "service_date": "2026-10-10",
+  "admission_date": null,
+  "discharge_date": null,
+  "patient_name": "MONTENEGRO, LUCIA",
+  "patient_dob": "1975-05-12",
+  "patient_age": "51 Y",
+  "patient_sex": "F",
+  "patient_id": "LIA-211067",
+  "modality": "Ultrasound",
+  "body_part": "Abdomen",
+  "impression": "1. Hepatomegaly with moderate hepatic steatosis. No focal liver lesion.\n2. Cholelithiasis without sonographic evidence of acute cholecystitis.",
+  "notes": [],
+  "sections": [
+    {
+      "heading": "Indication",
+      "text": "Elevated ALT and AST. Obesity. Prediabetes.",
+      "box": {
+        "x0": 52,
+        "y0": 274,
+        "x1": 1048,
+        "y1": 327
+      },
+      "file": 1
+    },
+    {
+      "heading": "Findings",
+      "text": "Liver: 18.4 cm, enlarged. Diffusely increased echogenicity with posterior attenuation, consistent with moderate hepatic steatosis. No focal lesion. Smooth contour. Hepatopetal portal venous flow.\nGallbladder: Multiple mobile shadowing gallstones, largest 9 mm. No wall thickening or pericholecystic fluid. Sonographic Murphy sign negative.\nBile ducts: Common bile duct 4 mm.\nPancreas, spleen, kidneys, aorta: Unremarkable. Spleen 11.2 cm.",
+      "box": {
+        "x0": 52,
+        "y0": 337,
+        "x1": 1048,
+        "y1": 518
+      },
+      "file": 1
+    },
+    {
+      "heading": "Impression",
+      "text": "1. Hepatomegaly with moderate hepatic steatosis. No focal liver lesion.\n2. Cholelithiasis without sonographic evidence of acute cholecystitis.",
+      "box": {
+        "x0": 52,
+        "y0": 528,
+        "x1": 1048,
+        "y1": 633
+      },
+      "file": 1
+    },
+    {
+      "heading": "Recommendation",
+      "text": "Consider non-invasive fibrosis assessment (FIB-4 or elastography) if not already done.",
+      "box": {
+        "x0": 52,
+        "y0": 643,
+        "x1": 1048,
+        "y1": 696
+      },
+      "file": 1
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Diffusely increased echogenicity with posterior attenuation, consistent with moderate hepatic steatosis.",
+      "kind": "finding",
+      "icd10": "K76.0",
+      "box": {
+        "x0": 237,
+        "y0": 364,
+        "x1": 970,
+        "y1": 387
+      },
+      "file": 1
+    },
+    {
+      "text": "Multiple mobile shadowing gallstones, largest 9 mm.",
+      "kind": "finding",
+      "icd10": "K80.20",
+      "box": {
+        "x0": 150,
+        "y0": 414,
+        "x1": 528,
+        "y1": 437
+      },
+      "file": 1
+    }
+  ],
+  "medications": [],
+  "follow_ups": [
+    {
+      "text": "Consider non-invasive fibrosis assessment (FIB-4 or elastography) if not already done.",
+      "due": null,
+      "box": {
+        "x0": 78,
+        "y0": 668,
+        "x1": 1048,
+        "y1": 696
+      },
+      "file": 1
+    }
+  ]
+}

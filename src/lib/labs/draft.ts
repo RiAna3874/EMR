@@ -459,7 +459,8 @@ const isoTime = (s: string | null) => {
   return m ? `${m[1].padStart(2, "0")}:${m[2]}` : "";
 };
 
-function toFractionBox(b: ExtractedReport["sections"][number]["results"][number]["box"], page: PageSize | undefined): Box | null {
+// Pixel box on a page → fractions of the page, or null when it is unusable.
+export function toFractionBox(b: { x0: number; y0: number; x1: number; y1: number } | null, page: PageSize | undefined): Box | null {
   if (!b || !page?.width || !page?.height) return null;
   const f = { x0: b.x0 / page.width, y0: b.y0 / page.height, x1: b.x1 / page.width, y1: b.y1 / page.height };
   const clamp = (v: number) => Math.min(1, Math.max(0, v));

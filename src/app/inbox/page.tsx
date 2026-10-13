@@ -16,6 +16,10 @@ import { NoteBody } from "@/components/notes/note-view";
 import { noteTypeShort } from "@/lib/notes/library";
 import { unresolvedCount } from "@/lib/notes/smarttext";
 import { acknowledgeAllNormal, acknowledgeResult, cosignFromInbox, signDraftNote } from "./actions";
+import { acknowledgeDocument } from "@/app/patients/[id]/import/document-actions";
+import { documentsWhere, filedDocInclude, toFiledDoc } from "@/lib/documents/server";
+import { DocDraftSchema, docTypeLabel } from "@/lib/documents/draft";
+import { DocTypeChip, DocView } from "@/components/documents/doc-view";
 import { can, displayName, needsCosign, type SessionUser } from "@/lib/roles";
 import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
@@ -30,7 +34,8 @@ export const dynamic = "force-dynamic";
 const FOLDERS = [
   { id: "abnormal", label: "Abnormal results" },
   { id: "normal", label: "Normal results" },
-  { id: "imports", label: "Imported reports to verify" },
+  { id: "documents", label: "Outside documents" },
+  { id: "imports", label: "Imports to verify" },
   { id: "notes", label: "Notes to sign" },
   { id: "cosign", label: "Notes to cosign" },
   { id: "orders", label: "Orders to sign" },
@@ -167,6 +172,45 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         </div>
       );
     }
+  } else if (folder === "documents") {
+    const docs = await db.clinicalDocument.findMany({
+      where: documentsWhere(currentUser.id),
+      orderBy: { serviceDate: "desc" },
+      include: { patient: true },
+    });
+    items = docs.map((d) => ({
+      id: d.id,
+      href: href(d.id),
+      patient: d.patient,
+      title: d.title,
+      at: d.filedAt,
+      sub: (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <DocTypeChip type={d.type} />
+          <span className="truncate">{d.organization}</span>
+        </span>
+      ),
+    }));
+    const current = docs.find((d) => d.id === sp.item) ?? docs[0];
+    if (current) {
+      const doc = toFiledDoc(await db.clinicalDocument.findUniqueOrThrow({ where: { id: current.id }, include: filedDocInclude }));
+      const next = docs[docs.indexOf(current) + 1];
+      detail = (
+        <div>
+          <DetailHeader patient={current.patient} title={docTypeLabel[current.type]} meta={`Filed ${fmtDateTime(current.filedAt)} by ${doc.filedBy.name}`} />
+          <div className="px-4 py-3">
+            <DocView doc={doc} patientId={current.patientId} />
+          </div>
+          <form action={acknowledgeDocument.bind(null, current.id, next ? href(next.id) : href())} className="flex flex-wrap items-center gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+            <input name="comment" className={`${inputCls} min-w-48 flex-1`} placeholder="Comment (optional)" />
+            <Button type="submit">Mark reviewed</Button>
+            <Link href={`/patients/${current.patientId}/documents?doc=${current.id}`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Open in chart
+            </Link>
+          </form>
+        </div>
+      );
+    }
   } else if (folder === "imports") {
     const jobs = await db.importJob.findMany({
       where: { status: { in: ["needs_review", "failed"] } },
@@ -177,7 +221,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       id: j.id,
       href: href(j.id),
       patient: j.patient,
-      title: "Outside lab report",
+      title: j.kind === "document" ? "Outside clinical document" : "Outside lab report",
       at: j.createdAt,
       sub: <ImportStatusChip status={j.status} />,
     }));
@@ -185,11 +229,21 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     if (current) {
       detail = (
         <div>
-          <DetailHeader patient={current.patient} title="Outside lab report" meta={`Uploaded ${fmtDateTime(current.createdAt)} by ${current.createdBy.name}`} />
+          <DetailHeader
+            patient={current.patient}
+            title={current.kind === "document" ? "Outside clinical document" : "Outside lab report"}
+            meta={`Uploaded ${fmtDateTime(current.createdAt)} by ${current.createdBy.name}`}
+          />
           <div className="space-y-3 px-4 py-4">
             <p>
               {current._count.documents} {current._count.documents === 1 ? "page" : "pages"}.{" "}
-              {current.status === "failed" ? "The report couldn't be read automatically; results can be entered by hand." : "Results were read from the image and are waiting for verification before they're filed."}
+              {current.kind === "document"
+                ? current.status === "failed"
+                  ? "The document couldn't be read automatically; it can be typed in by hand."
+                  : `${docSummary(current.draft)} It was transcribed from the pages and is waiting for verification before it's filed.`
+                : current.status === "failed"
+                  ? "The report couldn't be read automatically; results can be entered by hand."
+                  : "Results were read from the image and are waiting for verification before they're filed."}
             </p>
             <Link href={`/patients/${current.patientId}/import/${current.id}`} className="inline-block rounded bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent/90">
               Review and file
@@ -672,4 +726,11 @@ async function RefillDetail({ requestId, next, user }: { requestId: string; next
       ) : null}
     </div>
   );
+}
+
+function docSummary(draft: unknown) {
+  const d = DocDraftSchema.safeParse(draft);
+  if (!d.success) return "";
+  const parts = [d.data.title, d.data.organization].filter(Boolean).join(" from ");
+  return parts ? `${docTypeLabel[d.data.type]}: ${parts}.` : "";
 }
