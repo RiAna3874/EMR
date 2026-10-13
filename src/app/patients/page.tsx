@@ -31,6 +31,7 @@ export default async function PatientLists({
   const sp = await searchParams;
   const currentUser = await requireUser();
   const clinical = can(currentUser.role, "viewClinical");
+  const canRegister = can(currentUser.role, "registerPatients");
   // "My Patients" is a PCP panel, so only providers have one.
   const shownLists = lists.filter((l) => l.key !== "mine" || isProvider(currentUser.role));
   const list: ListKey = shownLists.some((l) => l.key === sp.list) ? (sp.list as ListKey) : "today";
@@ -129,6 +130,11 @@ export default async function PatientLists({
               className="w-64 rounded border border-line bg-panel-muted px-2.5 py-1.5 outline-none focus:border-accent focus:bg-panel"
             />
           </form>
+          {canRegister && (
+            <Link href="/patients/new" className="rounded border border-accent bg-accent px-2.5 py-1.5 text-[12.5px] font-medium text-white hover:bg-accent/90">
+              New patient
+            </Link>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -205,6 +211,14 @@ export default async function PatientLists({
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-ink-3">
                     No patients match.
+                    {q && canRegister && (
+                      <>
+                        {" "}
+                        <Link href={`/patients/new?q=${encodeURIComponent(q)}`} className="text-accent hover:underline">
+                          Register a new patient
+                        </Link>
+                      </>
+                    )}
                   </td>
                 </tr>
               )}

@@ -216,35 +216,36 @@ model Practitioner {
   active       Boolean   @default(true)
   sessions     Session[]
 
-  primaryPatients   Patient[]           @relation("PCP")
-  encounters        Encounter[]
-  prescriptions     MedicationRequest[]
-  notes             Note[]              @relation("NoteAuthor")
-  cosignNotes       Note[]              @relation("NoteCosigner")
-  addenda           NoteAddendum[]
-  phrases           SmartPhrase[]
-  verifiedReports   DiagnosticReport[]  @relation("VerifiedReports")
-  uploads           DocumentReference[]
-  importJobs        ImportJob[]         @relation("ImportCreatedBy")
-  filedImports      ImportJob[]         @relation("ImportFiledBy")
-  reviewedReports   DiagnosticReport[]  @relation("ReviewedReports")
-  orders            ServiceRequest[]
-  cosignMeds        MedicationRequest[] @relation("MedCosigner")
-  endedMeds         MedicationRequest[] @relation("MedEndedBy")
-  medsReviewed      Patient[]           @relation("MedsReviewer")
-  refillsPended     RefillRequest[]     @relation("RefillPendedBy")
-  refillsDecided    RefillRequest[]     @relation("RefillDecidedBy")
-  filedDocuments    ClinicalDocument[]  @relation("DocFiledBy")
-  reviewedDocuments ClinicalDocument[]  @relation("DocReviewedBy")
-  scheduleSessions  ScheduleSession[]
-  scheduleBlocks    ScheduleBlock[]     @relation("BlockProvider")
-  encounterEvents   EncounterEvent[]
+  primaryPatients    Patient[]            @relation("PCP")
+  encounters         Encounter[]
+  prescriptions      MedicationRequest[]
+  notes              Note[]               @relation("NoteAuthor")
+  cosignNotes        Note[]               @relation("NoteCosigner")
+  addenda            NoteAddendum[]
+  phrases            SmartPhrase[]
+  verifiedReports    DiagnosticReport[]   @relation("VerifiedReports")
+  uploads            DocumentReference[]
+  importJobs         ImportJob[]          @relation("ImportCreatedBy")
+  filedImports       ImportJob[]          @relation("ImportFiledBy")
+  reviewedReports    DiagnosticReport[]   @relation("ReviewedReports")
+  orders             ServiceRequest[]
+  cosignMeds         MedicationRequest[]  @relation("MedCosigner")
+  endedMeds          MedicationRequest[]  @relation("MedEndedBy")
+  medsReviewed       Patient[]            @relation("MedsReviewer")
+  registeredPatients Patient[]            @relation("RegisteredBy")
+  refillsPended      RefillRequest[]      @relation("RefillPendedBy")
+  refillsDecided     RefillRequest[]      @relation("RefillDecidedBy")
+  filedDocuments     ClinicalDocument[]   @relation("DocFiledBy")
+  reviewedDocuments  ClinicalDocument[]   @relation("DocReviewedBy")
+  scheduleSessions   ScheduleSession[]
+  scheduleBlocks     ScheduleBlock[]      @relation("BlockProvider")
+  encounterEvents    EncounterEvent[]
   // Secure chat.
-  chatStatus        ChatStatus          @default(available)
-  chatStatusNote    String?
-  conversationsMade Conversation[]      @relation("ConversationCreatedBy")
-  chatMemberships   ConversationMember[]
-  chatMessages      ChatMessage[]
+  chatStatus         ChatStatus           @default(available)
+  chatStatusNote     String?
+  conversationsMade  Conversation[]       @relation("ConversationCreatedBy")
+  chatMemberships    ConversationMember[]
+  chatMessages       ChatMessage[]
 }
 
 // A signed-in browser. The cookie holds a random token; only its SHA-256 is stored.
@@ -260,29 +261,44 @@ model Session {
 }
 
 model Patient {
-  id                  String              @id @default(cuid())
-  mrn                 String              @unique
-  firstName           String
-  lastName            String
-  dob                 DateTime            @db.Date
-  sex                 Sex
-  phone               String?
-  address             String?
-  preferredLanguage   String              @default("English")
-  codeStatus          String              @default("Full code")
-  allergyStatus       AllergyReviewStatus @default(not_reviewed)
-  pcpId               String?
-  pcp                 Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
-  createdAt           DateTime            @default(now())
-  preferredPharmacyId String?
-  preferredPharmacy   Pharmacy?           @relation(fields: [preferredPharmacyId], references: [id])
+  id                       String              @id @default(cuid())
+  mrn                      String              @unique
+  firstName                String
+  lastName                 String
+  dob                      DateTime            @db.Date
+  sex                      Sex
+  phone                    String?
+  address                  String?
+  preferredLanguage        String              @default("English")
+  codeStatus               String              @default("Full code")
+  allergyStatus            AllergyReviewStatus @default(not_reviewed)
+  pcpId                    String?
+  pcp                      Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
+  createdAt                DateTime            @default(now())
+  preferredPharmacyId      String?
+  preferredPharmacy        Pharmacy?           @relation(fields: [preferredPharmacyId], references: [id])
   // "Mark as reviewed" on the medication list.
-  medsReviewedAt      DateTime?
-  medsReviewedById    String?
-  medsReviewedBy      Practitioner?       @relation("MedsReviewer", fields: [medsReviewedById], references: [id])
+  medsReviewedAt           DateTime?
+  medsReviewedById         String?
+  medsReviewedBy           Practitioner?       @relation("MedsReviewer", fields: [medsReviewedById], references: [id])
   // Confirmed or updated by the front desk at check-in.
-  insurancePayer      String?
-  insuranceMemberId   String?
+  insurancePayer           String?
+  insuranceMemberId        String?
+  // Registration (src/app/patients/new). Seeded patients have no registrar.
+  middleName               String?
+  preferredName            String?
+  email                    String?
+  emergencyContactName     String?
+  emergencyContactRelation String?
+  emergencyContactPhone    String?
+  insuranceGroup           String?
+  // The policy holder, when it isn't the patient (e.g. a parent or spouse).
+  subscriberName           String?
+  subscriberRelation       String?
+  registeredById           String?
+  registeredBy             Practitioner?       @relation("RegisteredBy", fields: [registeredById], references: [id])
+  // Set when the registrar saw possible duplicates and confirmed this is someone else.
+  duplicateCheckNote       String?
 
   encounters     Encounter[]
   conditions     Condition[]
@@ -300,6 +316,8 @@ model Patient {
   conversations  Conversation[]
 
   @@index([lastName, firstName])
+  // The duplicate-patient check looks up by date of birth.
+  @@index([dob])
 }
 
 model Encounter {
@@ -316,21 +334,21 @@ model Encounter {
 
   // Scheduling. An appointment is an Encounter from booking on (FHIR keeps
   // Appointment separate; one row is enough for an outpatient clinic).
-  visitType      String    @default("follow_up") // src/lib/scheduling/visit-types.ts
-  bookingNote    String?
-  statusAt       DateTime? // when the current status began, for wait timers
-  arrivedAt      DateTime?
-  room           String?
-  chiefComplaint String?
+  visitType           String     @default("follow_up") // src/lib/scheduling/visit-types.ts
+  bookingNote         String?
+  statusAt            DateTime? // when the current status began, for wait timers
+  arrivedAt           DateTime?
+  room                String?
+  chiefComplaint      String?
   allergiesReviewedAt DateTime?
-  medsReviewedAt DateTime?
-  copayCents     Int?
-  copayMethod    String? // cash, card, waived
-  cancelReason   String?
+  medsReviewedAt      DateTime?
+  copayCents          Int?
+  copayMethod         String? // cash, card, waived
+  cancelReason        String?
   // A rescheduled appointment is cancelled and points at its replacement.
-  rescheduledToId String?    @unique
-  rescheduledTo   Encounter? @relation("Reschedule", fields: [rescheduledToId], references: [id])
-  rescheduledFrom Encounter? @relation("Reschedule")
+  rescheduledToId     String?    @unique
+  rescheduledTo       Encounter? @relation("Reschedule", fields: [rescheduledToId], references: [id])
+  rescheduledFrom     Encounter? @relation("Reschedule")
 
   observations Observation[]
   notes        Note[]

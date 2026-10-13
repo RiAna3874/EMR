@@ -44,7 +44,7 @@ export function TopBar({ user, inboxCount, chat: initialChat }: { user: SessionU
 
   return (
     <header className="flex h-11 shrink-0 items-stretch bg-chrome text-white print:hidden">
-      <CommandPalette clinical={can(user.role, "viewClinical")} />
+      <CommandPalette clinical={can(user.role, "viewClinical")} canRegister={can(user.role, "registerPatients")} />
       <Link href="/" className="flex items-center gap-2 px-4 font-semibold tracking-wide">
         <Logo />
         <span>Meridian</span>

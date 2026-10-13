@@ -7,6 +7,7 @@ An outpatient electronic medical record that follows the workflows clinicians kn
 - **My Day**: today's clinic as it happens (each visit's status, room and time in status, with the next step for your role as a button), abnormal results from the last 30 days, unsigned note count. Providers see their own visits, with a switch to the whole clinic.
 - **Schedule**: see below.
 - **Patient Lists**: Clinic Today, My Patients and All Patients, with search by name or MRN, sortable columns and alert badges (allergies, abnormal results, code status).
+- **Register a new patient** (front desk and nurses): **Patient Lists → New patient**, "Register a new patient" when a search finds nobody (on Patient Lists or in Make appointment), or ⌘K → "Register new patient". The form takes legal name, preferred name, date of birth, legal sex, phone, email, address, language, an emergency contact, PCP, preferred pharmacy and coverage (plan, member ID, group, policy holder; blank is self-pay). A **duplicate check** runs as soon as name and date of birth are in, and again on save: it finds the same name and DOB, typos, accents, hyphenated or changed last names, first and last swapped, and a DOB one field off. Saving is blocked until the registrar has looked at every match and ticked "none of these is this patient" (kept on the record). The MRN comes from a database sequence (`M2000001` up). Registering from Make appointment goes straight back to booking with the new patient picked.
 - **Patient chart**: several charts can be open at once as tabs in the top bar, and each remembers its last activity. A patient rail stays on the left (demographics, code status, allergies, top problems, last vitals, next appointment).
   - **Summary**: problems, medications, allergies, vitals with sparkline trends, recent abnormal results, recent notes, upcoming visits.
   - **Results**: trend table (tests by date, H/L/critical flags, reference ranges, sparklines), a single-report view with acknowledgement, and a **graph** view: pick any components, see them over time against the shaded reference range, with imported results drawn as diamonds. Click a test name in the table to graph it.
@@ -67,6 +68,7 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Upload and review outside reports | ✓ | ✓ | ✓ | |
 | Verify and file imported results and documents | ✓ | ✓ | | |
 | Acknowledge results (Inbox) | ✓ | ✓ | | |
+| Register new patients | | | ✓ | ✓ |
 | Book, reschedule and cancel appointments | ✓ | ✓ | ✓ | ✓ |
 | Check in, check out, mark no-show | | | ✓ | ✓ |
 | Room patients | ✓ | ✓ | ✓ | |
