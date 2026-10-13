@@ -1,5 +1,6 @@
 import type { OrderPriority, OrderStatus, OrderType } from "@prisma/client";
 import type { OrderWarning } from "@/lib/orders/checks";
+import { rxSummary, type RxDetails } from "@/lib/meds/rx";
 
 const typeStyles: Record<OrderType, [string, string]> = {
   lab: ["LAB", "bg-accent-soft text-accent"],
@@ -50,7 +51,10 @@ export function WarningList({ warnings }: { warnings: OrderWarning[] }) {
           key={i}
           className={`rounded border px-2 py-1 text-[12px] ${w.level === "stop" ? "border-crit/30 bg-crit-soft text-crit" : "border-warn/30 bg-warn-soft text-warn"}`}
         >
-          <span className="font-semibold">{w.level === "stop" ? "Stop: " : "Check: "}</span>
+          <span className="font-semibold">
+            {w.level === "stop" ? "Stop" : "Check"}
+            {w.kind && !w.text.toLowerCase().startsWith(w.kind) && <span className="font-normal opacity-80"> · {w.kind}</span>}:{" "}
+          </span>
           {w.text}
         </li>
       ))}
@@ -58,8 +62,4 @@ export function WarningList({ warnings }: { warnings: OrderWarning[] }) {
   );
 }
 
-export function medSig(details: unknown) {
-  const d = (details ?? {}) as { dose?: string; route?: string; frequency?: string; quantity?: string; refills?: number };
-  if (!d.dose) return "";
-  return `${d.dose} ${d.route ?? ""}, ${d.frequency ?? ""}. Dispense ${d.quantity ?? "?"}, ${d.refills ?? 0} refill${d.refills === 1 ? "" : "s"}.`;
-}
+export const medSig = (details: unknown) => rxSummary(details as Partial<RxDetails> | null);

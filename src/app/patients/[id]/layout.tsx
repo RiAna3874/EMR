@@ -24,7 +24,7 @@ export default async function ChartLayout({ children, params }: { children: Reac
   });
   if (!patient) notFound();
 
-  const [vitals, abnormal, drafts, toVerify, unsignedOrders] = await Promise.all([
+  const [vitals, abnormal, drafts, toVerify, unsignedOrders, refillRequests] = await Promise.all([
     latestVitals(id),
     db.observation.count({
       where: {
@@ -38,13 +38,14 @@ export default async function ChartLayout({ children, params }: { children: Reac
     db.note.count({ where: { patientId: id, OR: [{ status: "draft", authorId: currentUser.id }, { status: "pending_cosign", cosignerId: currentUser.id }] } }),
     db.importJob.count({ where: { patientId: id, status: "needs_review" } }),
     db.serviceRequest.count({ where: { patientId: id, status: "pending" } }),
+    db.refillRequest.count({ where: { patientId: id, status: { in: ["requested", "pended"] } } }),
   ]);
 
   return (
     <div className="flex h-full">
       <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, notes: drafts, orders: unsignedOrders, import: toVerify }} allowed={allowed} />
+        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, meds: refillRequests, notes: drafts, orders: unsignedOrders, import: toVerify }} allowed={allowed} />
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       </div>
     </div>

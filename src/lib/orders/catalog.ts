@@ -2,6 +2,8 @@
 // match the DiagnosticReport codes results file under (seeded and imported), so
 // a result arriving for an ordered panel completes that order.
 import type { OrderType } from "@prisma/client";
+import { FORMULARY } from "@/lib/meds/formulary";
+import { classesOf } from "@/lib/meds/drugs";
 
 export type MedDefaults = { dose: string; route: string; frequency: string; quantity: string; refills: number };
 
@@ -63,25 +65,16 @@ export const ORDERABLES: Orderable[] = [
   { code: "REF:physical-therapy", display: "Referral to Physical Therapy", type: "referral", keywords: ["pt", "back pain", "rehab"] },
   { code: "REF:nutrition", display: "Referral to Nutrition (dietitian)", type: "referral", keywords: ["diet", "weight", "dietitian"] },
 
-  // Medications (a small outpatient formulary)
-  { code: "RX:723", display: "Amoxicillin 500 mg capsule", type: "medication", keywords: ["antibiotic"], med: { dose: "500 mg", route: "oral", frequency: "three times daily for 10 days", quantity: "30 capsules", refills: 0, classes: ["penicillin", "beta-lactam"] } },
-  { code: "RX:562251", display: "Amoxicillin-clavulanate 875-125 mg tablet", type: "medication", keywords: ["augmentin", "antibiotic"], med: { dose: "1 tablet", route: "oral", frequency: "twice daily for 7 days", quantity: "14 tablets", refills: 0, classes: ["penicillin", "beta-lactam"] } },
-  { code: "RX:309114", display: "Cephalexin 500 mg capsule", type: "medication", keywords: ["keflex", "antibiotic"], med: { dose: "500 mg", route: "oral", frequency: "four times daily for 7 days", quantity: "28 capsules", refills: 0, classes: ["cephalosporin", "beta-lactam"] } },
-  { code: "RX:248656", display: "Azithromycin 250 mg tablet", type: "medication", keywords: ["z-pak", "zithromax", "antibiotic"], med: { dose: "500 mg day 1, then 250 mg", route: "oral", frequency: "once daily for 5 days", quantity: "6 tablets", refills: 0, classes: ["macrolide"] } },
-  { code: "RX:1648755", display: "Nitrofurantoin monohydrate 100 mg capsule", type: "medication", keywords: ["macrobid", "uti", "antibiotic"], med: { dose: "100 mg", route: "oral", frequency: "twice daily for 5 days", quantity: "10 capsules", refills: 0, classes: [] } },
-  { code: "RX:198335", display: "Sulfamethoxazole-trimethoprim DS 800-160 mg tablet", type: "medication", keywords: ["bactrim", "smx-tmp", "antibiotic"], med: { dose: "1 tablet", route: "oral", frequency: "twice daily for 3 days", quantity: "6 tablets", refills: 0, classes: ["sulfonamide"] } },
-  { code: "RX:312617", display: "Prednisone 20 mg tablet", type: "medication", keywords: ["steroid"], med: { dose: "40 mg", route: "oral", frequency: "once daily for 5 days", quantity: "10 tablets", refills: 0, classes: ["corticosteroid"] } },
-  { code: "RX:861007", display: "Metformin 500 mg tablet", type: "medication", keywords: ["diabetes"], med: { dose: "500 mg", route: "oral", frequency: "twice daily with meals", quantity: "60 tablets", refills: 3, classes: [] } },
-  { code: "RX:314076", display: "Lisinopril 10 mg tablet", type: "medication", keywords: ["ace inhibitor", "hypertension", "blood pressure"], med: { dose: "10 mg", route: "oral", frequency: "once daily", quantity: "30 tablets", refills: 3, classes: ["ace-inhibitor"] } },
-  { code: "RX:197361", display: "Amlodipine 5 mg tablet", type: "medication", keywords: ["hypertension", "blood pressure"], med: { dose: "5 mg", route: "oral", frequency: "once daily", quantity: "30 tablets", refills: 3, classes: [] } },
-  { code: "RX:617310", display: "Atorvastatin 20 mg tablet", type: "medication", keywords: ["statin", "cholesterol"], med: { dose: "20 mg", route: "oral", frequency: "nightly", quantity: "30 tablets", refills: 3, classes: ["statin"] } },
-  { code: "RX:966247", display: "Levothyroxine 50 mcg tablet", type: "medication", keywords: ["thyroid", "synthroid"], med: { dose: "50 mcg", route: "oral", frequency: "once daily before breakfast", quantity: "30 tablets", refills: 3, classes: [] } },
-  { code: "RX:745679", display: "Albuterol HFA 90 mcg inhaler", type: "medication", keywords: ["inhaler", "asthma", "copd"], med: { dose: "2 puffs", route: "inhaled", frequency: "every 4 hours as needed", quantity: "1 inhaler", refills: 1, classes: [] } },
-  { code: "RX:198053", display: "Omeprazole 20 mg capsule", type: "medication", keywords: ["ppi", "gerd", "reflux"], med: { dose: "20 mg", route: "oral", frequency: "once daily before breakfast", quantity: "30 capsules", refills: 2, classes: [] } },
-  { code: "RX:197806", display: "Ibuprofen 600 mg tablet", type: "medication", keywords: ["nsaid", "pain"], med: { dose: "600 mg", route: "oral", frequency: "every 6 hours as needed with food", quantity: "30 tablets", refills: 0, classes: ["nsaid"] } },
-  { code: "RX:313782", display: "Acetaminophen 500 mg tablet", type: "medication", keywords: ["tylenol", "paracetamol", "pain"], med: { dose: "1000 mg", route: "oral", frequency: "every 8 hours as needed", quantity: "60 tablets", refills: 0, classes: [] } },
-  { code: "RX:993503", display: "Acetaminophen-codeine 300-30 mg tablet", type: "medication", keywords: ["tylenol 3", "opioid", "pain"], med: { dose: "1 tablet", route: "oral", frequency: "every 6 hours as needed", quantity: "12 tablets", refills: 0, classes: ["opioid", "codeine"] } },
-  { code: "RX:312086", display: "Ondansetron 4 mg ODT", type: "medication", keywords: ["zofran", "nausea"], med: { dose: "4 mg", route: "oral", frequency: "every 8 hours as needed", quantity: "12 tablets", refills: 0, classes: [] } },
+  // Medications: the prescribing formulary (src/lib/meds/formulary.ts).
+  ...FORMULARY.map(
+    (p): Orderable => ({
+      code: `RX:${p.rxnorm}`,
+      display: p.display,
+      type: "medication",
+      keywords: p.keywords,
+      med: { dose: p.dose, route: p.route, frequency: p.frequency, quantity: p.quantity, refills: p.refills, classes: classesOf(p.display) },
+    }),
+  ),
 ];
 
 export const orderableByCode = new Map(ORDERABLES.map((o) => [o.code, o]));

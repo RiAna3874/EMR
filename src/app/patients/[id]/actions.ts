@@ -132,35 +132,3 @@ export async function reactivateProblem(patientId: string, conditionId: string) 
   await db.condition.update({ where: { id: conditionId, patientId }, data: { status: "active", resolvedAt: null } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
-
-export async function discontinueMed(patientId: string, medId: string) {
-  await requirePermission("editMeds");
-  await db.medicationRequest.update({ where: { id: medId, patientId }, data: { status: "discontinued", end: new Date() } });
-  revalidatePath(`/patients/${patientId}`, "layout");
-}
-
-export async function holdMed(patientId: string, medId: string, hold: boolean) {
-  await requirePermission("editMeds");
-  await db.medicationRequest.update({ where: { id: medId, patientId }, data: { status: hold ? "on_hold" : "active" } });
-  revalidatePath(`/patients/${patientId}`, "layout");
-}
-
-export async function addMed(patientId: string, form: FormData) {
-  const currentUser = await requirePermission("editMeds");
-  const drug = str(form, "drug");
-  if (!drug) return;
-  await db.medicationRequest.create({
-    data: {
-      patientId,
-      drug,
-      dose: str(form, "dose"),
-      route: str(form, "route") || "oral",
-      frequency: str(form, "frequency"),
-      indication: str(form, "indication") || null,
-      status: "active",
-      start: new Date(),
-      prescriberId: currentUser.id,
-    },
-  });
-  revalidatePath(`/patients/${patientId}`, "layout");
-}

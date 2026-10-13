@@ -3,9 +3,10 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { fmtDate, fmtDateOnly } from "@/lib/format";
-import { orderableByCode, typeLabels } from "@/lib/orders/catalog";
-import { orderWarnings } from "@/lib/orders/checks";
-import { orderContext } from "@/lib/orders/server";
+import { typeLabels } from "@/lib/orders/catalog";
+import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
+import { scheduleOf } from "@/lib/meds/checks";
+import { needsCosign } from "@/lib/roles";
 import { Empty } from "@/components/panel";
 import { OrderComposer } from "@/components/orders/order-composer";
 import { PendingOrders, type PendingRow } from "@/components/orders/pending-orders";
@@ -19,7 +20,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
   const canPend = can(currentUser.role, "pendOrders");
   const canSign = can(currentUser.role, "signOrders");
   const sp = await searchParams;
-  const [orders, problems, ctx] = await Promise.all([
+  const [orders, problems, ctx, patient, pharmacies, attendings] = await Promise.all([
     db.serviceRequest.findMany({
       where: { patientId: id },
       orderBy: { createdAt: "desc" },
@@ -27,6 +28,9 @@ export default async function Orders({ params, searchParams }: { params: Promise
     }),
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { display: true } }),
     orderContext(id),
+    db.patient.findUniqueOrThrow({ where: { id }, select: { preferredPharmacyId: true } }),
+    db.pharmacy.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, address: true, mailOrder: true } }),
+    needsCosign(currentUser.role) ? db.practitioner.findMany({ where: { role: "physician", active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : null,
   ]);
 
   const pending = orders.filter((o) => o.status === "pending").reverse();
@@ -34,9 +38,8 @@ export default async function Orders({ params, searchParams }: { params: Promise
   const past = orders.filter((o) => o.status === "completed" || o.status === "discontinued");
   const shownPast = sp.history === "all" ? past : past.slice(0, 15);
 
+  const warnings = await pendingOrderWarnings(pending, ctx);
   const rows: PendingRow[] = pending.map((o) => {
-    const def = orderableByCode.get(o.code);
-    const others = { ...ctx, openOrders: orders.filter((x) => x.id !== o.id && (x.status === "pending" || x.status === "signed")) };
     return {
       id: o.id,
       type: o.type,
@@ -46,7 +49,8 @@ export default async function Orders({ params, searchParams }: { params: Promise
       sig: medSig(o.details),
       orderSet: o.orderSet,
       pendedBy: o.orderedById === currentUser.id ? null : o.orderedBy.name,
-      warnings: def ? orderWarnings(def, others) : [],
+      warnings: warnings.get(o.id) ?? [],
+      controlled: o.type === "medication" && !!scheduleOf(o.display),
     };
   });
 
@@ -59,6 +63,8 @@ export default async function Orders({ params, searchParams }: { params: Promise
             ctx={ctx}
             problems={problems.map((p) => p.display)}
             initialCode={sp.add}
+            pharmacies={pharmacies}
+            preferredPharmacyId={patient.preferredPharmacyId}
             addOrder={addOrder.bind(null, id)}
             addOrderSet={addOrderSet.bind(null, id)}
           />
@@ -96,6 +102,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
             remove={removePendingOrder.bind(null, id)}
             setPriority={updatePendingOrder.bind(null, id)}
             sign={canSign ? signOrders.bind(null, id) : undefined}
+            cosigners={attendings ?? undefined}
           />
         )}
       </div>

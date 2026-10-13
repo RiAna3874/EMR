@@ -30,3 +30,13 @@ test("residents otherwise act as prescribers", () => {
     assert.equal(can("resident", p), true, p);
   }
 });
+
+test("medications: nurses review and pend, prescribers sign, attendings cosign residents", () => {
+  assert.equal(can("nurse", "reviewMeds"), true);
+  assert.equal(can("nurse", "pendRefills"), true);
+  assert.equal(can("nurse", "approveRefills"), false);
+  assert.equal(can("resident", "approveRefills"), true);
+  assert.equal(can("resident", "cosignOrders"), false);
+  assert.equal(can("physician", "cosignOrders"), true);
+  for (const p of ["reviewMeds", "pendRefills", "approveRefills"] as const) assert.equal(can("front_desk", p), false, p);
+});
