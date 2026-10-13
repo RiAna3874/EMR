@@ -25,6 +25,18 @@ enum Role {
 }
 
 // "No known allergies" is an explicit, reviewed state, distinct from "not reviewed".
+// What colleagues see next to a name in secure chat.
+enum ChatStatus {
+  available
+  busy
+  away
+}
+
+enum ChatMessageKind {
+  text
+  system // "Kirsten Lund added Leo Brandt", "... left", "... renamed"
+}
+
 enum AllergyReviewStatus {
   not_reviewed
   no_known_allergies
@@ -227,6 +239,12 @@ model Practitioner {
   scheduleSessions  ScheduleSession[]
   scheduleBlocks    ScheduleBlock[]     @relation("BlockProvider")
   encounterEvents   EncounterEvent[]
+  // Secure chat.
+  chatStatus        ChatStatus          @default(available)
+  chatStatusNote    String?
+  conversationsMade Conversation[]      @relation("ConversationCreatedBy")
+  chatMemberships   ConversationMember[]
+  chatMessages      ChatMessage[]
 }
 
 // A signed-in browser. The cookie holds a random token; only its SHA-256 is stored.
@@ -279,6 +297,7 @@ model Patient {
   dispenses      MedicationDispense[]
   refillRequests RefillRequest[]
   clinicalDocs   ClinicalDocument[]
+  conversations  Conversation[]
 
   @@index([lastName, firstName])
 }
@@ -727,4 +746,54 @@ model ClinicalDocument {
 
   @@index([patientId, serviceDate])
   @@index([reviewedAt])
+}
+
+// Secure staff chat. Messages are working communication between staff, not
+// part of the legal record; members can't edit or delete what they sent.
+model Conversation {
+  id            String               @id @default(cuid())
+  // Null for a one-to-one or an unnamed group (named after its members).
+  title         String?
+  // Optional patient context, shown as a banner with a link to the chart.
+  patientId     String?
+  patient       Patient?             @relation(fields: [patientId], references: [id])
+  createdById   String
+  createdBy     Practitioner         @relation("ConversationCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime             @default(now())
+  lastMessageAt DateTime             @default(now())
+  members       ConversationMember[]
+  messages      ChatMessage[]
+
+  @@index([patientId])
+  @@index([lastMessageAt])
+}
+
+model ConversationMember {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  practitionerId String
+  practitioner   Practitioner @relation(fields: [practitionerId], references: [id])
+  joinedAt       DateTime     @default(now())
+  // Everything sent up to here has been read; drives unread counts and "Read by".
+  lastReadAt     DateTime?
+  // Set when a member leaves; they lose access until someone adds them back.
+  leftAt         DateTime?
+  muted          Boolean      @default(false)
+
+  @@id([conversationId, practitionerId])
+  @@index([practitionerId])
+}
+
+model ChatMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         Practitioner    @relation(fields: [senderId], references: [id])
+  kind           ChatMessageKind @default(text)
+  body           String
+  urgent         Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+
+  @@index([conversationId, createdAt])
 }

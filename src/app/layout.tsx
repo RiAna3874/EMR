@@ -3,6 +3,7 @@ import { TopBar } from "@/components/top-bar";
 import { inboxCounts } from "@/lib/inbox";
 import { getCurrentUser } from "@/lib/session";
 import { can } from "@/lib/roles";
+import { chatBadge } from "@/lib/chat/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,9 +20,16 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body className="flex h-screen flex-col antialiased print:block print:h-auto">
-        {user && <TopBar user={user} inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null} />}
+        {user && (
+          <TopBar
+            user={user}
+            inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
+            chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
+          />
+        )}
         <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
       </body>
     </html>
   );
 }
+

@@ -41,6 +41,9 @@ export const PERMISSIONS = {
   seePatients: ["physician", "resident"],
   // Provider session templates and blocked time.
   editSchedules: ["physician", "front_desk"],
+  // Secure chat between staff. Everyone uses it, front desk included (scheduling
+  // questions, a patient at the window); a conversation can carry a patient context.
+  useChat: ["physician", "resident", "nurse", "front_desk"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

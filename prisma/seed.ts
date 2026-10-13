@@ -352,6 +352,9 @@ function flagFor(value: number, a: { low: number; high: number; critLow?: number
 
 async function main() {
   await prisma.$transaction([
+    prisma.chatMessage.deleteMany(),
+    prisma.conversationMember.deleteMany(),
+    prisma.conversation.deleteMany(),
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
     prisma.clinicalDocument.deleteMany(),
@@ -561,6 +564,7 @@ async function main() {
     }
   }
   await seedClinicDay();
+  await seedChat();
 
   await prisma.smartPhrase.createMany({
     data: [
@@ -1057,6 +1061,85 @@ async function seedClinicDay() {
     if (clash) continue;
     await clinicVisit({ patientId, providerId, start, visitType: rand() < 0.25 ? "same_day" : "follow_up", reason: rand() < 0.5 ? "Follow-up" : "Medication check" });
   }
+}
+
+// Secure chat for the demo: an urgent nurse message waiting for Dr. Chen, a
+// consult note from cardiology, a resident's question, the front desk asking to
+// overbook, and a clinic huddle group. Times are minutes before seeding.
+async function seedChat() {
+  const patient = async (lastName: string) => (await prisma.patient.findFirstOrThrow({ where: { lastName } })).id;
+  const ago = (min: number) => new Date(Date.now() - min * 60_000);
+  type Line = [sender: string, minutesAgo: number, body: string, urgent?: boolean];
+  async function conversation(opts: { title?: string; patientId?: string; members: string[]; read: Record<string, number>; muted?: string[]; lines: Line[] }) {
+    const first = Math.max(...opts.lines.map((l) => l[1]));
+    await prisma.conversation.create({
+      data: {
+        title: opts.title ?? null,
+        patientId: opts.patientId ?? null,
+        createdById: opts.lines[0][0],
+        createdAt: ago(first),
+        lastMessageAt: ago(Math.min(...opts.lines.map((l) => l[1]))),
+        members: {
+          create: opts.members.map((id) => ({
+            practitionerId: id,
+            joinedAt: ago(first + 1),
+            lastReadAt: opts.read[id] === undefined ? null : ago(opts.read[id]),
+            muted: opts.muted?.includes(id) ?? false,
+          })),
+        },
+        messages: { create: opts.lines.map(([senderId, min, body, urgent]) => ({ senderId, body, urgent: !!urgent, createdAt: ago(min) })) },
+      },
+    });
+  }
+
+  await conversation({
+    patientId: await patient("Brightwater"),
+    members: ["prac_lund", "prac_chen"],
+    read: { prac_lund: 6, prac_chen: 95 },
+    lines: [
+      ["prac_lund", 100, "Ms. Brightwater is checked in for her 8:00. Fasting labs drawn."],
+      ["prac_chen", 96, "Thanks, room her when you can."],
+      ["prac_lund", 6, "Repeat BP 182/104 after 10 min seated. Headache since this morning, no chest pain, no vision change, no weakness. Room her now or wait for you?", true],
+    ],
+  });
+  await conversation({
+    patientId: await patient("Okonkwo-Hale"),
+    members: ["prac_marsh", "prac_chen"],
+    read: { prac_marsh: 40, prac_chen: 300 },
+    lines: [["prac_marsh", 40, "Saw Mr. Okonkwo-Hale this morning. Up 2.5 kg with ankle edema, so I increased furosemide to 40 mg twice daily. Could you get a BMP in one week and send me the result?"]],
+  });
+  await conversation({
+    patientId: await patient("Achterberg"),
+    members: ["prac_brandt", "prac_chen"],
+    read: { prac_brandt: 12, prac_chen: 15 },
+    lines: [
+      ["prac_brandt", 25, "Quick question on Mr. Achterberg before his 1:40: urate was 9.1 last month on allopurinol 300. Go up to 400 now, or wait until this flare settles?"],
+      ["prac_brandt", 24, "He's taking colchicine for the flare."],
+      ["prac_chen", 15, "Don't change the dose mid-flare, but don't stop it either. Treat the flare, then titrate once it has settled and recheck urate in 4 weeks."],
+    ],
+  });
+  await conversation({
+    patientId: await patient("Raman"),
+    members: ["prac_mbeki", "prac_chen"],
+    read: { prac_mbeki: 50, prac_chen: 55 },
+    lines: [
+      ["prac_mbeki", 62, "Ms. Raman is at the window asking to be seen today. Can I overbook her at 3:40?"],
+      ["prac_chen", 55, "Yes, that's fine. Book it as same-day."],
+    ],
+  });
+  await conversation({
+    title: "Lakeview huddle",
+    members: ["prac_chen", "prac_ibarra", "prac_brandt", "prac_lund", "prac_mbeki"],
+    read: { prac_chen: 80, prac_ibarra: 85, prac_brandt: 30, prac_lund: 18, prac_mbeki: 18 },
+    lines: [
+      ["prac_lund", 90, "Morning all. Room 4 is out until facilities fixes the exam light, use 5 and 6."],
+      ["prac_ibarra", 85, "Thanks. I'm at committee 1 to 3 tomorrow, so please don't book me then."],
+      ["prac_mbeki", 18, "Dr. Brandt's 1:40 called, running about 15 minutes late."],
+    ],
+  });
+
+  await prisma.practitioner.update({ where: { id: "prac_marsh" }, data: { chatStatus: "busy", chatStatusNote: "Reading echos until noon" } });
+  await prisma.practitioner.update({ where: { id: "prac_ibarra" }, data: { chatStatus: "away", chatStatusNote: "Hospital rounds" } });
 }
 
 main()

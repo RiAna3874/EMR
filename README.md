@@ -24,7 +24,7 @@ An outpatient electronic medical record that follows the workflows clinicians kn
   - **Import**: turn a photo, scan or PDF of an outside lab report into filed, flagged results, or of any other outside document into a structured chart document. See below.
 - **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), outside documents to review, imports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
 - **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; an order requisition for active labs, imaging and referrals; a paper **prescription** for print-class medications; and the patient's own **medication list**.
-- **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g h` My Day.
+- **Command palette**: press ⌘K or Ctrl+K to find a patient by name, MRN or date of birth, jump to part of the open chart, or type "order cbc" to start an order. `g` then a letter jumps directly: `g r` Results, `g o` Orders, `g n` Notes, `g i` Inbox, `g c` Messages, `g h` My Day.
 
 - **Sign-in and roles**: see below.
 
@@ -72,6 +72,7 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Room patients | ✓ | ✓ | ✓ | |
 | Start and finish visits | ✓ | ✓ | | |
 | Edit provider templates and blocked time | ✓ | | | ✓ |
+| Secure chat with other staff | ✓ | ✓ | ✓ | ✓ |
 
 A resident can't sign a note without choosing an attending to cosign it; the note then waits in that attending's Inbox. Orders a nurse pends show "pended by" on the chart's Orders tab, and the physician or resident who signs them becomes the ordering clinician. Front desk opens a chart to a demographics and appointments view only.
 
@@ -102,6 +103,20 @@ The sign-in page lists them in development. In a production build they are hidde
 - **My Day** refreshes every 30 seconds. The status shows how long the patient has been in it, highlighted after 20 minutes of waiting to be roomed or seen.
 
 The seed gives every provider a weekly template, walks today's visits through the clinic day up to the time the seed runs (so seeding mid-morning shows a clinic in progress), adds a cancellation and a no-show, and scatters bookings over the next two weeks.
+
+## Secure staff chat
+
+**Messages** in the top bar is real-time chat between staff, next to the Inbox. The Inbox holds work the chart routes to you; Messages is people talking to each other.
+
+- **Conversations** are one-to-one or groups (optionally named), and can carry a **patient context**: a banner with name, age, DOB and MRN and a link to the chart. Start one from **New message** or from **Message about this patient** on the chart's left rail, which pre-fills the patient and suggests the PCP and the provider seeing them next. The rail also lists your conversations about that patient.
+- **Read receipts**: under your latest message, "Read 3:42 PM" in a one-to-one or "Read by Dana, Leo (2 of 4)" in a group. A message counts as read only while the conversation is on screen.
+- **Urgent** messages show in red, put a red count on the Messages tab and pop an alert on whatever screen the recipient is on, even if they muted the conversation.
+- **Status**: Available, Busy or Away with a short note ("in a procedure until 11"), shown next to names and above the message box.
+- **Unread counts** per conversation and on the top bar. An open conversation refreshes every few seconds; the top-bar count every 15 seconds on any screen.
+- **Mute, leave, add people, rename.** Adding someone to a one-to-one starts a new group, so they don't see the private conversation. Someone who leaves loses access until they're added back.
+- Messages can't be edited or deleted, and only members can open a conversation (anyone else gets a 404). Chat isn't part of the legal record, and the screen says so: decisions belong in the chart.
+
+The seed loads a few conversations for Dr. Chen, including an urgent one from the nurse waiting to be read.
 
 ## Lab report import
 
