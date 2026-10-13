@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { clinic } from "@/lib/clinic";
+import { brand } from "@/lib/brand";
+import { dataNotice } from "@/lib/deployment";
 import { PrintButton } from "./print-button";
 
 // Screen: a paper preview with a toolbar. Print: just the page.
@@ -50,7 +52,10 @@ export function PrintFooter({ children }: { children?: React.ReactNode }) {
   return (
     <footer className="mt-6 border-t border-black/40 pt-1.5 text-[10px] text-black/70">
       {children}
-      <div>Meridian EMR · Synthetic demonstration data, not for clinical use.</div>
+      <div>
+        {brand.fullName}
+        {dataNotice && ` · ${dataNotice.text}`}
+      </div>
     </footer>
   );
 }

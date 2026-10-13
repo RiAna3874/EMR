@@ -6,9 +6,10 @@ import { displayName } from "@/lib/roles";
 import { twoStepRequired } from "@/lib/deployment";
 import { fmtDateTime } from "@/lib/format";
 import { groupSecret, newTotpSecret, otpauthUri } from "@/lib/totp";
+import { brand } from "@/lib/brand";
 import { ManageTwoStep, SetUpTwoStep } from "./two-step-forms";
 
-export const metadata = { title: "Two-step sign-in · Meridian EMR" };
+export const metadata = { title: "Two-step sign-in" };
 export const dynamic = "force-dynamic";
 
 export default async function TwoStep() {
@@ -22,7 +23,7 @@ export default async function TwoStep() {
     // A new secret each time setup starts; it only counts once the first code is confirmed.
     const secret = row.totpPendingSecret ?? newTotpSecret();
     if (!row.totpPendingSecret) await db.practitioner.update({ where: { id: user.id }, data: { totpPendingSecret: secret } });
-    const qr = await QRCode.toString(otpauthUri(secret, user.username), { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+    const qr = await QRCode.toString(otpauthUri(secret, user.username, brand.fullName), { type: "svg", margin: 1, errorCorrectionLevel: "M" });
     setup = { qr, secret: groupSecret(secret) };
   }
 
@@ -40,7 +41,7 @@ export default async function TwoStep() {
                 This site holds patient records, so every account signs in with a password and a code from a phone. Set it up once to continue.
               </p>
             )}
-            <SetUpTwoStep qr={setup.qr} secret={setup.secret} />
+            <SetUpTwoStep qr={setup.qr} secret={setup.secret} appName={brand.fullName} />
           </>
         ) : (
           <ManageTwoStep since={fmtDateTime(row.totpEnabledAt!)} codesLeft={row.recoveryCodes.length} canTurnOff={!twoStepRequired} />

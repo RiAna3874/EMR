@@ -94,7 +94,7 @@ export async function verifyTwoStep(_prev: VerifyState, form: FormData): Promise
       await endChallenge();
       redirect("/login?expired=tries");
     }
-    return { error: "That code isn't right. Check the code for Meridian EMR in your app and try again." };
+    return { error: "That code isn't right. Check the code in your authenticator app and try again." };
   }
 
   const next = challenge.next;

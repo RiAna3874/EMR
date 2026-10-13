@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { StaffAccounts } from "./staff-accounts";
 
-export const metadata = { title: "Staff accounts · Meridian EMR" };
+export const metadata = { title: "Staff accounts" };
 export const dynamic = "force-dynamic";
 
 // Administrators add staff, issue temporary passwords, change roles and deactivate accounts.

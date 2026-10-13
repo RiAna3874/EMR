@@ -4,7 +4,11 @@ import { useActionState, useState } from "react";
 import { Button, Field, inputCls } from "@/components/form";
 import { cancelTwoStep, verifyTwoStep } from "../actions";
 
-export function VerifyForm({ name }: { name: string }) {
+// Authenticator apps keep the name an account was added under, so staff who set up
+// two-step before a rename still see the old one.
+const ORIGINAL_NAME = "Meridian EMR";
+
+export function VerifyForm({ name, appName }: { name: string; appName: string }) {
   const [state, action, pending] = useActionState(verifyTwoStep, undefined);
   const [recovery, setRecovery] = useState(false);
   return (
@@ -12,7 +16,14 @@ export function VerifyForm({ name }: { name: string }) {
       <form action={action} className="space-y-3 p-5">
         <h1 className="text-[15px] font-semibold">Two-step sign-in</h1>
         <p className="text-[12.5px] text-ink-2">
-          {name}, open your authenticator app and enter the 6-digit code shown for <b>Meridian EMR</b>.
+          {name}, open your authenticator app and enter the 6-digit code shown for <b>{appName}</b>
+          {appName !== ORIGINAL_NAME && (
+            <>
+              {" "}
+              (or <b>{ORIGINAL_NAME}</b> if you set it up before the name changed)
+            </>
+          )}
+          .
         </p>
         <Field label={recovery ? "Recovery code" : "Code"}>
           {recovery ? (

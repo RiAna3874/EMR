@@ -43,6 +43,7 @@ Environment variables:
 | `TZ` | `Asia/Dhaka` (the clinic's time zone). **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. |
 | `MERIDIAN_SETUP_TOKEN` | A long random value, made with `openssl rand -base64 24`. Keep it private; you type it once to create the first administrator. |
 | `MERIDIAN_CLINIC_NAME`, `MERIDIAN_CLINIC_ADDRESS`, `MERIDIAN_CLINIC_PHONE`, `MERIDIAN_CLINIC_FAX` | Printed on letters, requisitions and prescriptions |
+| `MERIDIAN_APP_NAME`, `MERIDIAN_APP_FULL_NAME`, `MERIDIAN_LOGO_URL`, `MERIDIAN_ACCENT_COLOR` | Optional: your own product name, logo and color. See [Your own name and look](#your-own-name-and-look). |
 | `ANTHROPIC_API_KEY` | **Leave unset** until you have a signed agreement with Anthropic (see GO-LIVE.md). Without it, the Import tab says import isn't configured and nothing leaves your server. |
 
 Do **not** set `MERIDIAN_DEMO_ACCOUNTS`, `MERIDIAN_EXTRACTION_FIXTURE` or `MERIDIAN_DOCUMENT_FIXTURES` on a live site.
@@ -68,7 +69,27 @@ Review it regularly, for example once a week: look at failed sign-ins and at any
 
 ## 4. Your own domain
 
-In the web service, **Settings → Custom Domains**, add e.g. `emr.yourclinic.com`, and add the DNS record Render shows at your domain registrar. Render issues the HTTPS certificate.
+You need a domain first, bought from a registrar (for a `.com`: Cloudflare, Namecheap or Porkbun; for a `.com.bd`: BTCL or a BTCL reseller). A subdomain such as `emr.yourclinic.com` is best: it leaves `yourclinic.com` free for a public website.
+
+1. In the web service, **Settings → Custom Domains → Add Custom Domain**, type e.g. `emr.yourclinic.com`, save.
+2. Render shows a DNS record to add. For a subdomain it's a **CNAME** named `emr` pointing at the service's `.onrender.com` address. (For a bare `yourclinic.com` it's an **A** record, or ALIAS/ANAME, with the value Render shows.)
+3. At your registrar's DNS settings, add exactly that record. If the domain uses Cloudflare, set the record to **DNS only** (grey cloud) so Render can issue the certificate.
+4. Back in Render, click **Verify**. Once it shows Verified and Certificate issued (minutes, sometimes a few hours while DNS spreads), the site opens at `https://emr.yourclinic.com`. Render renews HTTPS on its own.
+
+The `.onrender.com` address keeps working, so nothing breaks while DNS spreads. Signed-in staff are signed out once when they move to the new address (the sign-in cookie belongs to the old one), and each person's open-patient tabs start fresh. Two-step codes keep working.
+
+## Your own name and look
+
+The product name, logo and accent color come from environment variables, so changing them needs no code change. Set them on the web service (**Environment**), save, and Render redeploys.
+
+| Variable | What it changes | Default |
+|---|---|---|
+| `MERIDIAN_APP_NAME` | The name in the top bar and on the sign-in page | `Meridian` |
+| `MERIDIAN_APP_FULL_NAME` | Browser tab titles, printouts, and the name in authenticator apps for newly set-up two-step sign-in | `Meridian EMR`, or `MERIDIAN_APP_NAME` if that is set |
+| `MERIDIAN_LOGO_URL` | Logo next to the name, and the browser tab icon. An `https://` link to a square PNG or SVG. | The built-in mark |
+| `MERIDIAN_ACCENT_COLOR` | Buttons, links and highlights. A hex color such as `#0f8a8a`; anything else is ignored. | Teal `#0f8a8a` |
+
+Staff who set up two-step sign-in before a rename still see the old name in their authenticator app; their codes keep working, and the code screen tells them to look for either name. The `MERIDIAN_*` variable names stay as they are.
 
 ## 5. Check before staff use it
 

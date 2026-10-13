@@ -5,8 +5,10 @@ import { roleLabel } from "@/lib/roles";
 import { dataNotice, demoMode } from "@/lib/deployment";
 import { needsSetup } from "@/lib/setup";
 import { SignInForm } from "./sign-in-form";
+import { brand } from "@/lib/brand";
+import { BrandMark } from "@/components/brand-mark";
 
-export const metadata = { title: "Sign in · Meridian EMR" };
+export const metadata = { title: "Sign in" };
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string; expired?: string }> }) {
   const { next, expired } = await searchParams;
@@ -26,12 +28,9 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
     <main className="flex h-full items-center justify-center overflow-y-auto bg-chrome p-4">
       <div className="w-full max-w-sm">
         <div className="mb-5 flex items-center justify-center gap-2 text-white">
-          <svg width="26" height="26" viewBox="0 0 20 20" aria-hidden>
-            <circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
-            <path d="M10 1.5v17" stroke="#5eead4" strokeWidth="2" />
-            <path d="M4 10h3l1.5-3 2.5 6 1.5-3H16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-          </svg>
-          <span className="text-lg font-semibold tracking-wide">Meridian</span>
+          <span className="flex items-center gap-2 text-lg font-semibold tracking-wide">
+            <BrandMark name={brand.shortName} logoUrl={brand.logoUrl} size={26} />
+          </span>
         </div>
         {expired && (
           <p role="alert" className="mb-3 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-warn">

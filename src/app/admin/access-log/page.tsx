@@ -7,7 +7,7 @@ import { AUDIT_ACTIONS, isAuditAction } from "@/lib/audit/labels";
 import { ACTION_GROUPS, logWhere, namesFor, type LogFilters } from "@/lib/audit/query";
 import { Button, inputCls } from "@/components/form";
 
-export const metadata = { title: "Access log · Meridian EMR" };
+export const metadata = { title: "Access log" };
 export const dynamic = "force-dynamic";
 
 const PAGE = 100;

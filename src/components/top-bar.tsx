@@ -7,6 +7,7 @@ import { closeOpenPatient, readOpenPatients, subscribeOpenPatients, type OpenPat
 import { can, displayName, roleLabel, type SessionUser } from "@/lib/roles";
 import { signOut } from "@/app/login/actions";
 import { CommandPalette } from "@/components/command-palette";
+import { BrandMark } from "@/components/brand-mark";
 
 const EMPTY: OpenPatient[] = [];
 
@@ -25,7 +26,16 @@ const CHAT_POLL_MS = 15_000;
 
 // inboxCount is null for roles without an Inbox (front desk). dataLabel warns what data this
 // system may hold ("Synthetic data", "Not for real patients"); null once cleared for real patients.
-export function TopBar({ user, inboxCount, chat: initialChat, dataLabel }: { user: SessionUser; inboxCount: number | null; chat: ChatBadge; dataLabel: string | null }) {
+export function TopBar({
+  user,
+  brand,
+  inboxCount,
+  chat: initialChat,
+  dataLabel,
+}: {
+  user: SessionUser;
+  brand: { name: string; logoUrl: string | null };
+  inboxCount: number | null; chat: ChatBadge; dataLabel: string | null }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = useSyncExternalStore(subscribeOpenPatients, readOpenPatients, () => EMPTY);
@@ -47,8 +57,7 @@ export function TopBar({ user, inboxCount, chat: initialChat, dataLabel }: { use
     <header className="flex h-11 shrink-0 items-stretch bg-chrome text-white print:hidden">
       <CommandPalette clinical={can(user.role, "viewClinical")} canRegister={can(user.role, "registerPatients")} />
       <Link href="/" className="flex items-center gap-2 px-4 font-semibold tracking-wide">
-        <Logo />
-        <span>Meridian</span>
+        <BrandMark name={brand.name} logoUrl={brand.logoUrl} />
       </Link>
       <nav className="flex items-stretch">
         {nav.filter((n) => n.href !== "/inbox" || inboxCount !== null).map((n) => {
@@ -171,12 +180,3 @@ function useChatBadge(initial: ChatBadge) {
   return polled && polled.base === initial ? polled.value : initial;
 }
 
-function Logo() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden>
-      <circle cx="10" cy="10" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.6" />
-      <path d="M10 1.5v17" stroke="#5eead4" strokeWidth="2" />
-      <path d="M4 10h3l1.5-3 2.5 6 1.5-3H16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
-}

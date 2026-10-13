@@ -50,7 +50,7 @@ function RecoveryCodes({ codes, done }: { codes: string[]; done?: React.ReactNod
   );
 }
 
-export function SetUpTwoStep({ qr, secret }: { qr: string; secret: string }) {
+export function SetUpTwoStep({ qr, secret, appName }: { qr: string; secret: string; appName: string }) {
   const [state, action, pending] = useActionState(confirmTwoStep, undefined);
   if (state?.codes)
     return (
@@ -71,7 +71,7 @@ export function SetUpTwoStep({ qr, secret }: { qr: string; secret: string }) {
           iPhone).
         </li>
         <li>In the app, add an account and scan this code.</li>
-        <li>Type the 6-digit code the app shows for Meridian EMR.</li>
+        <li>Type the 6-digit code the app shows for {appName}.</li>
       </ol>
       <div className="flex flex-wrap items-start gap-5">
         {/* Generated on the server from this account's own secret. */}
