@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { closeOpenPatient, readOpenPatients, subscribeOpenPatients, type OpenPatient } from "@/lib/open-patients";
 import { can, displayName, roleLabel, type SessionUser } from "@/lib/roles";
 import { signOut } from "@/app/login/actions";
@@ -14,14 +14,23 @@ const nav = [
   { href: "/", label: "My Day" },
   { href: "/schedule", label: "Schedule" },
   { href: "/inbox", label: "Inbox" },
+  { href: "/messages", label: "Messages" },
   { href: "/patients", label: "Patient Lists" },
 ];
 
+export type ChatBadge = { total: number; urgent: number; latestUrgent: { id: string; conversationId: string; from: string; preview: string } | null };
+
+// How often every screen checks for new secure chat messages.
+const CHAT_POLL_MS = 15_000;
+
 // inboxCount is null for roles without an Inbox (front desk).
-export function TopBar({ user, inboxCount }: { user: SessionUser; inboxCount: number | null }) {
+export function TopBar({ user, inboxCount, chat: initialChat }: { user: SessionUser; inboxCount: number | null; chat: ChatBadge }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = useSyncExternalStore(subscribeOpenPatients, readOpenPatients, () => EMPTY);
+  const chat = useChatBadge(initialChat);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const alert = chat.latestUrgent && chat.latestUrgent.id !== dismissed && pathname !== `/messages/${chat.latestUrgent.conversationId}` ? chat.latestUrgent : null;
 
   function close(e: React.MouseEvent, p: OpenPatient) {
     e.preventDefault();
@@ -43,7 +52,8 @@ export function TopBar({ user, inboxCount }: { user: SessionUser; inboxCount: nu
       <nav className="flex items-stretch">
         {nav.filter((n) => n.href !== "/inbox" || inboxCount !== null).map((n) => {
           const active = n.href === "/" ? pathname === "/" : pathname === n.href || pathname.startsWith(`${n.href}/`);
-          const count = n.href === "/inbox" ? (inboxCount ?? 0) : 0;
+          const count = n.href === "/inbox" ? (inboxCount ?? 0) : n.href === "/messages" ? chat.total : 0;
+          const urgent = n.href === "/messages" && chat.urgent > 0;
           return (
             <Link
               key={n.href}
@@ -51,7 +61,15 @@ export function TopBar({ user, inboxCount }: { user: SessionUser; inboxCount: nu
               className={`flex items-center px-3 text-[13px] ${active ? "bg-chrome-2 text-white" : "text-white/75 hover:bg-chrome-2/60 hover:text-white"}`}
             >
               {n.label}
-              {count > 0 && <span className="tabular ml-1.5 rounded-full bg-high px-1.5 text-[10.5px] font-semibold leading-4 text-white">{count}</span>}
+              {count > 0 && (
+                <span
+                  className={`tabular ml-1.5 rounded-full px-1.5 text-[10.5px] font-semibold leading-4 text-white ${urgent ? "bg-crit ring-2 ring-white/70" : "bg-high"}`}
+                  title={urgent ? `${chat.urgent} urgent` : undefined}
+                >
+                  {urgent && "! "}
+                  {count}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -102,8 +120,47 @@ export function TopBar({ user, inboxCount }: { user: SessionUser; inboxCount: nu
           </button>
         </form>
       </div>
+      {alert && (
+        <div role="alert" className="fixed right-4 top-13 z-40 flex w-80 items-start gap-2 rounded-md border border-crit/40 bg-panel p-3 text-ink shadow-lg">
+          <span className="mt-0.5 rounded bg-crit px-1 text-[10px] font-bold uppercase tracking-wide text-white">Urgent</span>
+          <Link href={`/messages/${alert.conversationId}`} onClick={() => setDismissed(alert.id)} className="min-w-0 flex-1 hover:text-accent">
+            <span className="block text-[12.5px] font-semibold">{alert.from}</span>
+            <span className="line-clamp-2 block text-[12px] text-ink-2">{alert.preview}</span>
+          </Link>
+          <button aria-label="Dismiss" onClick={() => setDismissed(alert.id)} className="rounded px-1 leading-none text-ink-3 hover:bg-panel-muted">
+            ×
+          </button>
+        </div>
+      )}
     </header>
   );
+}
+
+// The server's count on each render, then polled so it stays live between navigations.
+function useChatBadge(initial: ChatBadge) {
+  const [polled, setPolled] = useState<{ base: ChatBadge; value: ChatBadge } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/messages/unread", { cache: "no-store" });
+        if (res.ok && !stop) {
+          const value = (await res.json()) as ChatBadge;
+          setPolled({ base: initial, value });
+        }
+      } catch {
+        // Offline for a moment; the next tick tries again.
+      }
+    };
+    const t = setInterval(tick, CHAT_POLL_MS);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [initial]);
+  // A fresh server render wins over an older poll.
+  return polled && polled.base === initial ? polled.value : initial;
 }
 
 function Logo() {

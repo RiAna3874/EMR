@@ -10,8 +10,11 @@ type RailPatient = Patient & {
   encounters: Encounter[];
 };
 
+type RailChat = { id: string; name: string; at: Date };
+
 // `clinical` false (front desk) keeps demographics, allergies and the next visit only.
-export function PatientRail({ patient: p, vitals, clinical }: { patient: RailPatient; vitals: Observation[]; clinical: boolean }) {
+// `chats` is null for a role without secure chat.
+export function PatientRail({ patient: p, vitals, clinical, chats }: { patient: RailPatient; vitals: Observation[]; clinical: boolean; chats: RailChat[] | null }) {
   const base = `/patients/${p.id}`;
   const v = Object.fromEntries(vitals.map((o) => [o.code, o]));
   const bp = v["8480-6"] && v["8462-4"] ? `${v["8480-6"].valueNum}/${v["8462-4"].valueNum}` : null;
@@ -127,6 +130,29 @@ export function PatientRail({ patient: p, vitals, clinical }: { patient: RailPat
           <div className="text-ink-3">None scheduled</div>
         )}
       </RailSection>
+
+      {chats && (
+        <RailSection title="Secure chat">
+          {chats.length > 0 && (
+            <ul className="mb-1.5 space-y-0.5">
+              {chats.map((c) => (
+                <li key={c.id}>
+                  <Link href={`/messages/${c.id}`} className="flex gap-2 hover:text-accent">
+                    <span className="truncate">{c.name}</span>
+                    <span className="ml-auto shrink-0 text-ink-3">{fmtShortDate(c.at)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link
+            href={`/messages/new?patient=${p.id}${p.pcpId ? `&to=${p.pcpId}` : ""}`}
+            className="inline-block rounded border border-line px-2 py-0.5 text-[12px] font-medium text-accent hover:bg-accent-soft"
+          >
+            Message about this patient
+          </Link>
+        </RailSection>
+      )}
     </aside>
   );
 }

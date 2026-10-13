@@ -11,6 +11,8 @@ const GLOBAL: Command[] = [
   { id: "schedule", label: "Schedule", group: "Go to", href: "/schedule", hint: "g d" },
   { id: "book", label: "Make appointment", group: "Go to", href: "/schedule/book" },
   { id: "inbox", label: "Inbox", group: "Go to", href: "/inbox", hint: "g i" },
+  { id: "messages", label: "Messages (secure chat)", group: "Go to", href: "/messages", hint: "g c" },
+  { id: "new-message", label: "New message", group: "Go to", href: "/messages/new" },
   { id: "lists", label: "Patient Lists", group: "Go to", href: "/patients", hint: "g l" },
   { id: "phrases", label: "My phrases", group: "Go to", href: "/phrases" },
 ];
@@ -34,7 +36,7 @@ const CHART: { slug: string; label: string; key?: string }[] = [
   { slug: "appointments", label: "Appointments" },
 ];
 
-const globalKeys: Record<string, string> = { h: "/", d: "/schedule", i: "/inbox", l: "/patients" };
+const globalKeys: Record<string, string> = { h: "/", d: "/schedule", i: "/inbox", c: "/messages", l: "/patients" };
 
 function isTyping(el: EventTarget | null) {
   const t = el as HTMLElement | null;
