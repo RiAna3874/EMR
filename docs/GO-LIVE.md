@@ -35,7 +35,7 @@ For reference, other countries:
 | Two-step sign-in (password plus an authenticator app code) | **Done**, required for every account on the live site; admins reset it for a lost phone | A stolen password otherwise opens every chart |
 | Self-service password reset by email | **Missing** (admins can reset) | Needs an email provider under a BAA |
 | Rate limiting that survives restarts and multiple servers | **Partial** (5 tries per minute per username, in memory) | Stops password guessing |
-| Backups with a tested restore | **Host feature**, must be switched on and practised | Losing a chart is a patient-safety event |
+| Backups with a tested restore | **Built**, must be switched on and practised: Render point-in-time recovery (3 or 7 days) plus an encrypted off-site copy every 6 hours, kept 90 days, each one restored and checked before upload. Setup and drills in [BACKUPS.md](BACKUPS.md) | Losing a chart is a patient-safety event |
 | Encryption at rest | **Host feature** (Render Postgres encrypts disks) | Uploaded documents are stored in the database |
 | Security review / penetration test | **Not done** | Independent check before real data |
 | Uptime and error monitoring | **Not set up** | You find out before the clinic does |
@@ -55,7 +55,7 @@ These are fine for a demo and not for real care:
 1. Ask a Bangladeshi lawyer whether patient records must stay in Bangladesh, and get a patient consent form drafted.
 2. Deploy now for training with test patients only (see [DEPLOY.md](DEPLOY.md)).
 3. Settle hosting from the lawyer's answer (Singapore, or a Bangladesh data centre); decide whether the photo import stays on.
-4. ~~Build the audit log and MFA~~ (done); set up monitoring and practise a backup restore.
+4. ~~Build the audit log and MFA~~ (done). Set up backups and run both restore drills ([BACKUPS.md](BACKUPS.md)); set up monitoring.
 5. Decide on a licensed drug database and real e-prescribing, or turn prescribing off and print only.
 6. Independent security review, written policies, staff training.
 7. Then set `MERIDIAN_CLEARED_FOR_REAL_PATIENTS=1` and start with real patients.
