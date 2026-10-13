@@ -74,12 +74,14 @@ In the web service, **Settings → Custom Domains**, add e.g. `emr.yourclinic.co
 
 - [ ] The sign-in page lists no demo accounts and says "not yet approved for real patient information".
 - [ ] Register a test patient, book a visit for today, and check the times show in the clinic's time zone.
-- [ ] In Render Postgres, **Recovery**: confirm point-in-time recovery is on, then practise a restore into a new database once.
+- [ ] Set up backups and run both restore drills: [BACKUPS.md](BACKUPS.md).
 - [ ] Turn on Render's notifications for failed deploys and service downtime, and add an outside uptime check (e.g. UptimeRobot, Better Stack) on `/login`.
 
 ## Updating
 
 Merging to `main` redeploys automatically; the pre-deploy step applies new migrations first. Never run `npm run db:seed` or `npm run db:reset` against the live database. Both refuse in production, and refuse on any database with real accounts.
+
+Backups, restore drills and what to do if data is lost: [BACKUPS.md](BACKUPS.md).
 
 ## Your local copy
 

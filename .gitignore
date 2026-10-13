@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 !.env.example
+
+# backups and their private key never belong in the repository
+meridian-backup-key.txt
+*.tar.age
