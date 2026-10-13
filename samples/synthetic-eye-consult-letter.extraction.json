@@ -1,0 +1,117 @@
+{
+  "document_type": "consult_note",
+  "title": "Diabetic eye examination",
+  "organization": "Clearwater Eye Center",
+  "author": "Amara Okafor, OD",
+  "service_date": "2026-10-12",
+  "admission_date": null,
+  "discharge_date": null,
+  "patient_name": "Aiyana Brightwater",
+  "patient_dob": "1968-06-10",
+  "patient_age": null,
+  "patient_sex": null,
+  "patient_id": null,
+  "modality": null,
+  "body_part": null,
+  "impression": "1. Moderate nonproliferative diabetic retinopathy without macular edema, both eyes.\n2. Early age-related nuclear cataract, both eyes, not visually significant.",
+  "notes": [
+    "Letter is addressed to Dr. Dana Chen."
+  ],
+  "sections": [
+    {
+      "heading": "",
+      "text": "Dear Dr. Chen,\nThank you for referring Ms. Brightwater for her annual diabetic eye examination. She has had type 2 diabetes for about nine years and reports occasional blurred near vision. Her most recent A1c, per your referral, was 7.4%.",
+      "box": {
+        "x0": 52,
+        "y0": 283,
+        "x1": 1048,
+        "y1": 366
+      },
+      "file": 1
+    },
+    {
+      "heading": "Examination",
+      "text": "Best-corrected visual acuity 20/25 right eye, 20/30 left eye. Intraocular pressure 17 and 18 mmHg. Dilated fundus examination of both eyes shows scattered dot-blot hemorrhages and microaneurysms in all four quadrants of the left eye and fewer in the right, with no neovascularization. Optical coherence tomography shows no macular edema in either eye. Early nuclear sclerotic cataract in both eyes.",
+      "box": {
+        "x0": 52,
+        "y0": 376,
+        "x1": 1048,
+        "y1": 477
+      },
+      "file": 1
+    },
+    {
+      "heading": "Assessment",
+      "text": "1. Moderate nonproliferative diabetic retinopathy without macular edema, both eyes.\n2. Early age-related nuclear cataract, both eyes, not visually significant.",
+      "box": {
+        "x0": 52,
+        "y0": 487,
+        "x1": 1048,
+        "y1": 570
+      },
+      "file": 1
+    },
+    {
+      "heading": "Plan",
+      "text": "Return for dilated exam and OCT in 6 months, sooner for any change in vision.\nContinue working toward A1c and blood pressure goals; tighter control slows retinopathy.",
+      "box": {
+        "x0": 52,
+        "y0": 580,
+        "x1": 1048,
+        "y1": 658
+      },
+      "file": 1
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Moderate nonproliferative diabetic retinopathy without macular edema, both eyes.",
+      "kind": "finding",
+      "icd10": "E11.3293",
+      "box": {
+        "x0": 52,
+        "y0": 511,
+        "x1": 1048,
+        "y1": 541
+      },
+      "file": 1
+    },
+    {
+      "text": "Early age-related nuclear cataract, both eyes, not visually significant.",
+      "kind": "finding",
+      "icd10": "H25.13",
+      "box": {
+        "x0": 52,
+        "y0": 541,
+        "x1": 1048,
+        "y1": 570
+      },
+      "file": 1
+    }
+  ],
+  "medications": [],
+  "follow_ups": [
+    {
+      "text": "Return for dilated exam and OCT in 6 months, sooner for any change in vision.",
+      "due": "6 months",
+      "box": {
+        "x0": 78,
+        "y0": 605,
+        "x1": 1048,
+        "y1": 634
+      },
+      "file": 1
+    },
+    {
+      "text": "Continue working toward A1c and blood pressure goals; tighter control slows retinopathy.",
+      "due": null,
+      "box": {
+        "x0": 78,
+        "y0": 628,
+        "x1": 1048,
+        "y1": 658
+      },
+      "file": 1
+    }
+  ]
+}

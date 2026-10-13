@@ -2,6 +2,8 @@
 // kidney-function and interaction rules. Pure, so the composer can warn before
 // an order is added and the pending list can show the same warnings.
 import { satisfyingCodes, type Orderable } from "./catalog";
+import { classesForAllergy } from "@/lib/meds/drugs";
+import { medWarnings, type MedWarning, type RxInput } from "@/lib/meds/checks";
 
 export type OrderContext = {
   allergies: { substance: string; severity: string }[];
@@ -11,43 +13,26 @@ export type OrderContext = {
   lastResulted: Record<string, number>;
   activeMeds: string[];
   egfr: number | null;
+  ageYears?: number | null;
   now: number;
 };
 
-export type OrderWarning = { level: "stop" | "caution"; text: string };
+export type OrderWarning = MedWarning;
 
-// Allergy entries are free text; map common ones to the drug classes they cover.
-const allergyClasses: [RegExp, string[]][] = [
-  [/penicillin|amoxicillin|ampicillin|augmentin/i, ["penicillin"]],
-  [/cephalosporin|cephalexin|cefdinir|ceftriaxone|keflex/i, ["cephalosporin"]],
-  [/sulfa|sulfamethoxazole|bactrim/i, ["sulfonamide"]],
-  [/codeine/i, ["codeine"]],
-  [/morphine|oxycodone|hydrocodone|opioid/i, ["opioid"]],
-  [/nsaid|ibuprofen|naproxen|aspirin/i, ["nsaid"]],
-  [/macrolide|azithromycin|erythromycin|clarithromycin/i, ["macrolide"]],
-  [/statin/i, ["statin"]],
-  [/ace inhibitor|lisinopril|enalapril/i, ["ace-inhibitor"]],
-  [/contrast|iodine/i, ["iodinated-contrast"]],
-];
-
-export function classesForAllergy(substance: string) {
-  return allergyClasses.flatMap(([re, classes]) => (re.test(substance) ? classes : []));
-}
+export { classesForAllergy };
 
 const DAY = 86_400_000;
 
-export function orderWarnings(o: Orderable, ctx: OrderContext, opts: { ignoreOpenOrder?: boolean } = {}): OrderWarning[] {
+// Medication orders get the full prescribing checks (src/lib/meds/checks.ts),
+// against the sig being ordered when `rx` is given and the defaults otherwise.
+export function orderWarnings(o: Orderable, ctx: OrderContext, opts: { ignoreOpenOrder?: boolean; rx?: RxInput & { drug?: string } } = {}): OrderWarning[] {
   const out: OrderWarning[] = [];
-  const drugClasses = o.med?.classes ?? [];
-  const orderClasses = o.contrast ? [...drugClasses, "iodinated-contrast"] : drugClasses;
 
-  for (const a of ctx.allergies) {
-    const allergic = classesForAllergy(a.substance);
-    const hit = orderClasses.find((c) => allergic.includes(c));
-    if (hit) {
-      out.push({ level: "stop", text: `Allergy: ${a.substance} (${a.severity}). ${o.display} is ${hit === "iodinated-contrast" ? "a contrast study" : `in the ${hit} class`}.` });
-    } else if (allergic.includes("penicillin") && drugClasses.includes("cephalosporin")) {
-      out.push({ level: "caution", text: `Allergy: ${a.substance}. Low cross-reactivity risk with cephalosporins.` });
+  if (o.contrast) {
+    for (const a of ctx.allergies) {
+      if (classesForAllergy(a.substance).includes("iodinated-contrast")) {
+        out.push({ kind: "allergy", level: "stop", text: `Allergy: ${a.substance} (${a.severity}). ${o.display} is a contrast study.` });
+      }
     }
   }
 
@@ -66,22 +51,10 @@ export function orderWarnings(o: Orderable, ctx: OrderContext, opts: { ignoreOpe
   }
 
   if (o.med) {
-    const base = o.display.split(/[\s-]/)[0].toLowerCase();
-    const same = ctx.activeMeds.find((m) => m.toLowerCase().startsWith(base));
-    if (same) out.push({ level: "caution", text: `Patient already takes ${same}.` });
+    const rx = opts.rx ?? { dose: o.med.dose, frequency: o.med.frequency, refills: o.med.refills };
+    out.push(...medWarnings(opts.rx?.drug ?? o.display, rx, ctx));
   }
 
-  const egfr = ctx.egfr;
-  if (egfr !== null) {
-    if (o.code === "RX:861007" && egfr < 30) out.push({ level: "stop", text: `Metformin is contraindicated with eGFR ${egfr}.` });
-    else if (o.code === "RX:861007" && egfr < 45) out.push({ level: "caution", text: `eGFR ${egfr}: don't start metformin below 45.` });
-    if (drugClasses.includes("nsaid") && egfr < 45) out.push({ level: "caution", text: `eGFR ${egfr}: NSAIDs can worsen kidney function.` });
-    if (o.contrast && egfr < 30) out.push({ level: "stop", text: `eGFR ${egfr}: iodinated contrast risks kidney injury.` });
-    if (o.code === "RX:1648755" && egfr < 30) out.push({ level: "caution", text: `eGFR ${egfr}: nitrofurantoin is less effective and more toxic.` });
-  }
-
-  if (drugClasses.includes("nsaid") && ctx.activeMeds.some((m) => /apixaban|warfarin|rivaroxaban|clopidogrel/i.test(m))) {
-    out.push({ level: "caution", text: "On an anticoagulant or antiplatelet: higher bleeding risk with NSAIDs." });
-  }
+  if (o.contrast && ctx.egfr !== null && ctx.egfr < 30) out.push({ kind: "kidney", level: "stop", text: `eGFR ${ctx.egfr}: iodinated contrast risks kidney injury.` });
   return out;
 }

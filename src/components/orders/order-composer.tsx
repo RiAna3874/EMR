@@ -5,6 +5,8 @@ import { ORDERABLES, ORDER_SETS, orderableByCode, searchOrderables, typeLabels, 
 import { orderWarnings, type OrderContext } from "@/lib/orders/checks";
 import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "./order-bits";
+import { RxForm, type PharmacyOption } from "@/components/meds/rx-form";
+import { productByCode } from "@/lib/meds/formulary";
 
 type Props = {
   ctx: OrderContext;
@@ -12,11 +14,13 @@ type Props = {
   initialCode?: string;
   addOrder: (form: FormData) => Promise<void>;
   addOrderSet: (setId: string) => Promise<void>;
+  pharmacies: PharmacyOption[];
+  preferredPharmacyId: string | null;
 };
 
 const FILTERS = ["all", "lab", "imaging", "medication", "referral"] as const;
 
-export function OrderComposer({ ctx, problems, initialCode, addOrder, addOrderSet }: Props) {
+export function OrderComposer({ ctx, problems, initialCode, addOrder, addOrderSet, pharmacies, preferredPharmacyId }: Props) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [selected, setSelected] = useState<Orderable | null>(() => (initialCode ? (orderableByCode.get(initialCode) ?? null) : null));
@@ -77,7 +81,28 @@ export function OrderComposer({ ctx, problems, initialCode, addOrder, addOrderSe
           </div>
         </div>
 
-        {selected ? (
+        {selected && selected.type === "medication" && productByCode.get(selected.code) ? (
+          <RxForm
+            key={selected.code}
+            product={productByCode.get(selected.code)!}
+            ctx={ctx}
+            problems={problems}
+            pharmacies={pharmacies}
+            preferredPharmacyId={preferredPharmacyId}
+            pending={pending}
+            onCancel={() => {
+              setSelected(null);
+              searchRef.current?.focus();
+            }}
+            onSubmit={(form) =>
+              start(async () => {
+                await addOrder(form);
+                setSelected(null);
+                searchRef.current?.focus();
+              })
+            }
+          />
+        ) : selected ? (
           <Composer
             key={selected.code}
             o={selected}
@@ -175,34 +200,13 @@ function Composer({
       </div>
       <WarningList warnings={warnings} />
       <div className="flex flex-wrap items-end gap-3">
-        {o.type !== "medication" && (
-          <Field label="Priority">
-            <select name="priority" defaultValue="routine" className={inputCls}>
-              <option value="routine">Routine</option>
-              <option value="urgent">Urgent</option>
-              <option value="stat">STAT</option>
-            </select>
-          </Field>
-        )}
-        {o.med && (
-          <>
-            <Field label="Dose">
-              <input name="dose" defaultValue={o.med.dose} className={`${inputCls} w-40`} />
-            </Field>
-            <Field label="Route">
-              <input name="route" defaultValue={o.med.route} className={`${inputCls} w-24`} />
-            </Field>
-            <Field label="Frequency">
-              <input name="frequency" defaultValue={o.med.frequency} className={`${inputCls} w-60`} />
-            </Field>
-            <Field label="Dispense">
-              <input name="quantity" defaultValue={o.med.quantity} className={`${inputCls} w-28`} />
-            </Field>
-            <Field label="Refills">
-              <input name="refills" type="number" min={0} max={11} defaultValue={o.med.refills} className={`${inputCls} w-16`} />
-            </Field>
-          </>
-        )}
+        <Field label="Priority">
+          <select name="priority" defaultValue="routine" className={inputCls}>
+            <option value="routine">Routine</option>
+            <option value="urgent">Urgent</option>
+            <option value="stat">STAT</option>
+          </select>
+        </Field>
         {(o.type === "lab" || o.type === "imaging" || o.type === "procedure") && (
           <Field label="When">
             <input name="expectedAt" type="date" className={inputCls} defaultValue={new Date().toLocaleDateString("en-CA")} />
@@ -217,7 +221,7 @@ function Composer({
           ))}
         </datalist>
       </div>
-      <Field label={o.type === "medication" ? "Note to pharmacy" : "Instructions"}>
+      <Field label="Instructions">
         <input name="instructions" className={`${inputCls} w-full`} />
       </Field>
       <div className="flex gap-2">

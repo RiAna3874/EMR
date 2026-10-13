@@ -11,12 +11,20 @@ export const PERMISSIONS = {
   // Problems and the medication list are prescriber decisions.
   editProblems: ["physician", "resident"],
   editMeds: ["physician", "resident"],
+  // Medication review at rooming: what the patient actually takes, outside and
+  // over-the-counter medications, and "mark as reviewed". Prescribing is editMeds/signOrders.
+  reviewMeds: ["physician", "resident", "nurse"],
   // Writing and signing one's own notes and addenda. Residents' notes route for cosign.
   writeNotes: ["physician", "resident", "nurse"],
   cosignNotes: ["physician"],
   // Nurses can pend orders for a prescriber; only prescribers sign them.
   pendOrders: ["physician", "resident", "nurse"],
   signOrders: ["physician", "resident"],
+  // Residents' prescriptions are sent at once but wait on an attending's cosignature.
+  cosignOrders: ["physician"],
+  // Pharmacy refill requests: nurses prepare them against the protocol; prescribers decide.
+  pendRefills: ["physician", "resident", "nurse"],
+  approveRefills: ["physician", "resident"],
   // Uploading and reviewing an outside report vs. verifying it into the chart.
   importReports: ["physician", "resident", "nurse"],
   fileImports: ["physician", "resident"],
@@ -56,5 +64,7 @@ export const isProvider = (role: Role) => role === "physician" || role === "resi
 export type SessionUser = { id: string; name: string; credentials: string | null; role: Role; username: string };
 
 export const displayName = (u: Pick<SessionUser, "name" | "credentials">) => (u.credentials ? `${u.name}, ${u.credentials}` : u.name);
+
+export const RX_COSIGNER_REQUIRED = "Choose an attending to cosign. Resident prescriptions need a cosignature.";
 
 export const COSIGNER_REQUIRED = "Choose an attending to cosign. Resident notes need a cosignature.";

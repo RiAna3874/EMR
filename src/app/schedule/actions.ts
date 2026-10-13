@@ -138,6 +138,10 @@ export async function roomPatient(encounterId: string, form: FormData) {
       },
     });
     if (!ok) return;
+    // Reviewing medications while rooming counts as the chart's medication review.
+    if (form.get("medsReviewed") === "on" && can(user.role, "reviewMeds")) {
+      await tx.patient.update({ where: { id: enc.patientId }, data: { medsReviewedAt: now, medsReviewedById: user.id } });
+    }
     const vitals = can(user.role, "recordVitals") ? vitalObservations(form, { patientId: enc.patientId, at: now, encounterId }) : [];
     if (vitals.length) await tx.observation.createMany({ data: vitals });
   });

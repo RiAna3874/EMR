@@ -69,11 +69,38 @@ enum AllergyType {
   other
 }
 
+// replaced = superseded by a newer prescription for the same therapy (a reorder,
+// a dose change or an approved refill); see MedicationRequest.priorId.
 enum MedStatus {
   active
   on_hold
   discontinued
   completed
+  replaced
+}
+
+// How a prescription leaves the clinic. historical = documented here but
+// prescribed elsewhere (or over the counter); nothing is sent.
+enum RxClass {
+  e_prescribe
+  print
+  phone
+  historical
+}
+
+// What the patient says they actually do, recorded at medication review.
+enum PatientTaking {
+  taking
+  not_taking
+  taking_differently
+}
+
+// A pharmacy's renewal request. pended = a nurse has prepared it for a prescriber.
+enum RefillStatus {
+  requested
+  pended
+  approved
+  denied
 }
 
 enum ObservationCategory {
@@ -99,6 +126,23 @@ enum ReportStatus {
 enum ReportSource {
   ordered
   imported
+}
+
+// What an import is read as: lab results, or an outside clinical document
+// (imaging report, discharge summary, letter...) filed as a ClinicalDocument.
+enum ImportKind {
+  lab
+  document
+}
+
+enum ClinicalDocType {
+  imaging_report
+  discharge_summary
+  referral_letter
+  consult_note
+  procedure_note
+  pathology_report
+  other
 }
 
 enum ImportStatus {
@@ -149,33 +193,40 @@ enum NoteStatus {
 }
 
 model Practitioner {
-  id          String   @id @default(cuid())
-  name        String
-  role        Role
-  credentials String?
-  createdAt   DateTime @default(now())
+  id           String    @id @default(cuid())
+  name         String
+  role         Role
+  credentials  String?
+  createdAt    DateTime  @default(now())
   // Sign-in. Synthetic accounts only; see prisma/seed.ts.
-  username     String?  @unique
+  username     String?   @unique
   passwordHash String? // scrypt, see src/lib/password.ts
-  active       Boolean  @default(true)
+  active       Boolean   @default(true)
   sessions     Session[]
 
-  primaryPatients  Patient[]           @relation("PCP")
-  encounters       Encounter[]
-  prescriptions    MedicationRequest[]
-  notes            Note[]             @relation("NoteAuthor")
-  cosignNotes      Note[]             @relation("NoteCosigner")
-  addenda          NoteAddendum[]
-  phrases          SmartPhrase[]
-  verifiedReports  DiagnosticReport[] @relation("VerifiedReports")
-  uploads          DocumentReference[]
-  importJobs       ImportJob[]        @relation("ImportCreatedBy")
-  filedImports     ImportJob[]        @relation("ImportFiledBy")
-  reviewedReports  DiagnosticReport[] @relation("ReviewedReports")
-  orders           ServiceRequest[]
-  scheduleSessions ScheduleSession[]
-  scheduleBlocks   ScheduleBlock[]    @relation("BlockProvider")
-  encounterEvents  EncounterEvent[]
+  primaryPatients   Patient[]           @relation("PCP")
+  encounters        Encounter[]
+  prescriptions     MedicationRequest[]
+  notes             Note[]              @relation("NoteAuthor")
+  cosignNotes       Note[]              @relation("NoteCosigner")
+  addenda           NoteAddendum[]
+  phrases           SmartPhrase[]
+  verifiedReports   DiagnosticReport[]  @relation("VerifiedReports")
+  uploads           DocumentReference[]
+  importJobs        ImportJob[]         @relation("ImportCreatedBy")
+  filedImports      ImportJob[]         @relation("ImportFiledBy")
+  reviewedReports   DiagnosticReport[]  @relation("ReviewedReports")
+  orders            ServiceRequest[]
+  cosignMeds        MedicationRequest[] @relation("MedCosigner")
+  endedMeds         MedicationRequest[] @relation("MedEndedBy")
+  medsReviewed      Patient[]           @relation("MedsReviewer")
+  refillsPended     RefillRequest[]     @relation("RefillPendedBy")
+  refillsDecided    RefillRequest[]     @relation("RefillDecidedBy")
+  filedDocuments    ClinicalDocument[]  @relation("DocFiledBy")
+  reviewedDocuments ClinicalDocument[]  @relation("DocReviewedBy")
+  scheduleSessions  ScheduleSession[]
+  scheduleBlocks    ScheduleBlock[]     @relation("BlockProvider")
+  encounterEvents   EncounterEvent[]
 }
 
 // A signed-in browser. The cookie holds a random token; only its SHA-256 is stored.
@@ -191,34 +242,43 @@ model Session {
 }
 
 model Patient {
-  id            String              @id @default(cuid())
-  mrn           String              @unique
-  firstName     String
-  lastName      String
-  dob           DateTime            @db.Date
-  sex           Sex
-  phone         String?
-  address       String?
-  preferredLanguage String          @default("English")
-  codeStatus    String              @default("Full code")
-  allergyStatus AllergyReviewStatus @default(not_reviewed)
-  pcpId         String?
-  pcp           Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
+  id                  String              @id @default(cuid())
+  mrn                 String              @unique
+  firstName           String
+  lastName            String
+  dob                 DateTime            @db.Date
+  sex                 Sex
+  phone               String?
+  address             String?
+  preferredLanguage   String              @default("English")
+  codeStatus          String              @default("Full code")
+  allergyStatus       AllergyReviewStatus @default(not_reviewed)
+  pcpId               String?
+  pcp                 Practitioner?       @relation("PCP", fields: [pcpId], references: [id])
+  createdAt           DateTime            @default(now())
+  preferredPharmacyId String?
+  preferredPharmacy   Pharmacy?           @relation(fields: [preferredPharmacyId], references: [id])
+  // "Mark as reviewed" on the medication list.
+  medsReviewedAt      DateTime?
+  medsReviewedById    String?
+  medsReviewedBy      Practitioner?       @relation("MedsReviewer", fields: [medsReviewedById], references: [id])
   // Confirmed or updated by the front desk at check-in.
-  insurancePayer    String?
-  insuranceMemberId String?
-  createdAt     DateTime            @default(now())
+  insurancePayer      String?
+  insuranceMemberId   String?
 
-  encounters   Encounter[]
-  conditions   Condition[]
-  allergies    AllergyIntolerance[]
-  medications  MedicationRequest[]
-  observations Observation[]
-  reports      DiagnosticReport[]
-  notes        Note[]
-  documents    DocumentReference[]
-  importJobs   ImportJob[]
-  orders       ServiceRequest[]
+  encounters     Encounter[]
+  conditions     Condition[]
+  allergies      AllergyIntolerance[]
+  medications    MedicationRequest[]
+  observations   Observation[]
+  reports        DiagnosticReport[]
+  notes          Note[]
+  documents      DocumentReference[]
+  importJobs     ImportJob[]
+  orders         ServiceRequest[]
+  dispenses      MedicationDispense[]
+  refillRequests RefillRequest[]
+  clinicalDocs   ClinicalDocument[]
 
   @@index([lastName, firstName])
 }
@@ -303,16 +363,16 @@ model ScheduleBlock {
 }
 
 model Condition {
-  id        String          @id @default(cuid())
-  patientId String
-  patient   Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  code      String // ICD-10-CM
-  display   String
-  status    ConditionStatus
-  onset     DateTime?       @db.Date
-  resolvedAt DateTime?      @db.Date
-  priority  Int             @default(100) // lower sorts first
-  comment   String?
+  id         String          @id @default(cuid())
+  patientId  String
+  patient    Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code       String // ICD-10-CM
+  display    String
+  status     ConditionStatus
+  onset      DateTime?       @db.Date
+  resolvedAt DateTime?       @db.Date
+  priority   Int             @default(100) // lower sorts first
+  comment    String?
 
   @@index([patientId])
 }
@@ -331,22 +391,115 @@ model AllergyIntolerance {
   @@index([patientId])
 }
 
+// One prescription (FHIR MedicationRequest). A reorder, dose change or approved
+// refill writes a new row whose priorId points at the one it replaces, so the
+// list shows the current prescription and the chain is the history.
 model MedicationRequest {
-  id           String        @id @default(cuid())
-  patientId    String
-  patient      Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  drug         String
-  rxnorm       String?
-  dose         String
-  route        String
-  frequency    String
-  indication   String?
-  status       MedStatus
-  start        DateTime      @db.Date
-  end          DateTime?     @db.Date
-  prescriberId String?
-  prescriber   Practitioner? @relation(fields: [prescriberId], references: [id])
+  id                  String             @id @default(cuid())
+  patientId           String
+  patient             Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  drug                String
+  rxnorm              String?
+  dose                String
+  route               String
+  frequency           String
+  prn                 Boolean            @default(false)
+  prnReason           String?
+  indication          String?
+  status              MedStatus
+  start               DateTime           @db.Date // when the patient started this therapy
+  end                 DateTime?          @db.Date
+  prescriberId        String?
+  prescriber          Practitioner?      @relation(fields: [prescriberId], references: [id])
+  // The prescription itself.
+  rxClass             RxClass            @default(e_prescribe)
+  authoredAt          DateTime           @default(now())
+  quantity            String?
+  daysSupply          Int?
+  refills             Int                @default(0) // authorized refills (fills after the first)
+  daw                 Boolean            @default(false) // dispense as written, no substitution
+  patientInstructions String?
+  pharmacyNote        String?
+  pharmacyId          String?
+  pharmacy            Pharmacy?          @relation(fields: [pharmacyId], references: [id])
+  sentAt              DateTime?
+  priorId             String?            @unique
+  prior               MedicationRequest? @relation("PriorRx", fields: [priorId], references: [id])
+  next                MedicationRequest? @relation("PriorRx")
+  endReason           String?
+  endedById           String?
+  endedBy             Practitioner?      @relation("MedEndedBy", fields: [endedById], references: [id])
+  // Patient-reported use, from the last medication review.
+  taking              PatientTaking?
+  takingNote          String?
+  takingAt            DateTime?
+  // A resident's prescription waits on an attending's cosignature (it is still sent).
+  cosignerId          String?
+  cosigner            Practitioner?      @relation("MedCosigner", fields: [cosignerId], references: [id])
+  cosignedAt          DateTime?
 
+  dispenses      MedicationDispense[]
+  refillRequests RefillRequest[]      @relation("RefillFor")
+  refillResults  RefillRequest[]      @relation("RefillResult")
+
+  @@index([patientId])
+  @@index([cosignerId, cosignedAt])
+}
+
+model Pharmacy {
+  id        String  @id @default(cuid())
+  name      String
+  address   String
+  phone     String
+  fax       String?
+  mailOrder Boolean @default(false)
+
+  patients       Patient[]
+  prescriptions  MedicationRequest[]
+  dispenses      MedicationDispense[]
+  refillRequests RefillRequest[]
+}
+
+// A pharmacy fill, as reported back by the pharmacy (simulated in the seed).
+model MedicationDispense {
+  id           String            @id @default(cuid())
+  patientId    String
+  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medicationId String
+  medication   MedicationRequest @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  pharmacyId   String?
+  pharmacy     Pharmacy?         @relation(fields: [pharmacyId], references: [id])
+  filledAt     DateTime
+  quantity     String
+  daysSupply   Int
+
+  @@index([medicationId, filledAt])
+}
+
+// A pharmacy asking to renew a prescription that is out of refills.
+model RefillRequest {
+  id              String             @id @default(cuid())
+  patientId       String
+  patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  medicationId    String
+  medication      MedicationRequest  @relation("RefillFor", fields: [medicationId], references: [id], onDelete: Cascade)
+  pharmacyId      String?
+  pharmacy        Pharmacy?          @relation(fields: [pharmacyId], references: [id])
+  status          RefillStatus       @default(requested)
+  requestedAt     DateTime           @default(now())
+  pharmacyComment String?
+  pendedById      String?
+  pendedBy        Practitioner?      @relation("RefillPendedBy", fields: [pendedById], references: [id])
+  pendedAt        DateTime?
+  pendNote        String?
+  decidedById     String?
+  decidedBy       Practitioner?      @relation("RefillDecidedBy", fields: [decidedById], references: [id])
+  decidedAt       DateTime?
+  decisionNote    String? // deny reason, or a note sent with the approval
+  resultId        String? // the new prescription an approval wrote
+  result          MedicationRequest? @relation("RefillResult", fields: [resultId], references: [id])
+
+  @@index([status])
   @@index([patientId])
 }
 
@@ -375,27 +528,27 @@ model Observation {
 }
 
 model DiagnosticReport {
-  id          String       @id @default(cuid())
-  patientId   String
-  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  code        String
-  display     String // e.g. "Complete blood count"
-  performer   String // lab name
-  effectiveAt DateTime
-  issuedAt    DateTime
-  status      ReportStatus
-  source      ReportSource @default(ordered)
-  verifiedAt  DateTime?
-  verifiedById String?
-  verifiedBy  Practitioner? @relation("VerifiedReports", fields: [verifiedById], references: [id])
-  importJobId String?
-  importJob   ImportJob?   @relation(fields: [importJobId], references: [id])
-  orderId     String?
-  order       ServiceRequest? @relation(fields: [orderId], references: [id])
+  id            String          @id @default(cuid())
+  patientId     String
+  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code          String
+  display       String // e.g. "Complete blood count"
+  performer     String // lab name
+  effectiveAt   DateTime
+  issuedAt      DateTime
+  status        ReportStatus
+  source        ReportSource    @default(ordered)
+  verifiedAt    DateTime?
+  verifiedById  String?
+  verifiedBy    Practitioner?   @relation("VerifiedReports", fields: [verifiedById], references: [id])
+  importJobId   String?
+  importJob     ImportJob?      @relation(fields: [importJobId], references: [id])
+  orderId       String?
+  order         ServiceRequest? @relation(fields: [orderId], references: [id])
   // Inbox acknowledgement by the responsible clinician.
-  reviewedAt   DateTime?
-  reviewedById String?
-  reviewedBy   Practitioner? @relation("ReviewedReports", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewedBy    Practitioner?   @relation("ReviewedReports", fields: [reviewedById], references: [id])
   reviewComment String?
 
   observations Observation[]
@@ -437,13 +590,13 @@ model Note {
 
 // Signed notes are never edited; later information is appended as an addendum.
 model NoteAddendum {
-  id        String       @id @default(cuid())
-  noteId    String
-  note      Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
-  body      String
-  authorId  String
-  author    Practitioner @relation(fields: [authorId], references: [id])
-  signedAt  DateTime     @default(now())
+  id       String       @id @default(cuid())
+  noteId   String
+  note     Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  body     String
+  authorId String
+  author   Practitioner @relation(fields: [authorId], references: [id])
+  signedAt DateTime     @default(now())
 
   @@index([noteId])
 }
@@ -491,6 +644,7 @@ model ImportJob {
   id          String        @id @default(cuid())
   patientId   String
   patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  kind        ImportKind    @default(lab)
   status      ImportStatus  @default(extracting)
   model       String?
   extraction  Json? // raw model output, kept for audit
@@ -504,8 +658,9 @@ model ImportJob {
   filedById   String?
   filedBy     Practitioner? @relation("ImportFiledBy", fields: [filedById], references: [id])
 
-  documents DocumentReference[]
-  reports   DiagnosticReport[]
+  documents   DocumentReference[]
+  reports     DiagnosticReport[]
+  clinicalDoc ClinicalDocument?
 
   @@index([patientId, createdAt])
   @@index([status])
@@ -535,8 +690,41 @@ model ServiceRequest {
   discontinuedAt DateTime?
   medicationId   String? // the MedicationRequest a signed prescription created
 
-  reports DiagnosticReport[]
+  reports      DiagnosticReport[]
+  clinicalDocs ClinicalDocument[]
 
   @@index([patientId, status])
   @@index([orderedById, status])
+}
+
+// An outside clinical document filed from a verified import: an imaging report,
+// discharge summary, referral or consult letter. `content` holds the reviewed
+// structure (sections, diagnoses, medications, follow-ups; see
+// src/lib/documents/draft.ts DocContent). The source pages stay on the import job.
+model ClinicalDocument {
+  id            String          @id @default(cuid())
+  patientId     String
+  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type          ClinicalDocType
+  title         String
+  organization  String?
+  author        String?
+  serviceDate   DateTime        @db.Date
+  content       Json
+  importJobId   String?         @unique
+  importJob     ImportJob?      @relation(fields: [importJobId], references: [id])
+  // The imaging or referral order this document answers, if any.
+  orderId       String?
+  order         ServiceRequest? @relation(fields: [orderId], references: [id])
+  filedById     String
+  filedBy       Practitioner    @relation("DocFiledBy", fields: [filedById], references: [id])
+  filedAt       DateTime        @default(now())
+  // Inbox acknowledgement by the PCP (or the ordering clinician).
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewedBy    Practitioner?   @relation("DocReviewedBy", fields: [reviewedById], references: [id])
+  reviewComment String?
+
+  @@index([patientId, serviceDate])
+  @@index([reviewedAt])
 }

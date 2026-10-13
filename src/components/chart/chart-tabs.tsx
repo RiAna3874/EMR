@@ -17,7 +17,8 @@ export const chartTabs: { slug: string; label: string; needs?: Permission }[] = 
   { slug: "allergies", label: "Allergies", needs: "viewClinical" },
   { slug: "notes", label: "Notes", needs: "viewClinical" },
   { slug: "orders", label: "Orders", needs: "viewClinical" },
-  { slug: "import", label: "Import Report", needs: "importReports" },
+  { slug: "documents", label: "Documents", needs: "viewClinical" },
+  { slug: "import", label: "Import", needs: "importReports" },
   { slug: "appointments", label: "Appointments" },
 ];
 

@@ -17,23 +17,33 @@ export type PendingRow = {
   // Set when someone other than the viewer pended it.
   pendedBy: string | null;
   warnings: OrderWarning[];
+  // Controlled substance (needs the prescription monitoring program checked).
+  controlled?: boolean;
 };
+
+const OVERRIDE_REASONS = ["Benefit outweighs risk", "Tolerated before without reaction", "Will monitor closely", "Dose intended", "Alert not applicable"];
 
 export function PendingOrders({
   rows,
   remove,
   setPriority,
   sign,
+  cosigners,
 }: {
   rows: PendingRow[];
   remove: (id: string) => Promise<void>;
   setPriority: (id: string, form: FormData) => Promise<void>;
   // Absent when the user can pend but not sign (nursing).
   sign?: (form: FormData) => Promise<{ error: string } | void>;
+  // Attendings to pick from when a resident signs prescriptions.
+  cosigners?: { id: string; name: string }[];
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const stops = rows.filter((r) => r.warnings.some((w) => w.level === "stop"));
+  const controlled = rows.filter((r) => r.controlled);
+  const hasRx = rows.some((r) => r.type === "medication");
+  const [override, setOverride] = useState("");
 
   return (
     <section className="rounded-md border border-line bg-panel">
@@ -108,7 +118,41 @@ export function PendingOrders({
               <span className="text-[11.5px] font-medium text-crit">
                 Override reason for {stops.length === 1 ? stops[0].display : `${stops.length} alerted orders`}
               </span>
-              <input name="overrideReason" className={`${inputCls} mt-0.5 w-full`} placeholder="e.g. Tolerated before without reaction" />
+              <input
+                name="overrideReason"
+                value={override}
+                onChange={(e) => setOverride(e.target.value)}
+                className={`${inputCls} mt-0.5 w-full`}
+                placeholder="Pick one or type a reason"
+              />
+              <span className="mt-1 flex flex-wrap gap-1">
+                {OVERRIDE_REASONS.map((r) => (
+                  <button key={r} type="button" onClick={() => setOverride(r)} className="rounded border border-line bg-panel px-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-accent">
+                    {r}
+                  </button>
+                ))}
+              </span>
+            </label>
+          )}
+          {controlled.length > 0 && (
+            <label className="flex items-start gap-1.5 text-[12px]">
+              <input type="checkbox" name="pdmpChecked" className="mt-0.5" />
+              <span>
+                I checked the state prescription monitoring program for {controlled.map((c) => c.display).join(", ")}.
+              </span>
+            </label>
+          )}
+          {hasRx && cosigners && (
+            <label className="block">
+              <span className="text-[11.5px] font-medium text-ink-2">Cosigning attending (prescriptions)</span>
+              <select name="cosignerId" defaultValue="" className={`${inputCls} mt-0.5 w-full`}>
+                <option value="">Choose an attending</option>
+                {cosigners.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           {error && <p className="text-[12px] text-crit">{error}</p>}

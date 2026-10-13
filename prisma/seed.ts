@@ -7,10 +7,14 @@ import {
   type Sex,
   type AllergySeverity,
   type AllergyType,
+  type PatientTaking,
 } from "@prisma/client";
 
 import { ORDERABLES } from "../src/lib/orders/catalog";
+import { productFor } from "../src/lib/meds/formulary";
 import { hashPassword } from "../src/lib/password";
+import { docContent, docDraftFromExtraction, suggestOrder, type DocDraft, type ExtractedDocument } from "../src/lib/documents/draft";
+import { readFileSync } from "node:fs";
 
 const prisma = new PrismaClient();
 const orderables = new Map(ORDERABLES.map((o) => [o.code, o]));
@@ -33,7 +37,15 @@ const daysAgo = (d: number, hour = 9, minute = 0) => {
 };
 
 type ConditionDef = { code: string; display: string; onsetYearsAgo: number; status?: "active" | "resolved" };
-type MedDef = { drug: string; rxnorm: string; dose: string; route: string; frequency: string; indication?: string; status?: "active" | "on_hold" | "discontinued" };
+type MedDef = {
+  drug: string; rxnorm: string; dose: string; route: string; frequency: string; indication?: string; status?: "active" | "on_hold" | "discontinued";
+  // Prescription and pharmacy fill details (see seedMeds).
+  refillsLeft?: number; lateDays?: number; historical?: boolean; endReason?: string;
+  taking?: "not_taking" | "taking_differently"; takingNote?: string;
+  request?: { comment?: string; pendNote?: string };
+  // Today, the resident changed this prescription from an earlier one.
+  residentChangedFrom?: { drug: string; rxnorm: string; dose: string };
+};
 type AllergyDef = { substance: string; type: AllergyType; reaction: string; severity: AllergySeverity; verified?: boolean };
 
 // Lab "drift" lets a profile push particular analytes high or low.
@@ -71,10 +83,10 @@ const patients: PatientDef[] = [
       { code: "E78.5", display: "Hyperlipidemia, unspecified", onsetYearsAgo: 7 },
     ],
     meds: [
-      { drug: "Metformin 1000 mg tablet", rxnorm: "861004", dose: "1000 mg", route: "oral", frequency: "twice daily with meals", indication: "Type 2 diabetes" },
-      { drug: "Lisinopril 20 mg tablet", rxnorm: "314077", dose: "20 mg", route: "oral", frequency: "once daily", indication: "Hypertension" },
+      { drug: "Metformin 1000 mg tablet", rxnorm: "861004", dose: "1000 mg", route: "oral", frequency: "twice daily with meals", indication: "Type 2 diabetes", residentChangedFrom: { drug: "Metformin 500 mg tablet", rxnorm: "861007", dose: "500 mg" } },
+      { drug: "Lisinopril 20 mg tablet", rxnorm: "314077", dose: "20 mg", route: "oral", frequency: "once daily", indication: "Hypertension", refillsLeft: 0, request: { comment: "Patient requests 90-day supply." } },
       { drug: "Atorvastatin 40 mg tablet", rxnorm: "617311", dose: "40 mg", route: "oral", frequency: "nightly", indication: "Hyperlipidemia" },
-      { drug: "Glipizide 5 mg tablet", rxnorm: "310488", dose: "5 mg", route: "oral", frequency: "once daily", indication: "Type 2 diabetes", status: "discontinued" },
+      { drug: "Glipizide 5 mg tablet", rxnorm: "310488", dose: "5 mg", route: "oral", frequency: "once daily", indication: "Type 2 diabetes", status: "discontinued", endReason: "Hypoglycemia" },
     ],
     vitals: { sbp: 142, dbp: 88, hr: 78, weightKg: 88, heightCm: 163 },
     labBias: { glucose: 1.6, a1c: 1.45, ldl: 1.2, tg: 1.4, creatinine: 1.15 },
@@ -96,7 +108,7 @@ const patients: PatientDef[] = [
       { code: "I50.9", display: "Heart failure, unspecified", onsetYearsAgo: 2 },
     ],
     meds: [
-      { drug: "Apixaban 5 mg tablet", rxnorm: "1364445", dose: "5 mg", route: "oral", frequency: "twice daily", indication: "Atrial fibrillation" },
+      { drug: "Apixaban 5 mg tablet", rxnorm: "1364445", dose: "5 mg", route: "oral", frequency: "twice daily", indication: "Atrial fibrillation", refillsLeft: 0, request: {} },
       { drug: "Metoprolol succinate ER 50 mg tablet", rxnorm: "866436", dose: "50 mg", route: "oral", frequency: "once daily", indication: "Rate control" },
       { drug: "Furosemide 40 mg tablet", rxnorm: "313988", dose: "40 mg", route: "oral", frequency: "once daily", indication: "Heart failure" },
     ],
@@ -117,7 +129,7 @@ const patients: PatientDef[] = [
       { code: "D50.9", display: "Iron deficiency anemia, unspecified", onsetYearsAgo: 1 },
     ],
     meds: [
-      { drug: "Levothyroxine 75 mcg tablet", rxnorm: "966222", dose: "75 mcg", route: "oral", frequency: "once daily before breakfast", indication: "Hypothyroidism" },
+      { drug: "Levothyroxine 75 mcg tablet", rxnorm: "966222", dose: "75 mcg", route: "oral", frequency: "once daily before breakfast", indication: "Hypothyroidism", refillsLeft: 0, request: {} },
       { drug: "Ferrous sulfate 325 mg tablet", rxnorm: "310325", dose: "325 mg", route: "oral", frequency: "once daily", indication: "Iron deficiency" },
     ],
     vitals: { sbp: 112, dbp: 70, hr: 84, weightKg: 61, heightCm: 165 },
@@ -141,10 +153,10 @@ const patients: PatientDef[] = [
       { code: "K21.9", display: "Gastro-esophageal reflux disease without esophagitis", onsetYearsAgo: 3 },
     ],
     meds: [
-      { drug: "Fluticasone/salmeterol 250/50 mcg inhaler", rxnorm: "896188", dose: "1 puff", route: "inhaled", frequency: "twice daily", indication: "Asthma" },
+      { drug: "Fluticasone-salmeterol 250-50 mcg inhaler", rxnorm: "896188", dose: "1 puff", route: "inhaled", frequency: "twice daily", indication: "Asthma" },
       { drug: "Albuterol HFA 90 mcg inhaler", rxnorm: "745679", dose: "2 puffs", route: "inhaled", frequency: "every 4 hours as needed", indication: "Wheezing" },
-      { drug: "Omeprazole 20 mg capsule", rxnorm: "311353", dose: "20 mg", route: "oral", frequency: "once daily", indication: "GERD" },
-      { drug: "Epinephrine 0.3 mg auto-injector", rxnorm: "727316", dose: "0.3 mg", route: "intramuscular", frequency: "once as needed", indication: "Anaphylaxis" },
+      { drug: "Omeprazole 20 mg capsule", rxnorm: "198053", dose: "20 mg", route: "oral", frequency: "once daily", indication: "GERD" },
+      { drug: "Epinephrine 0.3 mg auto-injector", rxnorm: "727316", dose: "0.3 mg", route: "intramuscular", frequency: "once as needed", indication: "Anaphylaxis", refillsLeft: 1 },
     ],
     vitals: { sbp: 124, dbp: 80, hr: 72, weightKg: 82, heightCm: 178, spo2: 97 },
     reasonToday: "Asthma check", visitHour: 9,
@@ -164,7 +176,7 @@ const patients: PatientDef[] = [
       { drug: "Alendronate 70 mg tablet", rxnorm: "904420", dose: "70 mg", route: "oral", frequency: "once weekly", indication: "Osteoporosis" },
       { drug: "Amlodipine 5 mg tablet", rxnorm: "197361", dose: "5 mg", route: "oral", frequency: "once daily", indication: "Hypertension" },
       { drug: "Donepezil 10 mg tablet", rxnorm: "997223", dose: "10 mg", route: "oral", frequency: "nightly", indication: "Dementia" },
-      { drug: "Cholecalciferol 2000 unit capsule", rxnorm: "636676", dose: "2000 units", route: "oral", frequency: "once daily", indication: "Vitamin D" },
+      { drug: "Cholecalciferol 2000 unit capsule", rxnorm: "636676", dose: "2000 units", route: "oral", frequency: "once daily", indication: "Vitamin D", historical: true },
     ],
     vitals: { sbp: 136, dbp: 74, hr: 68, weightKg: 54, heightCm: 155 },
     labBias: { sodium: 0.97, vitd: 0.6 },
@@ -175,7 +187,7 @@ const patients: PatientDef[] = [
     firstName: "Jonah", lastName: "Kessler", sex: "male", age: 29,
     phone: "(555) 905-3378", address: "18 Orchard Way, Lakeview, OR 97630",
     conditions: [{ code: "F41.1", display: "Generalized anxiety disorder", onsetYearsAgo: 2 }],
-    meds: [{ drug: "Sertraline 50 mg tablet", rxnorm: "312940", dose: "50 mg", route: "oral", frequency: "once daily", indication: "Anxiety" }],
+    meds: [{ drug: "Sertraline 50 mg tablet", rxnorm: "312940", dose: "50 mg", route: "oral", frequency: "once daily", indication: "Anxiety", lateDays: 24, taking: "taking_differently", takingNote: "Skips doses on weekends; worried about side effects" }],
     vitals: { sbp: 118, dbp: 72, hr: 76, weightKg: 75, heightCm: 183 },
     reasonToday: "Medication follow-up", telehealth: true, visitHour: 10,
   },
@@ -205,7 +217,7 @@ const patients: PatientDef[] = [
     meds: [
       { drug: "Tiotropium 18 mcg inhalation capsule", rxnorm: "485032", dose: "18 mcg", route: "inhaled", frequency: "once daily", indication: "COPD" },
       { drug: "Albuterol HFA 90 mcg inhaler", rxnorm: "745679", dose: "2 puffs", route: "inhaled", frequency: "every 4 hours as needed", indication: "COPD" },
-      { drug: "Prednisone 20 mg tablet", rxnorm: "312617", dose: "40 mg", route: "oral", frequency: "once daily x5 days", indication: "COPD exacerbation", status: "discontinued" },
+      { drug: "Prednisone 20 mg tablet", rxnorm: "312617", dose: "40 mg", route: "oral", frequency: "once daily x5 days", indication: "COPD exacerbation", status: "discontinued", endReason: "Course completed" },
     ],
     vitals: { sbp: 130, dbp: 82, hr: 90, weightKg: 70, heightCm: 172, spo2: 92 },
     labBias: { hgb: 1.1, wbc: 1.3 },
@@ -220,7 +232,7 @@ const patients: PatientDef[] = [
     ],
     meds: [
       { drug: "Sumatriptan 50 mg tablet", rxnorm: "313461", dose: "50 mg", route: "oral", frequency: "at migraine onset, may repeat in 2 h", indication: "Migraine" },
-      { drug: "Cyclobenzaprine 10 mg tablet", rxnorm: "828320", dose: "10 mg", route: "oral", frequency: "nightly as needed", indication: "Back spasm", status: "on_hold" },
+      { drug: "Cyclobenzaprine 10 mg tablet", rxnorm: "828320", dose: "10 mg", route: "oral", frequency: "nightly as needed", indication: "Back spasm", status: "on_hold", taking: "not_taking", takingNote: "Back spasm resolved" },
     ],
     vitals: { sbp: 120, dbp: 78, hr: 70, weightKg: 68, heightCm: 170 },
     reasonToday: "Back pain", visitHour: 14,
@@ -235,8 +247,8 @@ const patients: PatientDef[] = [
       { code: "N40.0", display: "Benign prostatic hyperplasia", onsetYearsAgo: 6 },
     ],
     meds: [
-      { drug: "Aspirin 81 mg tablet", rxnorm: "243670", dose: "81 mg", route: "oral", frequency: "once daily", indication: "CAD" },
-      { drug: "Rosuvastatin 20 mg tablet", rxnorm: "859751", dose: "20 mg", route: "oral", frequency: "once daily", indication: "CAD" },
+      { drug: "Aspirin 81 mg tablet", rxnorm: "243670", dose: "81 mg", route: "oral", frequency: "once daily", indication: "CAD", historical: true },
+      { drug: "Rosuvastatin 20 mg tablet", rxnorm: "859751", dose: "20 mg", route: "oral", frequency: "once daily", indication: "CAD", refillsLeft: 0, request: { pendNote: "Protocol met: lipid panel 3 weeks ago, visit 3 weeks ago. Ready to approve." } },
       { drug: "Insulin glargine 100 unit/mL pen", rxnorm: "847232", dose: "28 units", route: "subcutaneous", frequency: "nightly", indication: "Type 2 diabetes" },
       { drug: "Tamsulosin 0.4 mg capsule", rxnorm: "863669", dose: "0.4 mg", route: "oral", frequency: "nightly", indication: "BPH" },
     ],
@@ -261,7 +273,7 @@ const patients: PatientDef[] = [
       { code: "I10", display: "Essential (primary) hypertension", onsetYearsAgo: 6 },
     ],
     meds: [
-      { drug: "Allopurinol 300 mg tablet", rxnorm: "197320", dose: "300 mg", route: "oral", frequency: "once daily", indication: "Gout" },
+      { drug: "Allopurinol 300 mg tablet", rxnorm: "197320", dose: "300 mg", route: "oral", frequency: "once daily", indication: "Gout", refillsLeft: 0, request: {} },
       { drug: "Losartan 50 mg tablet", rxnorm: "979485", dose: "50 mg", route: "oral", frequency: "once daily", indication: "Hypertension" },
     ],
     vitals: { sbp: 146, dbp: 92, hr: 74, weightKg: 97, heightCm: 179 },
@@ -342,6 +354,7 @@ async function main() {
   await prisma.$transaction([
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
+    prisma.clinicalDocument.deleteMany(),
     prisma.serviceRequest.deleteMany(),
     prisma.documentReference.deleteMany(),
     prisma.importJob.deleteMany(),
@@ -352,12 +365,16 @@ async function main() {
     prisma.encounter.deleteMany(),
     prisma.scheduleBlock.deleteMany(),
     prisma.scheduleSession.deleteMany(),
+    prisma.refillRequest.deleteMany(),
+    prisma.medicationDispense.deleteMany(),
     prisma.medicationRequest.deleteMany(),
     prisma.allergyIntolerance.deleteMany(),
     prisma.condition.deleteMany(),
     prisma.patient.deleteMany(),
+    prisma.pharmacy.deleteMany(),
     prisma.practitioner.deleteMany(),
   ]);
+  await prisma.pharmacy.createMany({ data: pharmacies });
 
   await prisma.practitioner.createMany({
     data: await Promise.all(practitioners.map(async (p) => ({ ...p, passwordHash: await hashPassword(DEMO_PASSWORD) }))),
@@ -366,7 +383,8 @@ async function main() {
   await seedTemplates();
 
   for (const [i, p] of patients.entries()) {
-    const dob = new Date(today.getFullYear() - p.age, Math.floor(rand() * 12), 1 + Math.floor(rand() * 27));
+    // UTC midnight: DOB is a date column, so a local midnight east of UTC would store the day before.
+    const dob = new Date(Date.UTC(today.getFullYear() - p.age, Math.floor(rand() * 12), 1 + Math.floor(rand() * 27)));
     const pcpId = pcps[i % 2];
     const patient = await prisma.patient.create({
       data: {
@@ -383,6 +401,7 @@ async function main() {
         pcpId,
         insurancePayer: PAYERS[i % PAYERS.length],
         insuranceMemberId: `${PAYERS[i % PAYERS.length].slice(0, 3).toUpperCase()}${(48213077 + i * 90731).toString()}`,
+        preferredPharmacyId: pharmacies[i % pharmacies.length].id,
       },
     });
 
@@ -404,25 +423,7 @@ async function main() {
       });
     }
 
-    await prisma.medicationRequest.createMany({
-      data: p.meds.map((m) => {
-        const status = m.status ?? "active";
-        const startAgo = 60 + Math.round(rand() * 1500);
-        return {
-          patientId: patient.id,
-          drug: m.drug,
-          rxnorm: m.rxnorm,
-          dose: m.dose,
-          route: m.route,
-          frequency: m.frequency,
-          indication: m.indication,
-          status,
-          start: daysAgo(startAgo),
-          end: status === "discontinued" ? daysAgo(Math.round(startAgo / 3)) : null,
-          prescriberId: pcpId,
-        };
-      }),
-    });
+    await seedMeds(i, p, patient.id, pcpId);
 
     // Past office visits roughly quarterly, each with vitals; labs at most of them.
     const visitDaysAgo = [540, 360, 270, 180, 90, 21];
@@ -575,7 +576,118 @@ async function main() {
   });
 
   const counts = await Promise.all([prisma.patient.count(), prisma.observation.count(), prisma.note.count()]);
+  await seedOutsideDocuments();
   console.log(`Seeded ${counts[0]} patients, ${counts[1]} observations, ${counts[2]} notes.`);
+}
+
+// Synthetic pharmacies (not real businesses).
+const pharmacies = [
+  { id: "pharm_lakeview", name: "Lakeview Community Pharmacy", address: "220 N Main St, Lakeview, OR 97630", phone: "(555) 201-7700", fax: "(555) 201-7701" },
+  { id: "pharm_cascade", name: "Cascade Drug #212", address: "1450 Center St, Lakeview, OR 97630", phone: "(555) 201-3390", fax: "(555) 201-3391" },
+  { id: "pharm_riverside", name: "Riverside Pharmacy", address: "9 Water St, Paisley, OR 97636", phone: "(555) 943-2210", fax: null },
+  { id: "pharm_mail", name: "MedSure Mail Order Pharmacy", address: "PO Box 4400, Portland, OR 97208", phone: "(555) 800-6274", fax: "(555) 800-6275", mailOrder: true },
+];
+
+// Current prescriptions with pharmacy fill history, an earlier prescription each
+// replaced, refill requests from pharmacies, and today's medication review.
+async function seedMeds(i: number, p: PatientDef, patientId: string, pcpId: string) {
+  const pharmacyId = pharmacies[i % pharmacies.length].id;
+  const roomedToday = !!p.reasonToday && (p.visitHour ?? 9) <= 9;
+  const reviewedAt = roomedToday ? daysAgo(0, (p.visitHour ?? 9) - 1, 50) : i === 10 ? null : daysAgo(21, 9 + (i % 7), 15);
+  await prisma.patient.update({
+    where: { id: patientId },
+    data: { medsReviewedAt: reviewedAt, medsReviewedById: reviewedAt ? (roomedToday ? "prac_lund" : pcpId) : null },
+  });
+
+  for (const m of p.meds) {
+    const status = m.status ?? "active";
+    const product = productFor({ rxnorm: m.rxnorm, drug: m.drug });
+    const startAgo = 200 + Math.round(rand() * 1400);
+    const taking: PatientTaking | null = reviewedAt && status !== "discontinued" ? (m.taking ?? "taking") : null;
+    const review = { taking, takingNote: taking ? (m.takingNote ?? null) : null, takingAt: taking ? reviewedAt : null };
+
+    if (m.historical) {
+      await prisma.medicationRequest.create({
+        data: {
+          patientId, drug: m.drug, rxnorm: m.rxnorm, dose: m.dose, route: m.route, frequency: m.frequency, indication: m.indication,
+          status, start: daysAgo(startAgo), rxClass: "historical", authoredAt: daysAgo(startAgo), pharmacyNote: "Over the counter", ...review,
+        },
+      });
+      continue;
+    }
+
+    if (status === "discontinued") {
+      const endAgo = Math.round(startAgo / 3);
+      await prisma.medicationRequest.create({
+        data: {
+          patientId, drug: m.drug, rxnorm: m.rxnorm, dose: m.dose, route: m.route, frequency: m.frequency, indication: m.indication,
+          status, start: daysAgo(startAgo), end: daysAgo(endAgo), endReason: m.endReason ?? "Discontinued", endedById: pcpId,
+          prescriberId: pcpId, authoredAt: daysAgo(startAgo), quantity: product?.quantity, refills: product?.refills ?? 0, pharmacyId,
+        },
+      });
+      continue;
+    }
+
+    const supply = product?.days ?? 30;
+    const refills = product?.refills ?? 3;
+    const refillsLeft = m.refillsLeft ?? Math.min(refills, 1 + Math.floor(rand() * refills));
+    const fills = refills - refillsLeft + 1;
+    // The last fill runs out a few days to most of a supply from now, or lateDays ago.
+    const runsOutIn = m.lateDays !== undefined ? -m.lateDays : m.request ? 3 : Math.round(between(6, Math.max(8, supply - 5)));
+    const lastFillAgo = supply - runsOutIn;
+    const authoredAgo = lastFillAgo + (fills - 1) * supply + 1;
+
+    const prior = await prisma.medicationRequest.create({
+      data: {
+        patientId, drug: m.residentChangedFrom?.drug ?? m.drug, rxnorm: m.residentChangedFrom?.rxnorm ?? m.rxnorm,
+        dose: m.residentChangedFrom?.dose ?? m.dose, route: m.route, frequency: m.frequency, indication: m.indication,
+        status: m.residentChangedFrom ? "active" : "replaced",
+        start: daysAgo(Math.max(startAgo, authoredAgo + 365)), end: m.residentChangedFrom ? null : daysAgo(authoredAgo),
+        endReason: m.residentChangedFrom ? null : "Reordered", endedById: m.residentChangedFrom ? null : pcpId,
+        prescriberId: pcpId, authoredAt: daysAgo(authoredAgo + (m.residentChangedFrom ? 0 : 365)),
+        quantity: product?.quantity, daysSupply: supply, refills, pharmacyId, sentAt: daysAgo(authoredAgo + 365),
+      },
+    });
+    const current = m.residentChangedFrom
+      ? prior
+      : await prisma.medicationRequest.create({
+          data: {
+            patientId, drug: m.drug, rxnorm: m.rxnorm, dose: m.dose, route: m.route, frequency: m.frequency, indication: m.indication,
+            status, start: prior.start, prescriberId: pcpId, authoredAt: daysAgo(authoredAgo, 11), sentAt: daysAgo(authoredAgo, 11),
+            quantity: product?.quantity, daysSupply: supply, refills, pharmacyId, priorId: prior.id, ...review,
+          },
+        });
+    await prisma.medicationDispense.createMany({
+      data: Array.from({ length: fills }, (_, n) => ({
+        patientId, medicationId: current.id, pharmacyId, quantity: product?.quantity ?? "30 tablets", daysSupply: supply,
+        filledAt: daysAgo(lastFillAgo + (fills - 1 - n) * supply, 15),
+      })),
+    });
+
+    if (m.request) {
+      const pended = !!m.request.pendNote;
+      await prisma.refillRequest.create({
+        data: {
+          patientId, medicationId: current.id, pharmacyId, requestedAt: daysAgo(pended ? 2 : 1, 7, 40 + i),
+          pharmacyComment: m.request.comment ?? null, status: pended ? "pended" : "requested",
+          pendedById: pended ? "prac_lund" : null, pendedAt: pended ? daysAgo(1, 10, 5) : null, pendNote: m.request.pendNote ?? null,
+        },
+      });
+    }
+
+    // The resident's change from this morning's visit: sent, waiting on Dr. Chen's cosignature.
+    if (m.residentChangedFrom) {
+      const at = daysAgo(0, 8, 45);
+      await prisma.medicationRequest.update({ where: { id: prior.id }, data: { status: "replaced", end: at, endReason: `Changed to ${m.drug}`, endedById: "prac_brandt" } });
+      await prisma.medicationRequest.create({
+        data: {
+          patientId, drug: m.drug, rxnorm: m.rxnorm, dose: m.dose, route: m.route, frequency: m.frequency, indication: m.indication,
+          status, start: prior.start, prescriberId: "prac_brandt", cosignerId: "prac_chen", authoredAt: at, sentAt: at,
+          quantity: product?.quantity, daysSupply: supply, refills, pharmacyId, priorId: prior.id, ...review,
+        },
+      });
+    }
+  }
 }
 
 // Notes that show the documentation workflow: a resident's notes waiting on
@@ -703,6 +815,106 @@ async function historyNotes(i: number, p: PatientDef, patientId: string) {
       await prisma.note.update({ where: { id: last.id }, data: { status: "addended" } });
     }
   }
+}
+
+// Outside documents from samples/, as if uploaded through Import: one filed and
+// reviewed, one filed by the resident and waiting in the PCP's Inbox, and one a
+// nurse has prepared that still needs a physician to verify it.
+async function seedOutsideDocuments() {
+  const pngSize = (b: Buffer) => ({ width: b.readUInt32BE(16), height: b.readUInt32BE(20) });
+  async function importDoc(o: {
+    lastName: string;
+    sample: string;
+    uploadedById: string;
+    createdAt: Date;
+    filed?: { byId: string; at: Date; reviewedById?: string };
+    edit?: (d: DocDraft) => void;
+  }) {
+    const patient = await prisma.patient.findFirstOrThrow({ where: { lastName: o.lastName } });
+    const data = readFileSync(`samples/${o.sample}.png`);
+    const size = pngSize(data);
+    const extraction = JSON.parse(readFileSync(`samples/${o.sample}.extraction.json`, "utf8")) as ExtractedDocument;
+    const draft = docDraftFromExtraction(extraction, [size]);
+    const orders = await prisma.serviceRequest.findMany({ where: { patientId: patient.id, status: "signed", type: { in: ["imaging", "referral", "procedure"] } } });
+    draft.orderId = suggestOrder(draft, orders.map((x) => ({ id: x.id, type: x.type, code: x.code, display: x.display, signedAt: (x.signedAt ?? x.createdAt).toISOString() })));
+    o.edit?.(draft);
+    const job = await prisma.importJob.create({
+      data: {
+        patientId: patient.id,
+        kind: "document",
+        status: o.filed ? "filed" : "needs_review",
+        model: "fixture",
+        extraction,
+        draft,
+        createdById: o.uploadedById,
+        createdAt: o.createdAt,
+        filedAt: o.filed?.at,
+        filedById: o.filed?.byId,
+        documents: {
+          create: {
+            patientId: patient.id,
+            kind: o.filed ? draft.type : "clinical_document",
+            fileName: `${o.sample}.png`,
+            mimeType: "image/png",
+            size: data.length,
+            ...size,
+            data,
+            uploadedById: o.uploadedById,
+            uploadedAt: o.createdAt,
+          },
+        },
+      },
+    });
+    if (!o.filed) return;
+    const serviceDate = new Date(`${draft.serviceDate}T00:00:00Z`);
+    for (const d of draft.diagnoses.filter((x) => x.addToProblems)) {
+      await prisma.condition.create({
+        data: { patientId: patient.id, code: d.icd10 || "R69", display: d.text, status: "active", onset: serviceDate, priority: 50, comment: `From imaging report: ${draft.title}, ${draft.organization}` },
+      });
+    }
+    if (draft.orderId) await prisma.serviceRequest.update({ where: { id: draft.orderId }, data: { status: "completed", completedAt: o.filed.at } });
+    await prisma.clinicalDocument.create({
+      data: {
+        patientId: patient.id,
+        type: draft.type,
+        title: draft.title,
+        organization: draft.organization || null,
+        author: draft.author || null,
+        serviceDate,
+        content: docContent(draft),
+        importJobId: job.id,
+        orderId: draft.orderId,
+        filedById: o.filed.byId,
+        filedAt: o.filed.at,
+        reviewedAt: o.filed.reviewedById ? o.filed.at : null,
+        reviewedById: o.filed.reviewedById ?? null,
+      },
+    });
+  }
+
+  await importDoc({
+    lastName: "Tanabe",
+    sample: "synthetic-ct-chest-report",
+    uploadedById: "prac_lund",
+    createdAt: daysAgo(20, 10, 5),
+    filed: { byId: "prac_ibarra", at: daysAgo(20, 12, 30), reviewedById: "prac_ibarra" },
+    edit: (d) => {
+      d.diagnoses.forEach((x) => (x.addToProblems = x.icd10 === "R91.1"));
+      d.diagnoses.forEach((x) => (x.text = x.icd10 === "R91.1" ? "Solitary pulmonary nodule, right upper lobe, 7 mm" : x.text));
+    },
+  });
+  await importDoc({
+    lastName: "Montenegro",
+    sample: "synthetic-ruq-ultrasound",
+    uploadedById: "prac_lund",
+    createdAt: daysAgo(1, 9, 10),
+    filed: { byId: "prac_brandt", at: daysAgo(1, 11, 45) },
+    edit: (d) => {
+      const stones = d.diagnoses.find((x) => x.icd10 === "K80.20")!;
+      Object.assign(stones, { addToProblems: true, text: "Calculus of gallbladder without cholecystitis" });
+    },
+  });
+  await importDoc({ lastName: "Brightwater", sample: "synthetic-eye-consult-letter", uploadedById: "prac_lund", createdAt: daysAgo(0, 7, 40) });
 }
 
 function progressNote(p: PatientDef, vitals: { display: string; value: number; unit: string }[]) {

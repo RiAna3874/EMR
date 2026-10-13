@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
-import { inboxCounts, inboxFolderAllowed, inboxResults } from "@/lib/inbox";
+import { inboxCounts, inboxFolderAllowed, inboxResults, refillsWhere } from "@/lib/inbox";
 import { age, fmtDate, fmtDateTime, fmtRange, fmtValue, fullName, isAbnormal, relativeDays, sexShort, unitLabel } from "@/lib/format";
 import { orderableByCode } from "@/lib/orders/catalog";
 import { orderWarnings } from "@/lib/orders/checks";
@@ -16,16 +16,31 @@ import { NoteBody } from "@/components/notes/note-view";
 import { noteTypeShort } from "@/lib/notes/library";
 import { unresolvedCount } from "@/lib/notes/smarttext";
 import { acknowledgeAllNormal, acknowledgeResult, cosignFromInbox, signDraftNote } from "./actions";
+import { acknowledgeDocument } from "@/app/patients/[id]/import/document-actions";
+import { documentsWhere, filedDocInclude, toFiledDoc } from "@/lib/documents/server";
+import { DocDraftSchema, docTypeLabel } from "@/lib/documents/draft";
+import { DocTypeChip, DocView } from "@/components/documents/doc-view";
+import { can, displayName, needsCosign, type SessionUser } from "@/lib/roles";
+import { maxRefills, medWarnings } from "@/lib/meds/checks";
+import { productFor } from "@/lib/meds/formulary";
+import { rxClassLabel, rxSummary } from "@/lib/meds/rx";
+import { sigText } from "@/lib/meds/sig";
+import { refillReview, withoutMed } from "@/lib/meds/server";
+import { ResultForm } from "@/components/meds/med-controls";
+import { approveRefill, cosignPrescription, denyRefill, pendRefill } from "@/app/patients/[id]/meds/actions";
 
 export const dynamic = "force-dynamic";
 
 const FOLDERS = [
   { id: "abnormal", label: "Abnormal results" },
   { id: "normal", label: "Normal results" },
-  { id: "imports", label: "Imported reports to verify" },
+  { id: "documents", label: "Outside documents" },
+  { id: "imports", label: "Imports to verify" },
   { id: "notes", label: "Notes to sign" },
   { id: "cosign", label: "Notes to cosign" },
   { id: "orders", label: "Orders to sign" },
+  { id: "refills", label: "Refill requests" },
+  { id: "rxcosign", label: "Prescriptions to cosign" },
 ] as const;
 type FolderId = (typeof FOLDERS)[number]["id"];
 
@@ -157,6 +172,45 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         </div>
       );
     }
+  } else if (folder === "documents") {
+    const docs = await db.clinicalDocument.findMany({
+      where: documentsWhere(currentUser.id),
+      orderBy: { serviceDate: "desc" },
+      include: { patient: true },
+    });
+    items = docs.map((d) => ({
+      id: d.id,
+      href: href(d.id),
+      patient: d.patient,
+      title: d.title,
+      at: d.filedAt,
+      sub: (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <DocTypeChip type={d.type} />
+          <span className="truncate">{d.organization}</span>
+        </span>
+      ),
+    }));
+    const current = docs.find((d) => d.id === sp.item) ?? docs[0];
+    if (current) {
+      const doc = toFiledDoc(await db.clinicalDocument.findUniqueOrThrow({ where: { id: current.id }, include: filedDocInclude }));
+      const next = docs[docs.indexOf(current) + 1];
+      detail = (
+        <div>
+          <DetailHeader patient={current.patient} title={docTypeLabel[current.type]} meta={`Filed ${fmtDateTime(current.filedAt)} by ${doc.filedBy.name}`} />
+          <div className="px-4 py-3">
+            <DocView doc={doc} patientId={current.patientId} />
+          </div>
+          <form action={acknowledgeDocument.bind(null, current.id, next ? href(next.id) : href())} className="flex flex-wrap items-center gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+            <input name="comment" className={`${inputCls} min-w-48 flex-1`} placeholder="Comment (optional)" />
+            <Button type="submit">Mark reviewed</Button>
+            <Link href={`/patients/${current.patientId}/documents?doc=${current.id}`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Open in chart
+            </Link>
+          </form>
+        </div>
+      );
+    }
   } else if (folder === "imports") {
     const jobs = await db.importJob.findMany({
       where: { status: { in: ["needs_review", "failed"] } },
@@ -167,7 +221,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       id: j.id,
       href: href(j.id),
       patient: j.patient,
-      title: "Outside lab report",
+      title: j.kind === "document" ? "Outside clinical document" : "Outside lab report",
       at: j.createdAt,
       sub: <ImportStatusChip status={j.status} />,
     }));
@@ -175,14 +229,100 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     if (current) {
       detail = (
         <div>
-          <DetailHeader patient={current.patient} title="Outside lab report" meta={`Uploaded ${fmtDateTime(current.createdAt)} by ${current.createdBy.name}`} />
+          <DetailHeader
+            patient={current.patient}
+            title={current.kind === "document" ? "Outside clinical document" : "Outside lab report"}
+            meta={`Uploaded ${fmtDateTime(current.createdAt)} by ${current.createdBy.name}`}
+          />
           <div className="space-y-3 px-4 py-4">
             <p>
               {current._count.documents} {current._count.documents === 1 ? "page" : "pages"}.{" "}
-              {current.status === "failed" ? "The report couldn't be read automatically; results can be entered by hand." : "Results were read from the image and are waiting for verification before they're filed."}
+              {current.kind === "document"
+                ? current.status === "failed"
+                  ? "The document couldn't be read automatically; it can be typed in by hand."
+                  : `${docSummary(current.draft)} It was transcribed from the pages and is waiting for verification before it's filed.`
+                : current.status === "failed"
+                  ? "The report couldn't be read automatically; results can be entered by hand."
+                  : "Results were read from the image and are waiting for verification before they're filed."}
             </p>
             <Link href={`/patients/${current.patientId}/import/${current.id}`} className="inline-block rounded bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent/90">
               Review and file
+            </Link>
+          </div>
+        </div>
+      );
+    }
+  } else if (folder === "refills") {
+    const requests = await db.refillRequest.findMany({
+      where: refillsWhere(currentUser),
+      orderBy: { requestedAt: "asc" },
+      include: { patient: true, medication: true, pharmacy: true, pendedBy: true },
+    });
+    items = requests.map((r) => ({
+      id: r.id,
+      href: href(r.id),
+      patient: r.patient,
+      title: r.medication.drug,
+      at: r.requestedAt,
+      sub: (
+        <span className="truncate">
+          {r.status === "pended" ? <span className="mr-1 rounded bg-accent-soft px-1 text-[10.5px] font-semibold text-accent">PENDED</span> : null}
+          {r.pharmacy?.name ?? "Pharmacy"}
+          {r.pendedBy && ` · ${r.pendedBy.name}`}
+        </span>
+      ),
+    }));
+    const current = requests.find((r) => r.id === sp.item) ?? requests[0];
+    if (current) {
+      const next = requests[requests.indexOf(current) + 1];
+      detail = <RefillDetail key={current.id} requestId={current.id} next={next ? href(next.id) : href()} user={currentUser} />;
+    }
+  } else if (folder === "rxcosign") {
+    const meds = await db.medicationRequest.findMany({
+      where: { cosignerId: currentUser.id, cosignedAt: null },
+      orderBy: { authoredAt: "asc" },
+      include: { patient: true, prescriber: true, prior: true, pharmacy: true },
+    });
+    items = meds.map((m) => ({
+      id: m.id,
+      href: href(m.id),
+      patient: m.patient,
+      title: m.drug,
+      at: m.authoredAt,
+      sub: `${m.prescriber?.name ?? ""}${m.prior ? ` · changed from ${m.prior.drug}` : ""}`,
+    }));
+    const current = meds.find((m) => m.id === sp.item) ?? meds[0];
+    if (current) {
+      const next = meds[meds.indexOf(current) + 1];
+      const ctx = withoutMed(await orderContext(current.patientId), current.drug);
+      const warnings = medWarnings(current.drug, { dose: current.dose, frequency: current.frequency, refills: current.refills }, ctx);
+      detail = (
+        <div>
+          <DetailHeader
+            patient={current.patient}
+            title={current.drug}
+            meta={`Prescribed by ${current.prescriber ? displayName(current.prescriber) : "unknown"} · ${fmtDateTime(current.authoredAt)} · ${rxClassLabel[current.rxClass]}${current.pharmacy ? ` to ${current.pharmacy.name}` : ""}`}
+          />
+          <div className="space-y-2 px-4 py-3">
+            <p>
+              <span className="font-semibold">Sig: </span>
+              {rxSummary({ dose: current.dose, route: current.route, frequency: current.frequency, prn: current.prn, prnReason: current.prnReason, quantity: current.quantity ?? undefined, daysSupply: current.daysSupply, refills: current.refills, daw: current.daw })}
+            </p>
+            {current.indication && <p className="text-ink-2">For {current.indication}</p>}
+            {current.prior && (
+              <p className="text-ink-2">
+                Replaces {current.prior.drug}, {current.prior.dose} {current.prior.frequency}.
+              </p>
+            )}
+            <WarningList warnings={warnings} />
+            <p className="text-[12px] text-ink-3">The prescription was sent when the resident signed it. Cosigning records your supervision.</p>
+          </div>
+          <div className="flex gap-2 border-t border-line bg-panel-muted px-4 py-2.5">
+            <form action={cosignPrescription.bind(null, current.id, next ? href(next.id) : href())}>
+              <Button type="submit">Cosign</Button>
+            </form>
+            <Link href={`/patients/${current.patientId}/meds`} className="rounded border border-line bg-panel px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
+              Open medications
             </Link>
           </div>
         </div>
@@ -442,4 +582,155 @@ async function ResultDetail({ reportId, next }: { reportId: string; next: string
       </form>
     </div>
   );
+}
+
+const DENY_REASONS = ["Needs an appointment first", "Medication discontinued", "Too early to refill", "Patient not under my care", "Changed to another medication"];
+
+async function RefillDetail({ requestId, next, user }: { requestId: string; next: string; user: SessionUser }) {
+  const req = await db.refillRequest.findUniqueOrThrow({ where: { id: requestId }, include: { patient: true, pharmacy: true, pendedBy: true } });
+  const { med, ctx, protocol, fills } = await refillReview(req.medicationId);
+  const product = productFor(med);
+  const warnings = medWarnings(med.drug, { dose: med.dose, frequency: med.frequency, refills: med.refills }, ctx);
+  const stops = warnings.filter((w) => w.level === "stop");
+  const met = protocol.every((p) => p.met);
+  const canApprove = can(user.role, "approveRefills");
+  const attendings = canApprove && needsCosign(user.role) ? await db.practitioner.findMany({ where: { role: "physician", active: true }, orderBy: { name: "asc" } }) : [];
+  const limit = maxRefills(med.drug);
+  const pendDefault = `Protocol ${met ? "met" : "not met"}: ${protocol.map((p) => `${p.met ? "✓" : "✗"} ${p.label.toLowerCase()}`).join("; ")}.`;
+
+  return (
+    <div>
+      <DetailHeader
+        patient={req.patient}
+        title={<>Refill request: {med.drug}</>}
+        meta={
+          <>
+            From {req.pharmacy?.name ?? "pharmacy"} · {fmtDateTime(req.requestedAt)}
+            {req.pharmacyComment && <> · “{req.pharmacyComment}”</>}
+          </>
+        }
+      />
+      <div className="grid gap-4 px-4 py-3 lg:grid-cols-2">
+        <section className="space-y-1">
+          <h3 className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Current prescription</h3>
+          <p className="font-medium">{sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason })}</p>
+          {med.indication && <p className="text-ink-2">For {med.indication}</p>}
+          <p className="text-ink-2">
+            {med.quantity} with {med.refills} refill{med.refills === 1 ? "" : "s"}, {fills.refillsLeft} left · prescribed {fmtDate(med.authoredAt)} by {med.prescriber?.name}
+          </p>
+          <ul className="mt-1 space-y-0.5 text-[12px] text-ink-2">
+            {med.dispenses.slice(0, 5).map((d) => (
+              <li key={d.id}>
+                <span className="tabular">{fmtDate(d.filledAt)}</span> filled {d.quantity} ({d.daysSupply} days)
+              </li>
+            ))}
+          </ul>
+          {fills.daysLate > 0 ? (
+            <p className="text-[12px] font-medium text-crit">Supply ran out {fills.daysLate} days ago.</p>
+          ) : fills.runsOutAt ? (
+            <p className="text-[12px] text-ink-3">Current supply lasts to {fmtDate(fills.runsOutAt)}.</p>
+          ) : null}
+        </section>
+        <section>
+          <h3 className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Refill protocol</h3>
+          <ul className="mt-1 space-y-1">
+            {protocol.map((p) => (
+              <li key={p.label} className="flex gap-2">
+                <span className={`w-4 shrink-0 text-center font-bold ${p.met ? "text-accent" : "text-crit"}`}>{p.met ? "✓" : "✗"}</span>
+                <span>
+                  {p.label}
+                  <span className="block text-[12px] text-ink-3">{p.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className={`mt-2 text-[12px] font-medium ${met ? "text-accent" : "text-warn"}`}>{met ? "Protocol met." : "Protocol not met: approve a short supply or ask for a visit or labs."}</p>
+        </section>
+      </div>
+      {warnings.length > 0 && (
+        <div className="px-4 pb-3">
+          <WarningList warnings={warnings} />
+        </div>
+      )}
+      {req.status === "pended" && req.pendedBy && (
+        <p className="mx-4 mb-3 rounded border border-accent/30 bg-accent-soft px-3 py-2 text-[12.5px]">
+          <span className="font-semibold">Pended by {displayName(req.pendedBy)}</span> {req.pendedAt && fmtDateTime(req.pendedAt)}
+          {req.pendNote && <span className="block text-ink-2">{req.pendNote}</span>}
+        </p>
+      )}
+
+      {canApprove ? (
+        <div className="space-y-2 border-t border-line bg-panel-muted px-4 py-3">
+          <ResultForm action={approveRefill.bind(null, req.id, next)} className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium text-ink-3">Dispense</span>
+              <input name="quantity" defaultValue={med.quantity ?? product?.quantity ?? ""} className={`${inputCls} w-36`} />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-medium text-ink-3">Refills{limit < 11 ? ` (max ${limit})` : ""}</span>
+              <input name="refills" type="number" min={0} max={limit} defaultValue={met ? Math.min(limit, med.refills || (product?.refills ?? 0)) : 0} className={`${inputCls} w-20`} />
+            </label>
+            <label className="flex min-w-48 flex-1 flex-col gap-0.5">
+              <span className="text-[11px] font-medium text-ink-3">Note to pharmacy</span>
+              <input name="note" placeholder={met ? "" : "e.g. 30-day supply; patient needs a visit"} className={inputCls} />
+            </label>
+            {stops.length > 0 && (
+              <label className="flex min-w-48 flex-col gap-0.5">
+                <span className="text-[11px] font-medium text-crit">Override reason</span>
+                <input name="overrideReason" className={inputCls} />
+              </label>
+            )}
+            {attendings.length > 0 && (
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-medium text-ink-3">Cosigning attending</span>
+                <select name="cosignerId" defaultValue="" className={inputCls}>
+                  <option value="">Choose</option>
+                  {attendings.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <Button type="submit">Approve and send</Button>
+          </ResultForm>
+          <div className="flex flex-wrap items-end gap-2">
+            <form action={denyRefill.bind(null, req.id, next)} className="flex flex-wrap items-end gap-2">
+              <select name="reason" defaultValue="" required className={inputCls} aria-label="Reason to deny">
+                <option value="" disabled>
+                  Deny reason…
+                </option>
+                {DENY_REASONS.map((r) => (
+                  <option key={r}>{r}</option>
+                ))}
+              </select>
+              <input name="note" placeholder="Note (optional)" className={`${inputCls} w-48`} />
+              <Button type="submit" variant="danger">
+                Deny
+              </Button>
+            </form>
+            <Link href={`/patients/${med.patientId}/meds?rx=${med.id}&modify=1&refill=${req.id}#prescribe`} className="ml-auto text-[12.5px] font-medium text-accent hover:underline">
+              Change dose or quantity in chart
+            </Link>
+          </div>
+        </div>
+      ) : req.status === "requested" ? (
+        <form action={pendRefill.bind(null, req.id, next)} className="flex items-end gap-2 border-t border-line bg-panel-muted px-4 py-3">
+          <label className="flex flex-1 flex-col gap-0.5">
+            <span className="text-[11px] font-medium text-ink-3">Note for the prescriber</span>
+            <input name="note" defaultValue={pendDefault} className={inputCls} />
+          </label>
+          <Button type="submit">Pend for approval</Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+function docSummary(draft: unknown) {
+  const d = DocDraftSchema.safeParse(draft);
+  if (!d.success) return "";
+  const parts = [d.data.title, d.data.organization].filter(Boolean).join(" from ");
+  return parts ? `${docTypeLabel[d.data.type]}: ${parts}.` : "";
 }

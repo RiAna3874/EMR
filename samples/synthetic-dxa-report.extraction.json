@@ -1,0 +1,126 @@
+{
+  "document_type": "imaging_report",
+  "title": "DXA BONE DENSITOMETRY, AXIAL SKELETON",
+  "organization": "Lakeview Imaging Associates",
+  "author": "Martin Osei, MD",
+  "service_date": "2026-10-07",
+  "admission_date": null,
+  "discharge_date": null,
+  "patient_name": "FERREIRA, ROSALIND",
+  "patient_dob": "1950-05-08",
+  "patient_age": "76 Y",
+  "patient_sex": "F",
+  "patient_id": "LIA-208833",
+  "modality": "DXA",
+  "body_part": "Lumbar spine and left hip",
+  "impression": "1. Osteoporosis, lowest T-score -2.9 at the lumbar spine.\n2. Statistically significant 4.1% decline in lumbar spine BMD since 09/2024 despite alendronate therapy.\n3. High 10-year fracture risk by FRAX.",
+  "notes": [],
+  "sections": [
+    {
+      "heading": "Indication",
+      "text": "Age-related osteoporosis on alendronate since 2020. Prior right femoral neck fracture. Follow-up.",
+      "box": {
+        "x0": 52,
+        "y0": 274,
+        "x1": 1048,
+        "y1": 327
+      },
+      "file": 1
+    },
+    {
+      "heading": "Comparison",
+      "text": "DXA 09/12/2024, same scanner.",
+      "box": {
+        "x0": 52,
+        "y0": 337,
+        "x1": 1048,
+        "y1": 390
+      },
+      "file": 1
+    },
+    {
+      "heading": "Findings",
+      "text": "Region BMD (g/cm²) T-score Z-score Change vs 2024\nLumbar spine L1-L4 0.712 -2.9 -0.9 -4.1% (significant)\nLeft femoral neck 0.556 -2.6 -0.4 -1.2% (not significant)\nLeft total hip 0.648 -2.3 -0.3 -0.9% (not significant)\nRight hip not scanned (prior fracture fixation hardware). No vertebral levels excluded.\nFRAX 10-year probability (femoral neck BMD): major osteoporotic fracture 24%, hip fracture 7.8%.",
+      "box": {
+        "x0": 52,
+        "y0": 400,
+        "x1": 1048,
+        "y1": 589
+      },
+      "file": 1
+    },
+    {
+      "heading": "Impression",
+      "text": "1. Osteoporosis, lowest T-score -2.9 at the lumbar spine.\n2. Statistically significant 4.1% decline in lumbar spine BMD since 09/2024 despite alendronate therapy.\n3. High 10-year fracture risk by FRAX.",
+      "box": {
+        "x0": 52,
+        "y0": 599,
+        "x1": 1048,
+        "y1": 732
+      },
+      "file": 1
+    },
+    {
+      "heading": "Recommendations",
+      "text": "Consider evaluation for secondary causes of bone loss and review of adherence and treatment (e.g., anabolic or parenteral therapy).\nRepeat DXA in 2 years on the same scanner.",
+      "box": {
+        "x0": 52,
+        "y0": 742,
+        "x1": 1048,
+        "y1": 817
+      },
+      "file": 1
+    }
+  ],
+  "diagnoses": [
+    {
+      "text": "Osteoporosis, lowest T-score -2.9 at the lumbar spine.",
+      "kind": "finding",
+      "icd10": "M81.0",
+      "box": {
+        "x0": 63,
+        "y0": 633,
+        "x1": 1037,
+        "y1": 661
+      },
+      "file": 1
+    },
+    {
+      "text": "Statistically significant 4.1% decline in lumbar spine BMD since 09/2024 despite alendronate therapy.",
+      "kind": "finding",
+      "icd10": null,
+      "box": {
+        "x0": 63,
+        "y0": 661,
+        "x1": 1037,
+        "y1": 689
+      },
+      "file": 1
+    }
+  ],
+  "medications": [],
+  "follow_ups": [
+    {
+      "text": "Consider evaluation for secondary causes of bone loss and review of adherence and treatment (e.g., anabolic or parenteral therapy).",
+      "due": null,
+      "box": {
+        "x0": 78,
+        "y0": 766,
+        "x1": 1048,
+        "y1": 795
+      },
+      "file": 1
+    },
+    {
+      "text": "Repeat DXA in 2 years on the same scanner.",
+      "due": "2 years",
+      "box": {
+        "x0": 78,
+        "y0": 789,
+        "x1": 1048,
+        "y1": 817
+      },
+      "file": 1
+    }
+  ]
+}

@@ -4,11 +4,14 @@ import { db } from "@/lib/db";
 import { toLocalDate } from "@/lib/format";
 import { draftFromExtraction, type History } from "./draft";
 import { describeExtractionError, extractLabReport } from "./extract";
+import { runDocumentExtraction } from "@/lib/documents/server";
 
 // An extraction still "running" after this long was cut off (e.g. a server restart).
 export const STALE_EXTRACTION_MS = 10 * 60_000;
 
 export async function runExtraction(jobId: string) {
+  const job = await db.importJob.findUnique({ where: { id: jobId }, select: { kind: true } });
+  if (job?.kind === "document") return runDocumentExtraction(jobId);
   const docs = await db.documentReference.findMany({ where: { importJobId: jobId }, orderBy: { position: "asc" } });
   try {
     const { report, model } = await extractLabReport(
