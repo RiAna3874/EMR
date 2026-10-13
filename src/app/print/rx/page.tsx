@@ -5,6 +5,7 @@ import { age, fmtDate, fmtDateOnly, fmtDateTime, fmtDob, sexShort } from "@/lib/
 import { scheduleOf } from "@/lib/meds/checks";
 import { numberWords, quantityCount, sigText } from "@/lib/meds/sig";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
   const med = sp.med ? await db.medicationRequest.findUnique({ where: { id: sp.med }, include: { patient: { include: { allergies: true } }, prescriber: true, cosigner: true } }) : null;
   if (!med || med.rxClass === "historical") notFound();
   const p = med.patient;
+  await logChartView(p.id, "Prescription", "print");
   const count = quantityCount(med.quantity);
   const schedule = scheduleOf(med.drug);
 

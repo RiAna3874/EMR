@@ -5,6 +5,7 @@ import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
 import { Button, Field, inputCls } from "@/components/form";
 import { addAllergy, markNoKnownAllergies, removeAllergy } from "../actions";
+import { logChartView } from "@/lib/audit/server";
 
 const severityStyles = {
   mild: "bg-panel-muted text-ink-2",
@@ -15,6 +16,7 @@ const severityStyles = {
 export default async function Allergies({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Allergies");
   const canEdit = can(currentUser.role, "editAllergies");
   const patient = await db.patient.findUnique({ where: { id }, include: { allergies: { orderBy: { recordedAt: "desc" } } } });
   if (!patient) notFound();

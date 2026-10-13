@@ -218,7 +218,14 @@ model Practitioner {
   isAdmin            Boolean   @default(false)
   // Set when an admin issues a temporary password; the user must pick their own before using the app.
   mustChangePassword Boolean   @default(false)
+  // Two-step sign-in with an authenticator app (TOTP, src/lib/totp.ts). Set up at /account/two-step.
+  totpSecret         String? // base32; null until set up
+  totpPendingSecret  String? // shown as a QR code while setting up, until the first code is confirmed
+  totpEnabledAt      DateTime?
+  totpLastStep       Int? // the last 30-second step used, so a code can't be used twice
+  recoveryCodes      String[]  @default([]) // sha256 of each unused one-time recovery code
   sessions     Session[]
+  signInChallenges SignInChallenge[]
 
   primaryPatients    Patient[]            @relation("PCP")
   encounters         Encounter[]
@@ -262,6 +269,37 @@ model Session {
   expiresAt      DateTime
 
   @@index([practitionerId])
+}
+
+// Between a correct password and the authenticator code. The cookie holds the token; this row its sha256.
+model SignInChallenge {
+  id             String       @id
+  practitionerId String
+  practitioner   Practitioner @relation(fields: [practitionerId], references: [id], onDelete: Cascade)
+  next           String
+  attempts       Int          @default(0)
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+}
+
+// The access log: who opened, printed or changed which chart, and every sign-in. Written by
+// src/lib/audit; read at /admin/access-log. Append-only: a database trigger refuses UPDATE
+// and DELETE. Plain columns, no foreign keys, so entries outlive accounts and charts.
+model AuditEvent {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  actorId   String?
+  actorName String? // username at the time
+  action    String // see AuditAction in src/lib/audit/labels.ts
+  patientId String?
+  subject   String // what was touched: a chart section, a record type, an account
+  recordId  String?
+  detail    String? // never clinical content: field names, counts, usernames
+  ip        String?
+
+  @@index([patientId, at])
+  @@index([actorId, at])
+  @@index([at])
 }
 
 model Patient {

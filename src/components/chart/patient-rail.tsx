@@ -14,7 +14,19 @@ type RailChat = { id: string; name: string; at: Date };
 
 // `clinical` false (front desk) keeps demographics, allergies and the next visit only.
 // `chats` is null for a role without secure chat.
-export function PatientRail({ patient: p, vitals, clinical, chats }: { patient: RailPatient; vitals: Observation[]; clinical: boolean; chats: RailChat[] | null }) {
+export function PatientRail({
+  patient: p,
+  vitals,
+  clinical,
+  chats,
+  admin = false,
+}: {
+  patient: RailPatient;
+  vitals: Observation[];
+  clinical: boolean;
+  chats: RailChat[] | null;
+  admin?: boolean;
+}) {
   const base = `/patients/${p.id}`;
   const v = Object.fromEntries(vitals.map((o) => [o.code, o]));
   const bp = v["8480-6"] && v["8462-4"] ? `${v["8480-6"].valueNum}/${v["8462-4"].valueNum}` : null;
@@ -152,6 +164,13 @@ export function PatientRail({ patient: p, vitals, clinical, chats }: { patient: 
             Message about this patient
           </Link>
         </RailSection>
+      )}
+      {admin && (
+        <div className="px-3 py-2 text-[12px]">
+          <Link href={`/admin/access-log?patient=${p.id}`} className="text-ink-3 hover:text-accent hover:underline">
+            Who has opened this chart
+          </Link>
+        </div>
       )}
     </aside>
   );

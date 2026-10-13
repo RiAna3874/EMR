@@ -369,6 +369,8 @@ async function refuseOnLiveData() {
 
 async function main() {
   await refuseOnLiveData();
+  // The access log refuses DELETE (append-only); a demo reseed empties it with TRUNCATE.
+  await prisma.$executeRawUnsafe(`TRUNCATE "AuditEvent"`);
   await prisma.$transaction([
     prisma.chatMessage.deleteMany(),
     prisma.conversationMember.deleteMany(),

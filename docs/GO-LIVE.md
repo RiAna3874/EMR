@@ -31,8 +31,8 @@ For reference, other countries:
 | First-run setup with a secret code | **Done** | Nobody else can claim the new site |
 | Admin-issued temporary passwords, forced change at first sign-in | **Done** | |
 | Synthetic data blocked from production | **Done** | Seed and reset refuse on a live database |
-| Audit log of who viewed and changed each chart | **Missing** | Required by HIPAA and GDPR; the first thing asked after a privacy complaint |
-| Two-factor sign-in (MFA) | **Missing** | A stolen password otherwise opens every chart |
+| Access log of who viewed, printed and changed each chart, and every sign-in | **Done** (Admin → Access log, CSV download; entries can't be edited or deleted) | Required by HIPAA and GDPR; the first thing asked after a privacy complaint |
+| Two-step sign-in (password plus an authenticator app code) | **Done**, required for every account on the live site; admins reset it for a lost phone | A stolen password otherwise opens every chart |
 | Self-service password reset by email | **Missing** (admins can reset) | Needs an email provider under a BAA |
 | Rate limiting that survives restarts and multiple servers | **Partial** (5 tries per minute per username, in memory) | Stops password guessing |
 | Backups with a tested restore | **Host feature**, must be switched on and practised | Losing a chart is a patient-safety event |
@@ -55,7 +55,7 @@ These are fine for a demo and not for real care:
 1. Ask a Bangladeshi lawyer whether patient records must stay in Bangladesh, and get a patient consent form drafted.
 2. Deploy now for training with test patients only (see [DEPLOY.md](DEPLOY.md)).
 3. Settle hosting from the lawyer's answer (Singapore, or a Bangladesh data centre); decide whether the photo import stays on.
-4. Build the audit log and MFA; set up monitoring and practise a backup restore.
+4. ~~Build the audit log and MFA~~ (done); set up monitoring and practise a backup restore.
 5. Decide on a licensed drug database and real e-prescribing, or turn prescribing off and print only.
 6. Independent security review, written policies, staff training.
 7. Then set `MERIDIAN_CLEARED_FOR_REAL_PATIENTS=1` and start with real patients.

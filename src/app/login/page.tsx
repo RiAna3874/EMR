@@ -8,8 +8,8 @@ import { SignInForm } from "./sign-in-form";
 
 export const metadata = { title: "Sign in · Meridian EMR" };
 
-export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  const { next } = await searchParams;
+export default async function Login({ searchParams }: { searchParams: Promise<{ next?: string; expired?: string }> }) {
+  const { next, expired } = await searchParams;
   if (await getCurrentUser()) redirect(safeNext(next));
   // A brand-new, empty database: make the first administrator.
   if (await needsSetup()) redirect("/setup");
@@ -33,6 +33,11 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
           </svg>
           <span className="text-lg font-semibold tracking-wide">Meridian</span>
         </div>
+        {expired && (
+          <p role="alert" className="mb-3 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
+            {expired === "tries" ? "Too many wrong codes. Sign in again with your password." : "Two-step sign-in timed out. Sign in again."}
+          </p>
+        )}
         <SignInForm next={safeNext(next)} demo={demo} />
         {dataNotice && <p className="mt-4 text-center text-[11.5px] text-white/60">{dataNotice.text}</p>}
       </div>

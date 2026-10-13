@@ -11,6 +11,7 @@ import { Button } from "@/components/form";
 import { VitalsFields } from "@/components/vitals-fields";
 import { TrendChart, type TrendSeries } from "@/components/trend-chart";
 import { recordVitals } from "../actions";
+import { logChartView } from "@/lib/audit/server";
 
 const MAX_COLUMNS = 8;
 
@@ -27,6 +28,7 @@ const GRAPHS: { title: string; codes: string[]; unit: string; low?: number; high
 export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string }> }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Vitals");
   const graph = (await searchParams).view === "graph";
   const observations = await db.observation.findMany({ where: { patientId: id, category: "vital_signs" } });
   const { times, rows } = pivot(observations);

@@ -6,6 +6,7 @@ import { docTypeLabel } from "@/lib/documents/draft";
 import { filedDocInclude, toFiledDoc } from "@/lib/documents/server";
 import { DocView } from "@/components/documents/doc-view";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
+import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function PrintDocument({ searchParams }: { searchParams: Pr
   if (!raw) notFound();
   const doc = toFiledDoc(raw);
   const p = raw.patient;
+  await logChartView(p.id, "Outside document", "print");
 
   return (
     <PrintShell back={`/patients/${p.id}/documents?doc=${doc.id}`}>

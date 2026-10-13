@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getCurrentUser } from "@/lib/session";
+import { getActiveUser } from "@/lib/session";
 import { age, fmtDob, fullName, sexShort } from "@/lib/format";
 
 // Patient lookup for the command palette: name (either order), MRN, or DOB (MM/DD/YYYY).
 export async function GET(req: NextRequest) {
-  if (!(await getCurrentUser())) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (!(await getActiveUser())) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
   if (q.length < 2) return NextResponse.json([]);
 

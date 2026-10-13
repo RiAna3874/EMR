@@ -58,7 +58,7 @@ export default async function ChartLayout({ children, params }: { children: Reac
 
   return (
     <div className="flex h-full">
-      <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} chats={allowed.includes("useChat") ? chats : null} />
+      <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} chats={allowed.includes("useChat") ? chats : null} admin={currentUser.isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, meds: refillRequests, notes: drafts, orders: unsignedOrders, documents: docsToReview, import: toVerify }} allowed={allowed} />
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>

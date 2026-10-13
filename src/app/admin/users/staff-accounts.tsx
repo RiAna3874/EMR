@@ -6,7 +6,7 @@ import { Button, Field, inputCls } from "@/components/form";
 import { roleLabel } from "@/lib/roles";
 import { addAccount, manageAccount, type AdminState } from "./actions";
 
-type Account = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; active: boolean; mustChangePassword: boolean };
+type Account = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; active: boolean; mustChangePassword: boolean; twoStep: boolean };
 
 const roles = Object.entries(roleLabel) as [Role, string][];
 
@@ -59,6 +59,7 @@ export function StaffAccounts({ accounts, meId }: { accounts: Account[]; meId: s
             <th className="px-3 py-1.5 font-medium">Username</th>
             <th className="px-3 py-1.5 font-medium">Role</th>
             <th className="px-3 py-1.5 font-medium">Status</th>
+            <th className="px-3 py-1.5 font-medium">Two-step</th>
             <th className="px-3 py-1.5" />
           </tr>
         </thead>
@@ -76,7 +77,7 @@ export function StaffAccounts({ accounts, meId }: { accounts: Account[]; meId: s
             );
             return editing === a.id ? (
               <tr key={a.id} className="border-t border-line bg-accent-soft/40">
-                <td colSpan={5} className="px-3 py-2">
+                <td colSpan={6} className="px-3 py-2">
                   <form
                     action={(f) => {
                       setLast("manage");
@@ -123,11 +124,13 @@ export function StaffAccounts({ accounts, meId }: { accounts: Account[]; meId: s
                 <td className="px-3 py-1.5 text-[12px]">
                   {!a.active ? "Deactivated" : a.mustChangePassword ? <span className="text-warn">Temporary password</span> : "Active"}
                 </td>
+                <td className="px-3 py-1.5 text-[12px]">{a.twoStep ? "On" : <span className="text-ink-3">Not set up</span>}</td>
                 <td className="whitespace-nowrap px-3 py-1.5 text-right">
                   <Button type="button" variant="ghost" onClick={() => setEditing(a.id)}>
                     Edit
                   </Button>
                   {a.active && op("resetPassword", "Reset password")}
+                  {a.active && a.twoStep && !self && op("resetTwoStep", "Reset two-step")}
                   {!self && a.active && op(a.isAdmin ? "removeAdmin" : "makeAdmin", a.isAdmin ? "Remove admin" : "Make admin")}
                   {!self && (a.active ? op("deactivate", "Deactivate", "danger") : op("reactivate", "Reactivate"))}
                 </td>

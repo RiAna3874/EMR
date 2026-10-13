@@ -5,11 +5,13 @@ import { fmtDateTime } from "@/lib/format";
 import { Empty, Panel } from "@/components/panel";
 import { UploadForm } from "@/components/import/upload-form";
 import { ImportStatusChip } from "@/components/import/status-chip";
+import { logChartView } from "@/lib/audit/server";
 
 export default async function ImportReport({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ kind?: string }> }) {
   const { id } = await params;
   const { kind } = await searchParams;
   await requirePermission("importReports");
+  await logChartView(id, "Import");
   const jobs = await db.importJob.findMany({
     where: { patientId: id },
     orderBy: { createdAt: "desc" },

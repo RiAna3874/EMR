@@ -13,10 +13,12 @@ import { PendingOrders, type PendingRow } from "@/components/orders/pending-orde
 import { medSig, OrderStatusChip, OrderTypeIcon, PriorityChip } from "@/components/orders/order-bits";
 import { ActionButton } from "@/components/action-button";
 import { addOrder, addOrderSet, completeOrder, discontinueOrder, removePendingOrder, signOrders, updatePendingOrder } from "./actions";
+import { logChartView } from "@/lib/audit/server";
 
 export default async function Orders({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ add?: string; history?: string }> }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Orders");
   const canPend = can(currentUser.role, "pendOrders");
   const canSign = can(currentUser.role, "signOrders");
   const sp = await searchParams;

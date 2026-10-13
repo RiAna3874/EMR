@@ -1,6 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
+import { db, type Tx } from "@/lib/db";
 import { orderContext } from "@/lib/orders/server";
 import type { OrderContext } from "@/lib/orders/checks";
 import { fillStatus, refillProtocol } from "./checks";
@@ -41,7 +40,7 @@ export async function refillReview(medicationId: string) {
 // Writes a signed prescription. A reorder, change or refill keeps the therapy's
 // start date and replaces the prescription it follows.
 export async function writePrescription(
-  tx: Prisma.TransactionClient,
+  tx: Tx,
   rx: RxDetails & { patientId: string; drug: string; rxnorm: string | null; indication: string | null; prescriberId: string; cosignerId: string | null; pharmacyNote?: string | null },
 ) {
   const now = new Date();

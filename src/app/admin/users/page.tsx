@@ -13,7 +13,7 @@ export default async function StaffAccountsPage({ searchParams }: { searchParams
   const accounts = await db.practitioner.findMany({
     where: { username: { not: null } },
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, credentials: true, role: true, username: true, isAdmin: true, active: true, mustChangePassword: true },
+    select: { id: true, name: true, credentials: true, role: true, username: true, isAdmin: true, active: true, mustChangePassword: true, totpEnabledAt: true },
   });
   return (
     <div className="h-full overflow-y-auto bg-bg">
@@ -28,7 +28,7 @@ export default async function StaffAccountsPage({ searchParams }: { searchParams
             You&apos;re the first administrator. Add the rest of your staff below.
           </p>
         )}
-        <StaffAccounts accounts={accounts.map((a) => ({ ...a, username: a.username! }))} meId={me.id} />
+        <StaffAccounts accounts={accounts.map(({ totpEnabledAt, ...a }) => ({ ...a, username: a.username!, twoStep: !!totpEnabledAt }))} meId={me.id} />
       </div>
     </div>
   );

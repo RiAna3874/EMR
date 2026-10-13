@@ -10,6 +10,7 @@ import { Sparkline } from "@/components/sparkline";
 import { TrendChart } from "@/components/trend-chart";
 import { Button } from "@/components/form";
 import { acknowledgeResult } from "@/app/inbox/actions";
+import { logChartView } from "@/lib/audit/server";
 
 const MAX_COLUMNS = 6;
 
@@ -22,6 +23,7 @@ export default async function Results({
 }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
+  await logChartView(id, "Results");
   const sp = await searchParams;
   const base = `/patients/${id}/results`;
   const reports = await db.diagnosticReport.findMany({
