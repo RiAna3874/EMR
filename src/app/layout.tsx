@@ -17,8 +17,9 @@ export const dynamic = "force-dynamic";
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // Signed out, only the sign-in page renders (the middleware sends everything else there).
   const user = await getCurrentUser();
+  // Browser extensions (e.g. QuillBot) add attributes to <html> before React loads.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="flex h-screen flex-col antialiased print:block print:h-auto">
         {user && (
           <TopBar
