@@ -28,6 +28,12 @@ export async function startSession(practitionerId: string) {
   });
 }
 
+// After a password change: sign out everywhere else.
+export async function endOtherSessions(practitionerId: string) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  await db.session.deleteMany({ where: { practitionerId, ...(token ? { id: { not: tokenId(token) } } : {}) } });
+}
+
 export async function endSession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
@@ -48,7 +54,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   }
   if (now - session.lastSeenAt.getTime() > TOUCH_MS) await db.session.update({ where: { id }, data: { lastSeenAt: new Date(now) } });
   const p = session.practitioner;
-  return { id: p.id, name: p.name, credentials: p.credentials, role: p.role, username: p.username ?? "" };
+  return { id: p.id, name: p.name, credentials: p.credentials, role: p.role, username: p.username ?? "", isAdmin: p.isAdmin, mustChangePassword: p.mustChangePassword };
 });
 
 // Only same-site paths, so a crafted link can't bounce a fresh sign-in elsewhere.
@@ -56,9 +62,18 @@ export const safeNext = (next: string | undefined) =>
   next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") && !next.startsWith("/login") ? next : "/";
 
 // For pages and server actions: the signed-in user, or off to the sign-in screen.
+// Someone still on a temporary password is sent to choose their own first.
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/account/password");
+  return user;
+}
+
+// Staff account management (/admin/users).
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!user.isAdmin) redirect("/?denied=admin");
   return user;
 }
 

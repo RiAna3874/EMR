@@ -282,10 +282,10 @@ const patients: PatientDef[] = [
 ];
 
 // Synthetic staff. Every account signs in with DEMO_PASSWORD; the sign-in page
-// lists them outside production.
+// lists them outside production. Dana Chen is also the demo administrator.
 const DEMO_PASSWORD = "meridian";
 const practitioners = [
-  { id: "prac_chen", username: "dchen", name: "Dana Chen", role: "physician" as const, credentials: "MD" },
+  { id: "prac_chen", username: "dchen", name: "Dana Chen", role: "physician" as const, credentials: "MD", isAdmin: true },
   { id: "prac_ibarra", username: "ribarra", name: "Rafael Ibarra", role: "physician" as const, credentials: "DO" },
   { id: "prac_brandt", username: "lbrandt", name: "Leo Brandt", role: "resident" as const, credentials: "MD" },
   { id: "prac_marsh", username: "hmarsh", name: "Helena Marsh", role: "physician" as const, credentials: "MD" },
@@ -350,7 +350,25 @@ function flagFor(value: number, a: { low: number; high: number; critLow?: number
   return "N";
 }
 
+// The seed wipes every table before loading synthetic patients, so it must never
+// run against a live clinic's database.
+async function refuseOnLiveData() {
+  if (process.env.NODE_ENV === "production" && process.env.MERIDIAN_DEMO_ACCOUNTS !== "1") {
+    throw new Error("Refusing to load synthetic demo data in production (NODE_ENV=production). Live sites start empty: see docs/DEPLOY.md.");
+  }
+  const demoUsernames = practitioners.map((p) => p.username);
+  const real = await prisma.practitioner.findMany({ where: { username: { notIn: demoUsernames } }, select: { username: true }, take: 5 });
+  // Accounts made at /setup or /admin/users mean this database is in real use.
+  if (real.length) {
+    throw new Error(
+      `Refusing to seed: this database has staff accounts that aren't demo accounts (${real.map((r) => r.username ?? "unnamed").join(", ")}). ` +
+        "Seeding would erase everything in it. Use a separate database for the demo.",
+    );
+  }
+}
+
 async function main() {
+  await refuseOnLiveData();
   await prisma.$transaction([
     prisma.chatMessage.deleteMany(),
     prisma.conversationMember.deleteMany(),
