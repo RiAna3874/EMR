@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { age, fmtDate, fmtDateOnly, fmtDateTime, fmtDob, sexShort } from "@/lib/format";
-import { scheduleOf } from "@/lib/meds/checks";
+import { isControlled } from "@/lib/meds/checks";
 import { numberWords, quantityCount, sigText } from "@/lib/meds/sig";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
 import { logChartView } from "@/lib/audit/server";
@@ -19,7 +19,6 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
   const p = med.patient;
   await logChartView(p.id, "Prescription", "print");
   const count = quantityCount(med.quantity);
-  const schedule = scheduleOf(med.drug);
 
   return (
     <PrintShell back={`/patients/${p.id}/meds`}>
@@ -52,7 +51,7 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
         <div className="flex-1 space-y-2 text-[13px]">
           <div className="text-[16px] font-bold">
             {med.drug}
-            {schedule && <span className="ml-2 rounded border border-black px-1 text-[11px]">Controlled drug</span>}
+            {isControlled(med.drug) && <span className="ml-2 rounded border border-black px-1 text-[11px]">Controlled drug</span>}
           </div>
           <div>
             <span className="font-semibold">Sig: </span>

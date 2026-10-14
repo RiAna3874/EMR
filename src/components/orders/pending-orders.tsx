@@ -17,8 +17,6 @@ export type PendingRow = {
   // Set when someone other than the viewer pended it.
   pendedBy: string | null;
   warnings: OrderWarning[];
-  // Controlled substance (needs the prescription monitoring program checked).
-  controlled?: boolean;
 };
 
 const OVERRIDE_REASONS = ["Benefit outweighs risk", "Tolerated before without reaction", "Will monitor closely", "Dose intended", "Alert not applicable"];
@@ -41,7 +39,6 @@ export function PendingOrders({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const stops = rows.filter((r) => r.warnings.some((w) => w.level === "stop"));
-  const controlled = rows.filter((r) => r.controlled);
   const hasRx = rows.some((r) => r.type === "medication");
   const [override, setOverride] = useState("");
 
@@ -138,14 +135,6 @@ export function PendingOrders({
                     {r}
                   </button>
                 ))}
-              </span>
-            </label>
-          )}
-          {controlled.length > 0 && (
-            <label className="flex items-start gap-1.5 text-[12px]">
-              <input type="checkbox" name="pdmpChecked" className="mt-0.5" />
-              <span>
-                I checked the state prescription monitoring program for {controlled.map((c) => c.display).join(", ")}.
               </span>
             </label>
           )}

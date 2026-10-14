@@ -1,11 +1,11 @@
 // Prescribing checks. Pure, so the composer warns while the prescription is
 // being written, the pending list and the Inbox show the same warnings, and
 // signing re-runs them on the server.
-import { classesForAllergy, classesOf, DUPLICATE_CLASSES, ingredientsOf, interactionsBetween, type Schedule } from "./drugs";
+import { classesForAllergy, classesOf, DUPLICATE_CLASSES, ingredientsOf, interactionsBetween } from "./drugs";
 import { productFor } from "./formulary";
 import { doseMg, timesPerDay } from "./sig";
 
-export type MedWarning = { level: "stop" | "caution"; text: string; kind?: "allergy" | "interaction" | "duplicate" | "dose" | "kidney" | "older adult" | "controlled" };
+export type MedWarning = { level: "stop" | "caution"; text: string; kind?: "allergy" | "interaction" | "duplicate" | "dose" | "kidney" | "older adult" | "controlled" | "not checked" };
 
 export type MedCheckContext = {
   allergies: { substance: string; severity: string }[];
@@ -17,12 +17,11 @@ export type MedCheckContext = {
 
 export type RxInput = { dose?: string; frequency?: string; refills?: number };
 
-export const scheduleOf = (drug: string): Schedule | undefined => ingredientsOf(drug).find((i) => i.schedule)?.schedule;
+export const isControlled = (drug: string) => ingredientsOf(drug).some((i) => i.controlled);
 
-// Refills the law allows: none for C-II, at most 5 for C-III to C-V.
+// Controlled drugs get no refills: each supply needs a new prescription.
 export function maxRefills(drug: string) {
-  const s = scheduleOf(drug);
-  return s === "II" ? 0 : s ? 5 : 11;
+  return isControlled(drug) ? 0 : 11;
 }
 
 const firstWord = (drug: string) => drug.split(/[\s-]/)[0].toLowerCase();
@@ -31,6 +30,9 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
   const out: MedWarning[] = [];
   const ingredients = ingredientsOf(drug);
   const classes = classesOf(drug);
+  if (!ingredients.length) {
+    out.push({ kind: "not checked", level: "caution", text: `${drug} isn't in the clinic's drug list, so allergies, interactions and dose weren't checked. Check them yourself.` });
+  }
 
   for (const a of ctx.allergies) {
     const allergic = classesForAllergy(a.substance);
@@ -84,13 +86,11 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
     for (const i of ingredients) if (i.olderAdult) out.push({ kind: "older adult", level: "caution", text: `Age ${ctx.ageYears}: ${i.olderAdult}` });
   }
 
-  const schedule = scheduleOf(drug);
-  if (schedule) {
-    const max = maxRefills(drug);
-    if (rx?.refills !== undefined && rx.refills > max) {
-      out.push({ kind: "controlled", level: "stop", text: `Schedule ${schedule} prescriptions allow ${max === 0 ? "no refills" : `at most ${max} refills`}.` });
+  if (isControlled(drug)) {
+    if (rx?.refills !== undefined && rx.refills > maxRefills(drug)) {
+      out.push({ kind: "controlled", level: "stop", text: "Controlled drugs can't have refills. Write a new prescription for each supply." });
     } else {
-      out.push({ kind: "controlled", level: "caution", text: `Controlled substance, schedule ${schedule}. Check the state prescription monitoring program before signing.` });
+      out.push({ kind: "controlled", level: "caution", text: "Controlled drug. Prescribe the smallest amount needed and keep the clinic's register up to date." });
     }
   }
   return out;

@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/session";
 import { can, displayName, needsCosign } from "@/lib/roles";
 import { fmtDate, fmtDateOnly, fmtDateTime, relativeDays } from "@/lib/format";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
-import { fillStatus, interactionsAmong, scheduleOf } from "@/lib/meds/checks";
+import { fillStatus, interactionsAmong, isControlled } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { rxClassLabel, type RxDetails } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
@@ -107,7 +107,6 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
     orderSet: o.orderSet,
     pendedBy: o.orderedById === currentUser.id ? null : o.orderedBy.name,
     warnings: warnings.get(o.id) ?? [],
-    controlled: o.type === "medication" && !!scheduleOf(o.display),
   }));
 
   const reviewedToday = patient.medsReviewedAt && patient.medsReviewedAt.toDateString() === new Date().toDateString();
@@ -239,7 +238,6 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                   const product = productFor(m);
                   const fs = fillStatus(m.dispenses, m.refills, now);
                   const history = chain(m);
-                  const schedule = scheduleOf(m.drug);
                   const awaitingCosign = m.cosignerId && !m.cosignedAt;
                   const pendingRx = pendingFor.get(m.id);
                   const outside = m.rxClass === "historical";
@@ -250,7 +248,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="font-medium">{m.drug}</span>
                           {m.status === "on_hold" && <Chip tone="warn">ON HOLD</Chip>}
-                          {schedule && <Chip tone="crit">C-{schedule}</Chip>}
+                          {isControlled(m.drug) && <Chip tone="crit">Controlled</Chip>}
                           {outside && <Chip tone="muted">OUTSIDE / OTC</Chip>}
                           {awaitingCosign && <Chip tone="accent">AWAITING COSIGN</Chip>}
                           {pendingRx && <Chip tone="warn">CHANGE PENDING</Chip>}

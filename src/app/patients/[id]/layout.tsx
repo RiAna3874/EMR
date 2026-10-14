@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { can, PERMISSIONS, type Permission } from "@/lib/roles";
@@ -26,6 +26,8 @@ export default async function ChartLayout({ children, params }: { children: Reac
     },
   });
   if (!patient) notFound();
+  // A duplicate merged into another chart opens that chart instead.
+  if (patient.mergedIntoId) redirect(`/patients/${patient.mergedIntoId}`);
 
   const [vitals, abnormal, drafts, toVerify, unsignedOrders, refillRequests, docsToReview, conversations] = await Promise.all([
     latestVitals(id),

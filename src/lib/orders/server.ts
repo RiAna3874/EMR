@@ -2,7 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { db, type Tx } from "@/lib/db";
 import { age } from "@/lib/format";
-import { orderableByCode, satisfyingCodes } from "./catalog";
+import { orderableByCode, orderableFor, satisfyingCodes } from "./catalog";
 import { orderWarnings, type OrderContext, type OrderWarning } from "./checks";
 import type { RxDetails } from "@/lib/meds/rx";
 
@@ -65,7 +65,7 @@ export async function pendingOrderWarnings(pending: PendingLike[], ctx: OrderCon
   );
   const out = new Map<string, OrderWarning[]>();
   for (const p of pending) {
-    const def = orderableByCode.get(p.code);
+    const def = orderableFor(p.code);
     if (!def) {
       out.set(p.id, []);
       continue;

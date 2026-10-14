@@ -3,8 +3,8 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { OrderContext } from "@/lib/orders/checks";
-import { FORMULARY, productByCode, type Product } from "@/lib/meds/formulary";
-import { medWarnings, scheduleOf } from "@/lib/meds/checks";
+import { FORMULARY, offListProduct, productFor, type Product } from "@/lib/meds/formulary";
+import { isControlled, medWarnings } from "@/lib/meds/checks";
 import type { RxDetails } from "@/lib/meds/rx";
 import { RxForm, type PharmacyOption } from "./rx-form";
 
@@ -47,7 +47,10 @@ export function RxComposer({
   const [pending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
   const results = useMemo(() => search(q), [q]);
-  const product: Product | undefined = start ? productByCode.get(start.code) : undefined;
+  const product: Product | undefined = start ? productFor({ code: start.code }) : undefined;
+  // Anything typed can be prescribed by name when the list doesn't have it.
+  const offList = q.trim().length >= 3 ? offListProduct(q) : undefined;
+  const pickOffList = () => offList && setStart({ code: `RX:${offList.rxnorm}` });
 
   const clear = () => {
     setStart(undefined);
@@ -80,17 +83,19 @@ export function RxComposer({
                 } else if (e.key === "Enter" && results[active]) {
                   e.preventDefault();
                   setStart({ code: `RX:${results[active].rxnorm}` });
+                } else if (e.key === "Enter" && offList) {
+                  e.preventDefault();
+                  pickOffList();
                 }
               }}
-              placeholder="Search medications by name, brand or use (e.g. lisinopril, zofran, gout)…"
+              placeholder="Search medications by name, brand or use (e.g. napa, seclo, metformin, gout)…"
               className="w-full rounded border border-line bg-panel px-2 py-1 text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
               aria-label="Search medications"
             />
-            {results.length > 0 && (
+            {(results.length > 0 || offList) && (
               <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded border border-line bg-panel shadow-lg" role="listbox">
                 {results.map((p, i) => {
                   const w = medWarnings(p.display, { dose: p.dose, frequency: p.frequency, refills: p.refills }, ctx);
-                  const s = scheduleOf(p.display);
                   return (
                     <li key={p.rxnorm} role="option" aria-selected={i === active}>
                       <button
@@ -105,7 +110,7 @@ export function RxComposer({
                             {p.dose} {p.frequency}
                           </span>
                         </span>
-                        {s && <span className="rounded bg-crit-soft px-1 text-[10px] font-bold text-crit">C-{s}</span>}
+                        {isControlled(p.display) && <span className="rounded bg-crit-soft px-1 text-[10px] font-bold text-crit">Controlled</span>}
                         {w.some((x) => x.level === "stop") ? (
                           <span className="rounded bg-crit-soft px-1.5 text-[10.5px] font-semibold text-crit">ALERT</span>
                         ) : w.some((x) => x.kind !== "controlled") ? (
@@ -115,6 +120,20 @@ export function RxComposer({
                     </li>
                   );
                 })}
+                {offList && (
+                  <li role="option" aria-selected={!results.length}>
+                    <button
+                      type="button"
+                      onClick={pickOffList}
+                      className={`flex w-full items-center gap-2 border-t border-line px-3 py-1.5 text-left first:border-t-0 ${results.length ? "" : "bg-accent-soft"}`}
+                    >
+                      <span className="flex-1">
+                        Prescribe “{offList.display}” by name
+                        <span className="ml-2 text-[11.5px] text-ink-3">not on the list; checks may not cover it</span>
+                      </span>
+                    </button>
+                  </li>
+                )}
               </ul>
             )}
           </div>
@@ -143,7 +162,7 @@ export function RxComposer({
         />
       ) : (
         <p className="px-3 py-2.5 text-[12px] text-ink-3">
-          Checks run as you write: allergies, interactions with current medications, duplicate therapy, dose limits, kidney function, age, and controlled-substance rules.
+          Checks run as you write: allergies, interactions with current medications, duplicate therapy, dose limits, kidney function, age, and controlled-drug rules. Anything not on the list can be prescribed by name, unchecked.
         </p>
       )}
     </section>
