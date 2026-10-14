@@ -29,6 +29,7 @@ test("finds the patient from the result, the data, a connect, or the filter", ()
 
 test("addenda, visit events and chat messages reach the patient through their parent", () => {
   assert.deepEqual(parentOf("NoteAddendum", { data: { noteId: "n1" } }, null), { model: "Note", id: "n1" });
+  assert.deepEqual(parentOf("NoteVersion", { data: { noteId: "n2" } }, null), { model: "Note", id: "n2" });
   assert.deepEqual(parentOf("EncounterEvent", {}, { encounterId: "e1" }), { model: "Encounter", id: "e1" });
   assert.deepEqual(parentOf("ChatMessage", {}, { conversationId: "c1" }), { model: "Conversation", id: "c1" });
   assert.equal(parentOf("Note", {}, { patientId: "p" }), null);

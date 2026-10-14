@@ -18,7 +18,7 @@ export default async function PrintNote({ searchParams }: { searchParams: Promis
   const note = id
     ? await db.note.findUnique({
         where: { id },
-        include: { patient: true, author: true, cosigner: true, addenda: { include: { author: true }, orderBy: { signedAt: "asc" } } },
+        include: { patient: true, author: true, cosigner: true, editedBy: true, _count: { select: { versions: true } }, addenda: { include: { author: true }, orderBy: { signedAt: "asc" } } },
       })
     : null;
   if (!note) notFound();
@@ -57,6 +57,11 @@ export default async function PrintNote({ searchParams }: { searchParams: Promis
 
       <div className="mt-5 space-y-0.5 border-t border-black/50 pt-2 text-[11px]">
         {note.signedAt && <p>Electronically signed by {signer(note.author)} on {fmtDateTime(note.signedAt)}</p>}
+        {note.editedAt && note.editedBy && (
+          <p>
+            Edited and re-signed by {signer(note.editedBy)} on {fmtDateTime(note.editedAt)} (version {note._count.versions + 1}; earlier versions are kept in the chart)
+          </p>
+        )}
         {note.status === "pending_cosign" && note.cosigner && <p>Awaiting cosignature by {signer(note.cosigner)}</p>}
         {note.cosignedAt && note.cosigner && (
           <p>

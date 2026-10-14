@@ -205,32 +205,32 @@ enum NoteStatus {
 }
 
 model Practitioner {
-  id           String    @id @default(cuid())
-  name         String
-  role         Role
-  credentials  String?
+  id                 String            @id @default(cuid())
+  name               String
+  role               Role
+  credentials        String?
   // Medical council registration (BMDC in Bangladesh), printed on prescriptions.
   registrationNumber String?
-  createdAt    DateTime  @default(now())
+  createdAt          DateTime          @default(now())
   // Sign-in. Accounts are made at /setup (the first admin) and /admin/users; the demo seed makes synthetic ones.
-  username           String?   @unique
+  username           String?           @unique
   passwordHash       String? // scrypt, see src/lib/password.ts
-  active             Boolean   @default(true)
+  active             Boolean           @default(true)
   // Manages staff accounts at /admin/users. Separate from the clinical role.
-  isAdmin            Boolean   @default(false)
+  isAdmin            Boolean           @default(false)
   // Set when an admin issues a temporary password; the user must pick their own before using the app.
-  mustChangePassword Boolean   @default(false)
+  mustChangePassword Boolean           @default(false)
   // Two-step sign-in with an authenticator app (TOTP, src/lib/totp.ts). Set up at /account/two-step.
   totpSecret         String? // base32; null until set up
   totpPendingSecret  String? // shown as a QR code while setting up, until the first code is confirmed
   totpEnabledAt      DateTime?
   totpLastStep       Int? // the last 30-second step used, so a code can't be used twice
-  recoveryCodes      String[]  @default([]) // sha256 of each unused one-time recovery code
+  recoveryCodes      String[]          @default([]) // sha256 of each unused one-time recovery code
   // Wrong passwords in a row (sign-in or unlock); five lock sign-in until signInLockedUntil.
-  failedSignIns      Int       @default(0)
+  failedSignIns      Int               @default(0)
   signInLockedUntil  DateTime?
-  sessions     Session[]
-  signInChallenges SignInChallenge[]
+  sessions           Session[]
+  signInChallenges   SignInChallenge[]
 
   primaryPatients    Patient[]            @relation("PCP")
   encounters         Encounter[]
@@ -238,6 +238,8 @@ model Practitioner {
   notes              Note[]               @relation("NoteAuthor")
   cosignNotes        Note[]               @relation("NoteCosigner")
   addenda            NoteAddendum[]
+  editedNotes        Note[]               @relation("NoteEditor")
+  noteVersions       NoteVersion[]        @relation("NoteVersionSigner")
   phrases            SmartPhrase[]
   verifiedReports    DiagnosticReport[]   @relation("VerifiedReports")
   uploads            DocumentReference[]
@@ -603,25 +605,25 @@ model RefillRequest {
 }
 
 model Observation {
-  id          String              @id @default(cuid())
-  patientId   String
-  patient     Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  encounterId String?
-  encounter   Encounter?          @relation(fields: [encounterId], references: [id])
-  reportId    String?
-  report      DiagnosticReport?   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  category    ObservationCategory
-  code        String // LOINC, or a local code for vitals without one
-  display     String
-  valueNum    Float?
-  valueText   String?
-  unit        String? // UCUM
-  refLow      Float?
-  refHigh     Float?
-  refText     String?
-  flag        Flag?
-  effectiveAt DateTime
-  sortOrder   Int                 @default(0)
+  id                   String              @id @default(cuid())
+  patientId            String
+  patient              Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId          String?
+  encounter            Encounter?          @relation(fields: [encounterId], references: [id])
+  reportId             String?
+  report               DiagnosticReport?   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  category             ObservationCategory
+  code                 String // LOINC, or a local code for vitals without one
+  display              String
+  valueNum             Float?
+  valueText            String?
+  unit                 String? // UCUM
+  refLow               Float?
+  refHigh              Float?
+  refText              String?
+  flag                 Flag?
+  effectiveAt          DateTime
+  sortOrder            Int                 @default(0)
   // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
   // checks, kept for the record. See src/lib/db.ts.
   enteredInErrorAt     DateTime?
@@ -632,28 +634,28 @@ model Observation {
 }
 
 model DiagnosticReport {
-  id            String          @id @default(cuid())
-  patientId     String
-  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  code          String
-  display       String // e.g. "Complete blood count"
-  performer     String // lab name
-  effectiveAt   DateTime
-  issuedAt      DateTime
-  status        ReportStatus
-  source        ReportSource    @default(ordered)
-  verifiedAt    DateTime?
-  verifiedById  String?
-  verifiedBy    Practitioner?   @relation("VerifiedReports", fields: [verifiedById], references: [id])
-  importJobId   String?
-  importJob     ImportJob?      @relation(fields: [importJobId], references: [id])
-  orderId       String?
-  order         ServiceRequest? @relation(fields: [orderId], references: [id])
+  id                   String          @id @default(cuid())
+  patientId            String
+  patient              Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code                 String
+  display              String // e.g. "Complete blood count"
+  performer            String // lab name
+  effectiveAt          DateTime
+  issuedAt             DateTime
+  status               ReportStatus
+  source               ReportSource    @default(ordered)
+  verifiedAt           DateTime?
+  verifiedById         String?
+  verifiedBy           Practitioner?   @relation("VerifiedReports", fields: [verifiedById], references: [id])
+  importJobId          String?
+  importJob            ImportJob?      @relation(fields: [importJobId], references: [id])
+  orderId              String?
+  order                ServiceRequest? @relation(fields: [orderId], references: [id])
   // Inbox acknowledgement by the responsible clinician.
-  reviewedAt    DateTime?
-  reviewedById  String?
-  reviewedBy    Practitioner?   @relation("ReviewedReports", fields: [reviewedById], references: [id])
-  reviewComment String?
+  reviewedAt           DateTime?
+  reviewedById         String?
+  reviewedBy           Practitioner?   @relation("ReviewedReports", fields: [reviewedById], references: [id])
+  reviewComment        String?
   // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
   // checks, kept for the record. See src/lib/db.ts.
   enteredInErrorAt     DateTime?
@@ -689,8 +691,14 @@ model Note {
   cosigner    Practitioner? @relation("NoteCosigner", fields: [cosignerId], references: [id])
   cosignedAt  DateTime?
   cosignText  String?
+  // Set when a signed note's text was changed after signing. Each earlier
+  // version is kept in NoteVersion.
+  editedAt    DateTime?
+  editedById  String?
+  editedBy    Practitioner? @relation("NoteEditor", fields: [editedById], references: [id])
 
-  addenda NoteAddendum[]
+  addenda  NoteAddendum[]
+  versions NoteVersion[]
 
   @@index([patientId, serviceAt])
   @@index([authorId, status])
@@ -708,6 +716,26 @@ model NoteAddendum {
   signedAt DateTime     @default(now())
 
   @@index([noteId])
+}
+
+// A signed note's text as it stood before an edit. The note row always holds the
+// current version; these are the earlier ones, oldest first by number (1 = as first signed).
+model NoteVersion {
+  id         String       @id @default(cuid())
+  noteId     String
+  note       Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  number     Int
+  title      String
+  type       NoteType
+  body       String
+  // Who signed this version and when: the original signer, or the person who edited it in.
+  signedById String
+  signedBy   Practitioner @relation("NoteVersionSigner", fields: [signedById], references: [id])
+  signedAt   DateTime
+  // When it was replaced by the next version.
+  replacedAt DateTime     @default(now())
+
+  @@unique([noteId, number])
 }
 
 // A clinician's own dot phrase. It overrides a system phrase with the same name.
@@ -815,28 +843,28 @@ model ServiceRequest {
 // structure (sections, diagnoses, medications, follow-ups; see
 // src/lib/documents/draft.ts DocContent). The source pages stay on the import job.
 model ClinicalDocument {
-  id            String          @id @default(cuid())
-  patientId     String
-  patient       Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  type          ClinicalDocType
-  title         String
-  organization  String?
-  author        String?
-  serviceDate   DateTime        @db.Date
-  content       Json
-  importJobId   String?         @unique
-  importJob     ImportJob?      @relation(fields: [importJobId], references: [id])
+  id                   String          @id @default(cuid())
+  patientId            String
+  patient              Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type                 ClinicalDocType
+  title                String
+  organization         String?
+  author               String?
+  serviceDate          DateTime        @db.Date
+  content              Json
+  importJobId          String?         @unique
+  importJob            ImportJob?      @relation(fields: [importJobId], references: [id])
   // The imaging or referral order this document answers, if any.
-  orderId       String?
-  order         ServiceRequest? @relation(fields: [orderId], references: [id])
-  filedById     String
-  filedBy       Practitioner    @relation("DocFiledBy", fields: [filedById], references: [id])
-  filedAt       DateTime        @default(now())
+  orderId              String?
+  order                ServiceRequest? @relation(fields: [orderId], references: [id])
+  filedById            String
+  filedBy              Practitioner    @relation("DocFiledBy", fields: [filedById], references: [id])
+  filedAt              DateTime        @default(now())
   // Inbox acknowledgement by the PCP (or the ordering clinician).
-  reviewedAt    DateTime?
-  reviewedById  String?
-  reviewedBy    Practitioner?   @relation("DocReviewedBy", fields: [reviewedById], references: [id])
-  reviewComment String?
+  reviewedAt           DateTime?
+  reviewedById         String?
+  reviewedBy           Practitioner?   @relation("DocReviewedBy", fields: [reviewedById], references: [id])
+  reviewComment        String?
   // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
   // checks, kept for the record. See src/lib/db.ts.
   enteredInErrorAt     DateTime?

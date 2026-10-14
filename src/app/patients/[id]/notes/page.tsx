@@ -10,8 +10,9 @@ import { expand } from "@/lib/notes/smarttext";
 import { Empty } from "@/components/panel";
 import { inputCls } from "@/components/form";
 import { NoteEditor } from "@/components/notes/note-editor";
-import { NoteDocument, NoteStatusChip } from "@/components/notes/note-view";
-import { addAddendum, cosignNote, deleteDraft, saveNote } from "./actions";
+import { NoteDocument, NoteHistory, NoteStatusChip } from "@/components/notes/note-view";
+import { canEditSigned } from "@/lib/notes/edits";
+import { addAddendum, cosignNote, deleteDraft, editSignedNote, saveNote } from "./actions";
 import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ type SP = {
   template?: string;
   copy?: string;
   addend?: string;
+  edit?: string;
+  history?: string;
   cosign?: string;
   error?: string;
   type?: string;
@@ -74,16 +77,26 @@ export default async function Notes({ params, searchParams }: { params: Promise<
   const selected = selectedId
     ? await db.note.findFirst({
         where: { id: selectedId, patientId: id },
-        include: { author: true, cosigner: true, encounter: true, addenda: { include: { author: true }, orderBy: { signedAt: "asc" } } },
+        include: {
+          author: true,
+          cosigner: true,
+          editedBy: true,
+          encounter: true,
+          addenda: { include: { author: true }, orderBy: { signedAt: "asc" } },
+          versions: { include: { signedBy: true }, orderBy: { number: "asc" } },
+        },
       })
     : null;
   const editingDraft = !!selected && selected.status === "draft" && selected.authorId === currentUser.id;
+  const canEdit = !!selected && canWrite && canEditSigned(selected, currentUser.id);
+  const editingSigned = canEdit && sp.edit === "1";
+  const viewingHistory = !!selected && sp.history === "1" && selected.versions.length > 0;
   const addending = !!selected && canWrite && sp.addend === "1" && selected.status !== "draft";
   const canCosign = !!selected && can(currentUser.role, "cosignNotes") && selected.status === "pending_cosign" && selected.cosignerId === currentUser.id;
   const cosigning = canCosign && sp.cosign === "1";
   const template = creating ? (sp.copy ? undefined : templateById(sp.template)) : undefined;
   const copyFrom = creating && sp.copy ? await db.note.findFirst({ where: { id: sp.copy, patientId: id } }) : null;
-  const needsEditor = editingDraft || addending || cosigning || !!template || !!copyFrom;
+  const needsEditor = editingDraft || editingSigned || addending || cosigning || !!template || !!copyFrom;
   const ctx = needsEditor ? await editorContext(id, currentUser) : null;
   const todayEncounter = ctx?.encounters.find((e) => new Date(e.start).toDateString() === new Date().toDateString());
 
@@ -116,19 +129,45 @@ export default async function Notes({ params, searchParams }: { params: Promise<
         initial={{ title: selected.title, type: selected.type, body: selected.body, templateId: selected.templateId, encounterId: selected.encounterId, cosignerId: selected.cosignerId }}
       />
     );
+  } else if (editingSigned && ctx && selected) {
+    pane = (
+      <div className="flex h-full flex-col">
+        <div className="shrink-0 border-b border-line bg-warn-soft px-4 py-1.5 text-[12.5px] text-warn">
+          Editing a signed note. Saving re-signs it as you, with the date and time; the version it replaces stays in the note&apos;s history. For something
+          to add rather than correct, use Addend.
+        </div>
+        <div className="min-h-0 flex-1">
+          <NoteEditor
+            key={`edit-${selected.id}`}
+            mode="edit"
+            action={editSignedNote.bind(null, id, selected.id)}
+            ctx={ctx}
+            error={sp.error}
+            cancelHref={withFilters({ note: selected.id })}
+            initial={{ title: selected.title, type: selected.type, body: selected.body, templateId: selected.templateId }}
+          />
+        </div>
+      </div>
+    );
   } else if (selected) {
     pane = (
       <div className="flex h-full flex-col">
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-panel-muted px-4 py-1.5">
+          {canEdit && !addending && !cosigning && <ToolbarLink href={withFilters({ note: selected.id, edit: "1" })}>Edit</ToolbarLink>}
           {canCosign && !cosigning && <ToolbarLink href={withFilters({ note: selected.id, cosign: "1" })} primary>Cosign</ToolbarLink>}
           {canWrite && selected.status !== "draft" && !addending && <ToolbarLink href={withFilters({ note: selected.id, addend: "1" })}>Addend</ToolbarLink>}
           {canWrite && <ToolbarLink href={`${base}?new=1&copy=${selected.id}`}>Copy to new note</ToolbarLink>}
+          {selected.versions.length > 0 && !viewingHistory && <ToolbarLink href={withFilters({ note: selected.id, history: "1" })}>Version history</ToolbarLink>}
           <ToolbarLink href={`/print/note?id=${selected.id}`}>Print</ToolbarLink>
           {selected.status === "draft" && <span className="ml-auto text-[12px] text-ink-3">Pended by {selected.author.name}; only the author can edit it.</span>}
         </div>
         <div className={`min-h-0 overflow-y-auto ${addending || cosigning ? "basis-1/2 border-b border-line" : "flex-1"}`}>
           <div className="mx-auto max-w-3xl px-6 py-5">
-            <NoteDocument note={selected} />
+            {viewingHistory ? (
+              <NoteHistory note={selected} backHref={withFilters({ note: selected.id })} />
+            ) : (
+              <NoteDocument note={selected} historyHref={withFilters({ note: selected.id, history: "1" })} />
+            )}
           </div>
         </div>
         {(addending || cosigning) && ctx && (

@@ -42,6 +42,7 @@ export const MODEL_LABELS: Record<string, string> = {
   DiagnosticReport: "Lab report",
   Note: "Note",
   NoteAddendum: "Note addendum",
+  NoteVersion: "Note earlier version",
   SmartPhrase: "SmartPhrase",
   DocumentReference: "Uploaded file",
   ImportJob: "Report import",
@@ -104,7 +105,7 @@ export function parentOf(model: string, args: Record<string, unknown> | undefine
     const id = pick("encounterId");
     return id ? { model: "Encounter", id } : null;
   }
-  if (model === "NoteAddendum") {
+  if (model === "NoteAddendum" || model === "NoteVersion") {
     const id = pick("noteId");
     return id ? { model: "Note", id } : null;
   }

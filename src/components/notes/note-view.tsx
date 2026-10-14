@@ -1,4 +1,5 @@
-import type { Note, NoteAddendum, NoteStatus, Practitioner } from "@prisma/client";
+import Link from "next/link";
+import type { Note, NoteAddendum, NoteStatus, NoteVersion, Practitioner } from "@prisma/client";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { noteTypeLabel } from "@/lib/notes/library";
 
@@ -48,11 +49,14 @@ type FullNote = Note & {
   author: Practitioner;
   cosigner: Practitioner | null;
   encounter: { start: Date; reason: string | null; type: string } | null;
+  editedBy: Practitioner | null;
   addenda: (NoteAddendum & { author: Practitioner })[];
+  versions: (NoteVersion & { signedBy: Practitioner })[];
 };
 
 // A note as it reads in the chart: header, body, signatures, then addenda in order.
-export function NoteDocument({ note }: { note: FullNote }) {
+// historyHref links to the earlier versions when the note has been edited.
+export function NoteDocument({ note, historyHref }: { note: FullNote; historyHref?: string }) {
   return (
     <article>
       <header className="mb-4 border-b border-line pb-3">
@@ -91,6 +95,19 @@ export function NoteDocument({ note }: { note: FullNote }) {
             </p>
           )
         )}
+        {note.editedAt && note.editedBy && (
+          <p className="text-ok">
+            Edited and re-signed by {signer(note.editedBy)} on {fmtDateTime(note.editedAt)}
+            {historyHref && note.versions.length > 0 && (
+              <>
+                {" · "}
+                <Link href={historyHref} className="font-medium text-accent hover:underline">
+                  {note.versions.length === 1 ? "See the earlier version" : `See ${note.versions.length} earlier versions`}
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         {note.status === "pending_cosign" && note.cosigner && <p className="text-low">Awaiting cosignature by {signer(note.cosigner)}.</p>}
         {note.cosignedAt && note.cosigner && (
           <div>
@@ -115,4 +132,54 @@ export function NoteDocument({ note }: { note: FullNote }) {
       ))}
     </article>
   );
+}
+
+// Every version of an edited note, newest first: the current text, then each one it replaced.
+export function NoteHistory({ note, backHref }: { note: FullNote; backHref: string }) {
+  const current = currentVersion(note);
+  const rows = [current, ...note.versions.map((v) => ({ ...v, current: false }))].sort((a, b) => b.number - a.number);
+  return (
+    <article>
+      <header className="mb-4 flex items-baseline justify-between gap-3 border-b border-line pb-3">
+        <div>
+          <h1 className="text-[17px] font-semibold">Version history</h1>
+          <p className="text-[12.5px] text-ink-2">
+            {note.title} · {rows.length} versions. Earlier versions are kept as they were signed and cannot be changed.
+          </p>
+        </div>
+        <Link href={backHref} className="shrink-0 text-[12.5px] font-medium text-accent hover:underline">
+          Back to the note
+        </Link>
+      </header>
+      {rows.map((v) => (
+        <section key={v.number} className={`mb-4 rounded-md border ${v.current ? "border-accent" : "border-line"}`}>
+          <h2 className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line bg-panel-muted px-3 py-1.5 text-[12px] font-semibold text-ink-2">
+            <span>
+              Version {v.number}
+              {v.current ? " (current)" : ""} · {v.title}
+              {v.type !== note.type && ` · ${noteTypeLabel[v.type]}`}
+            </span>
+            <span className="font-normal">
+              {v.number === 1 ? "Signed" : "Edited and re-signed"} by {signer(v.signedBy)} on {fmtDateTime(v.signedAt)}
+              {v.replacedAt && <> · replaced {fmtDateTime(v.replacedAt)}</>}
+            </span>
+          </h2>
+          <NoteBody text={v.body} className="px-3 py-2" />
+        </section>
+      ))}
+    </article>
+  );
+}
+
+function currentVersion(note: FullNote) {
+  return {
+    number: note.versions.length + 1,
+    title: note.title,
+    type: note.type as NoteVersion["type"],
+    body: note.body,
+    signedBy: note.editedBy ?? note.author,
+    signedAt: note.editedAt ?? note.signedAt ?? note.createdAt,
+    replacedAt: null as Date | null,
+    current: true,
+  };
 }
