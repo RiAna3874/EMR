@@ -5,6 +5,7 @@ import { describeExtractionError } from "@/lib/labs/extract";
 import { docDraftFromExtraction, readContent, suggestOrder, type ChartFacts } from "./draft";
 import type { FiledDoc } from "@/components/documents/doc-view";
 import { extractDocument } from "./extract";
+import { reviewOwnerWhere } from "@/lib/review-owner";
 
 // The parts of the chart a document is reconciled against.
 export async function chartFacts(patientId: string): Promise<ChartFacts> {
@@ -61,9 +62,8 @@ export function toFiledDoc(d: Prisma.ClinicalDocumentGetPayload<{ include: typeo
   return { ...d, content: readContent(d.content), pages: d.importJob?._count.documents ?? 0 };
 }
 
-// An outside document belongs in a clinician's Inbox when they ordered what it
-// answers, or, with no order, when they are the patient's PCP.
+// Unreviewed outside documents this clinician answers for (src/lib/review-owner.ts).
 export const documentsWhere = (userId: string): Prisma.ClinicalDocumentWhereInput => ({
   reviewedAt: null,
-  OR: [{ order: { orderedById: userId } }, { orderId: null, patient: { pcpId: userId } }],
+  OR: reviewOwnerWhere(userId),
 });

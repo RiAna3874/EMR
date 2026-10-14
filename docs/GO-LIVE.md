@@ -46,7 +46,7 @@ For reference, other countries:
 These are fine for a demo and not for real care:
 
 - **Drug checks** (interactions, dose limits, kidney dosing) come from a small hand-written table, not a licensed, maintained drug database. Real prescribing needs one (e.g. First Databank, Medi-Span, or a national formulary service).
-- **E-prescribing and pharmacies are simulated.** Nothing is sent to a real pharmacy, and the pharmacy list is empty on a fresh site. Until there's a real pharmacy connection, use printed prescriptions.
+- **E-prescribing and pharmacies are simulated.** Nothing is sent to a real pharmacy, and the pharmacy list is empty on a fresh site. Every prescription is printed: e-prescribe and phone-in are switched off until there's a real pharmacy connection. Add each prescriber's registration number on Staff accounts so it prints.
 - **Lab results** arrive only by photo import or manual review. There's no live interface to a lab.
 - The **drug and order catalogues** are small samples.
 

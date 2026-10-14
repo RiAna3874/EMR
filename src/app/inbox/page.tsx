@@ -28,6 +28,7 @@ import { sigText } from "@/lib/meds/sig";
 import { refillReview, withoutMed } from "@/lib/meds/server";
 import { ResultForm } from "@/components/meds/med-controls";
 import { approveRefill, cosignPrescription, denyRefill, pendRefill } from "@/app/patients/[id]/meds/actions";
+import { isUnassigned } from "@/lib/review-owner";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       title: r.display,
       at: r.issuedAt,
       critical: r.critical,
-      sub: r.abnormal ? (
+      sub: withPool(r.unassigned, r.abnormal ? (
         <span className="truncate">
           {r.observations
             .filter((o) => isAbnormal(o.flag))
@@ -83,7 +84,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
         </span>
       ) : (
         `${r.observations.length} components, all within range`
-      ),
+      )),
     }));
     const current = results.find((r) => r.id === sp.item) ?? results[0];
     if (current) {
@@ -176,7 +177,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     const docs = await db.clinicalDocument.findMany({
       where: documentsWhere(currentUser.id),
       orderBy: { serviceDate: "desc" },
-      include: { patient: true },
+      include: { patient: true, order: { select: { orderedById: true } } },
     });
     items = docs.map((d) => ({
       id: d.id,
@@ -184,11 +185,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       patient: d.patient,
       title: d.title,
       at: d.filedAt,
-      sub: (
+      sub: withPool(
+        isUnassigned(d, currentUser.id),
         <span className="flex min-w-0 items-center gap-1.5">
           <DocTypeChip type={d.type} />
           <span className="truncate">{d.organization}</span>
-        </span>
+        </span>,
       ),
     }));
     const current = docs.find((d) => d.id === sp.item) ?? docs[0];
@@ -398,7 +400,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
           </Link>
         ))}
         <p className="mt-4 px-4 text-[11.5px] leading-snug text-ink-3">
-          Results land here when you ordered them, or, for outside reports, when you are the patient&apos;s PCP.
+          Results land here when you ordered them, or, for outside reports, when you are the patient&apos;s PCP. Unassigned ones (no PCP, or the clinician has left) go to every physician and resident.
         </p>
       </nav>
 
@@ -463,6 +465,19 @@ function DetailHeader({
       <div className="mt-0.5 font-medium">{title}</div>
       <div className="text-[12px] text-ink-3">{meta}</div>
     </header>
+  );
+}
+
+// Items with no responsible clinician reach every reviewer; say so, so it's clear nobody else has it.
+function withPool(unassigned: boolean, sub: React.ReactNode) {
+  if (!unassigned) return sub;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn" title="No PCP, or the ordering clinician has left. Any clinician can review it.">
+        Unassigned
+      </span>
+      <span className="min-w-0 truncate">{sub}</span>
+    </span>
   );
 }
 

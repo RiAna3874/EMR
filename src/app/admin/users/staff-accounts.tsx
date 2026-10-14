@@ -6,7 +6,7 @@ import { Button, Field, inputCls } from "@/components/form";
 import { roleLabel } from "@/lib/roles";
 import { addAccount, manageAccount, type AdminState } from "./actions";
 
-type Account = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; active: boolean; mustChangePassword: boolean; twoStep: boolean };
+type Account = { id: string; name: string; credentials: string | null; registrationNumber: string | null; role: Role; username: string; isAdmin: boolean; active: boolean; mustChangePassword: boolean; twoStep: boolean };
 
 const roles = Object.entries(roleLabel) as [Role, string][];
 
@@ -24,12 +24,15 @@ export function StaffAccounts({ accounts, meId }: { accounts: Account[]; meId: s
 
       <form action={(f) => (setLast("add"), add(f))} className="rounded-md border border-line bg-panel p-4">
         <h2 className="mb-2 text-[13.5px] font-semibold">Add a staff member</h2>
-        <div className="grid grid-cols-[1fr_6rem_9rem_10rem_auto] items-end gap-2">
+        <div className="grid grid-cols-[1fr_6rem_8rem_9rem_10rem_auto] items-end gap-2">
           <Field label="Full name">
             <input name="name" required className={inputCls} />
           </Field>
           <Field label="Credentials">
             <input name="credentials" placeholder="MD, RN…" className={inputCls} />
+          </Field>
+          <Field label="Registration no.">
+            <input name="registrationNumber" placeholder="BMDC A-12345" className={inputCls} />
           </Field>
           <Field label="Role">
             <select name="role" defaultValue="nurse" className={inputCls}>
@@ -93,6 +96,9 @@ export function StaffAccounts({ accounts, meId }: { accounts: Account[]; meId: s
                     </Field>
                     <Field label="Credentials" className="w-24">
                       <input name="credentials" defaultValue={a.credentials ?? ""} className={inputCls} />
+                    </Field>
+                    <Field label="Registration no." className="w-36">
+                      <input name="registrationNumber" defaultValue={a.registrationNumber ?? ""} className={inputCls} />
                     </Field>
                     <Field label="Role">
                       <select name="role" defaultValue={a.role} className={inputCls}>

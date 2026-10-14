@@ -209,6 +209,8 @@ model Practitioner {
   name         String
   role         Role
   credentials  String?
+  // Medical council registration (BMDC in Bangladesh), printed on prescriptions.
+  registrationNumber String?
   createdAt    DateTime  @default(now())
   // Sign-in. Accounts are made at /setup (the first admin) and /admin/users; the demo seed makes synthetic ones.
   username           String?   @unique

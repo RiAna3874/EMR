@@ -52,7 +52,7 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
         <div className="flex-1 space-y-2 text-[13px]">
           <div className="text-[16px] font-bold">
             {med.drug}
-            {schedule && <span className="ml-2 rounded border border-black px-1 text-[11px]">Schedule {schedule}</span>}
+            {schedule && <span className="ml-2 rounded border border-black px-1 text-[11px]">Controlled drug</span>}
           </div>
           <div>
             <span className="font-semibold">Sig: </span>
@@ -87,18 +87,19 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
         <div>
           <div className="mt-8 w-72 border-t border-black text-[10.5px]">Prescriber signature</div>
           <div className="mt-1 font-semibold">
-            {med.prescriber?.name}, {med.prescriber?.credentials}
+            {med.prescriber?.name}
+            {med.prescriber?.credentials && `, ${med.prescriber.credentials}`}
           </div>
-          <div className="text-[11px]">NPI and DEA: synthetic demonstration prescriber</div>
+          {med.prescriber?.registrationNumber && <div className="text-[11px]">Reg. no. {med.prescriber.registrationNumber}</div>}
           {med.cosigner && (
             <div className="text-[11px]">
               Supervising physician: {med.cosigner.name}, {med.cosigner.credentials}
+              {med.cosigner.registrationNumber && ` (reg. no. ${med.cosigner.registrationNumber})`}
             </div>
           )}
         </div>
         <div className="text-[11px]">
           <div>Date written: {fmtDate(med.authoredAt)}</div>
-          {schedule && <div className="mt-1">Controlled substance prescriptions must be filled within the period your state allows.</div>}
         </div>
       </section>
 

@@ -113,6 +113,13 @@ export function PendingOrders({
           }
           className="space-y-2 border-t border-line bg-panel-muted p-3"
         >
+          {/* What the signer is looking at: the server refuses to sign if the list or its alerts changed meanwhile. */}
+          {rows.map((r) => (
+            <input key={r.id} type="hidden" name="orderId" value={r.id} />
+          ))}
+          {stops.map((r) => (
+            <input key={r.id} type="hidden" name="alertedId" value={r.id} />
+          ))}
           {stops.length > 0 && (
             <label className="block">
               <span className="text-[11.5px] font-medium text-crit">
