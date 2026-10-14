@@ -6,10 +6,8 @@
 import "server-only";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { EXTRACTION_MODEL, type ExtractInput } from "@/lib/labs/extract";
+import { readWithClaude, type ExtractInput } from "@/lib/labs/extract";
 import { DIAGNOSIS_KINDS, MED_CHANGES, type ExtractedDocument } from "./draft";
 
 const file = z.number().int().describe("Which file (1-based, in the order given) this is on; where it starts if it spans pages");
@@ -22,7 +20,7 @@ export const DocExtractionSchema = z.object({
   document_type: z
     .enum(["imaging_report", "discharge_summary", "referral_letter", "consult_note", "procedure_note", "pathology_report", "lab_report", "other"])
     .describe(
-      "imaging_report: radiology, ultrasound, echo, DEXA, nuclear. referral_letter: another clinician asking us to see or take over the patient. consult_note: a specialist's letter or note back about a patient they saw. lab_report: mainly a table of lab results.",
+      "imaging_report: radiology, X-ray, CT, MRI, ultrasound, Doppler, echocardiogram, ECG/Holter/ETT report, DEXA, nuclear. pathology_report: histopathology, cytology, biopsy. referral_letter: another clinician asking us to see or take over the patient. consult_note: a specialist's letter or note back about a patient they saw. lab_report: mainly a table of lab results.",
     ),
   title: z.string().nullable().describe("Title or exam name as printed, e.g. 'CT CHEST WITHOUT CONTRAST', 'Discharge Summary'"),
   organization: z.string().nullable().describe("Hospital, imaging center or practice that produced the document"),
@@ -35,7 +33,7 @@ export const DocExtractionSchema = z.object({
   patient_age: z.string().nullable().describe("Age as printed, or null"),
   patient_sex: z.string().nullable().describe("Sex as printed, or null"),
   patient_id: z.string().nullable().describe("Any MRN or account number printed, or null"),
-  modality: z.string().nullable().describe("Imaging only: CT, MRI, X-ray, ultrasound, echocardiogram, DEXA..."),
+  modality: z.string().nullable().describe("Imaging only: CT, MRI, X-ray, ultrasound, echocardiogram, ECG, DEXA..."),
   body_part: z.string().nullable().describe("Imaging only: body region examined, as printed"),
   impression: z
     .string()
@@ -44,7 +42,20 @@ export const DocExtractionSchema = z.object({
   notes: z.array(z.string()).describe("Anything a reviewer should know: pages cut off, glare, handwriting, ambiguous dates, a page that seems to belong to someone else"),
   sections: z
     .array(z.object({ heading: z.string().describe("Heading as printed, or '' for untitled text such as a letter body"), text: z.string().describe("The section's text exactly as printed; keep list items on their own lines"), file, box }))
-    .describe("Every section of the document in order, including the impression again. Skip letterheads, addresses, page footers and signature blocks"),
+    .describe("Every section of the document in order, including the impression again, with all of its sentences. Skip letterheads, addresses, page footers and signature blocks"),
+  measurements: z
+    .array(
+      z.object({
+        name: z.string().describe("Measurement as printed, e.g. 'LVEF', 'LVIDd', 'IVSd', 'Aortic root', 'E/A', 'Liver span', 'T-score L1-L4'"),
+        value: z.string().describe("Value exactly as printed, e.g. '62', '4.8', '<20', '1.2/0.8'"),
+        unit: z.string().nullable().describe("Unit as printed, or null"),
+        normal_range: z.string().nullable().describe("Normal or reference range as printed, or null"),
+        group: z.string().nullable().describe("The table or section heading it is under, e.g. 'M-mode', 'Doppler', or null"),
+        file,
+        box,
+      }),
+    )
+    .describe("Numbered measurements printed in the report (echo, Doppler, ultrasound sizes, DEXA scores). Leave empty if there are none. Keep them in the sections text too"),
   diagnoses: z
     .array(
       z.object({
@@ -77,13 +88,15 @@ export const DocExtractionSchema = z.object({
     .describe("Follow-up appointments, tests and recommendations addressed to the patient or their doctors"),
 });
 
-const SYSTEM = `You transcribe outside clinical documents (imaging reports, hospital discharge summaries, referral and consultation letters) into structured data for a clinician to review before it is filed in a patient's chart.
+const SYSTEM = `You transcribe outside clinical documents (imaging reports such as X-ray, CT, MRI, ultrasound and echocardiography; histopathology; hospital discharge summaries; prescriptions; referral and consultation letters) into structured data for a clinician to review before it is filed in a patient's chart.
 
 Rules:
-- Transcribe exactly what is printed. Never summarize, infer, correct or add clinical content. Lists you return (diagnoses, medications, follow-ups) must each be stated in the document.
-- Keep every section's text word for word, including numbers and units. Join lines that were only wrapped by the page width; keep real line breaks for list items.
+- Transcribe exactly what is printed or handwritten. Never summarize, shorten, infer, correct or add clinical content. Lists you return (diagnoses, measurements, medications, follow-ups) must each be stated in the document.
+- Long, wordy reports are expected: keep every sentence of every section, word for word, including numbers and units, however long the findings are. Join lines that were only wrapped by the page width; keep paragraph breaks and real line breaks for list items.
+- A report with no headings is one section with heading ''. A report whose findings are a list of organs or structures (e.g. "Liver: ...", "Mitral valve: ...") keeps them as lines in the findings section.
+- Text in Bangla or another language: transcribe it in that script as written; do not translate.
 - If text is unreadable, transcribe what you can, mark the gap with [illegible], and say what is unclear in notes. Never guess digits, doses or dates.
-- Dates: convert to YYYY-MM-DD. Work out day/month order from the document's other dates and locale; if it stays ambiguous, pick the likelier reading and say so in notes.
+- Dates: convert to YYYY-MM-DD. Work out day/month order from the document's other dates and locale (Bangladesh and most of Asia write day first); if it stays ambiguous, pick the likelier reading and say so in notes.
 - Bounding boxes are in pixels of the image as given (sizes are listed below).`;
 
 // For working on the review screen without API access, point
@@ -94,46 +107,19 @@ async function fixtureFor(fileName: string | undefined) {
   if (!dir || process.env.NODE_ENV === "production" || !fileName) return null;
   const base = path.basename(fileName).replace(/\.[^.]+$/, "").replace(/-p\d+$/, "");
   try {
-    return DocExtractionSchema.parse(JSON.parse(await readFile(path.join(dir, `${base}.extraction.json`), "utf8")));
+    const saved = JSON.parse(await readFile(path.join(dir, `${base}.extraction.json`), "utf8"));
+    return DocExtractionSchema.parse({ measurements: [], ...saved });
   } catch {
     return null;
   }
 }
 
+export const hasDocumentFixture = async (fileName: string | undefined) => !!(await fixtureFor(fileName));
+
 export async function extractDocument(files: ExtractInput, fileNames: string[]): Promise<{ document: ExtractedDocument; model: string }> {
   const fixture = await fixtureFor(fileNames[0]);
   if (fixture) return { document: fixture, model: "fixture" };
 
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
-  const legend: string[] = [];
-  files.forEach((f, i) => {
-    const data = f.data.toString("base64");
-    if (f.mimeType === "application/pdf") {
-      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data } });
-      legend.push(`File ${i + 1}: PDF`);
-    } else {
-      content.push({
-        type: "image",
-        source: { type: "base64", media_type: f.mimeType as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data },
-      });
-      legend.push(`File ${i + 1}: image, ${f.width ?? "?"}×${f.height ?? "?"} px`);
-    }
-  });
-  content.push({ type: "text", text: `${legend.join("\n")}\n\nTranscribe this clinical document.` });
-
-  const client = new Anthropic({ timeout: 5 * 60_000 });
-  const response = await client.beta.messages.parse({
-    model: EXTRACTION_MODEL,
-    max_tokens: 32000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "high", format: betaZodOutputFormat(DocExtractionSchema) },
-    system: SYSTEM,
-    messages: [{ role: "user", content }],
-  });
-
-  if (response.stop_reason === "refusal") throw new Error("Claude declined to read this document.");
-  if (response.stop_reason === "max_tokens") throw new Error("The document was too long to read in one pass. Try uploading fewer pages at a time.");
-  if (!response.parsed_output) throw new Error("Claude's answer didn't match the expected format. Try again.");
-  return { document: response.parsed_output, model: response.model };
+  const { parsed, model } = await readWithClaude(DocExtractionSchema, SYSTEM, files, "Transcribe this clinical document.", "document");
+  return { document: parsed, model };
 }

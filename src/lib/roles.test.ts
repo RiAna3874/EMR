@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { can, needsCosign } from "./roles";
 
 test("front desk can't touch clinical data", () => {
-  for (const p of ["viewClinical", "writeNotes", "pendOrders", "signOrders", "recordVitals", "useInbox"] as const) {
+  for (const p of ["viewClinical", "addMedia", "writeNotes", "pendOrders", "signOrders", "recordVitals", "useInbox"] as const) {
     assert.equal(can("front_desk", p), false, p);
   }
 });

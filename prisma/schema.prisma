@@ -245,6 +245,7 @@ model Practitioner {
   phrases            SmartPhrase[]
   verifiedReports    DiagnosticReport[]   @relation("VerifiedReports")
   uploads            DocumentReference[]
+  mediaUploads       MediaItem[]
   importJobs         ImportJob[]          @relation("ImportCreatedBy")
   filedImports       ImportJob[]          @relation("ImportFiledBy")
   reviewedReports    DiagnosticReport[]   @relation("ReviewedReports")
@@ -372,6 +373,7 @@ model Patient {
   dispenses      MedicationDispense[]
   refillRequests RefillRequest[]
   clinicalDocs   ClinicalDocument[]
+  media          MediaItem[]
   conversations  Conversation[]
   visitDiagnoses EncounterDiagnosis[]
 
@@ -821,6 +823,9 @@ model ImportJob {
   patientId   String
   patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   kind        ImportKind    @default(lab)
+  // Uploaded as "any report": Claude first decides whether it is a lab table or a
+  // written document, then reads it as that kind.
+  autoKind    Boolean       @default(false)
   status      ImportStatus  @default(extracting)
   model       String?
   extraction  Json? // raw model output, kept for audit
@@ -962,4 +967,37 @@ model ChatMessage {
   createdAt      DateTime        @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// The chart's Media tab: clinical photos (hands, skin, wounds, findings), scanned
+// paperwork and any other image or PDF kept as is. Named and described by staff;
+// a photo of a report can also be sent to Import to be read into the chart.
+model MediaItem {
+  id           String       @id @default(cuid())
+  patientId    String
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title        String
+  category     String // src/lib/media/categories.ts
+  bodySite     String?
+  description  String?
+  takenAt      DateTime // when the photo was taken or the paper dated, as staff entered it
+  fileName     String
+  mimeType     String
+  size         Int
+  width        Int?
+  height       Int?
+  data         Bytes
+  thumb        Bytes? // small JPEG for the grid
+  uploadedById String
+  uploadedBy   Practitioner @relation(fields: [uploadedById], references: [id])
+  uploadedAt   DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  updatedById  String?
+  importJobId  String? // last time it was sent to Import
+
+  enteredInErrorAt     DateTime?
+  enteredInErrorReason String?
+  enteredInErrorById   String?
+
+  @@index([patientId, takenAt])
 }

@@ -1,0 +1,103 @@
+{
+ "document_type": "imaging_report",
+ "title": "MRI OF THE LUMBOSACRAL SPINE (PLAIN)",
+ "organization": "Popular Imaging & MRI Centre",
+ "author": "Dr. Kamrul Hasan, MBBS, MD (Radiology)",
+ "service_date": "2026-10-08",
+ "admission_date": null,
+ "discharge_date": null,
+ "patient_name": "Theodore Vance",
+ "patient_dob": null,
+ "patient_age": "45 years",
+ "patient_sex": "Male",
+ "patient_id": "PIMC-M-20931",
+ "modality": "MRI",
+ "body_part": "Lumbosacral spine",
+ "impression": "1. L4-L5: broad-based disc bulge with a superimposed right paracentral disc protrusion causing moderate right lateral recess narrowing and contact with the traversing right L5 nerve root. Mild bilateral neural foraminal narrowing.\n2. L5-S1: mild disc desiccation and bulge without nerve root compression.\n3. Multilevel facet arthropathy, worst at L4-L5. No spinal canal stenosis of significance at other levels.\n4. No fracture, marrow lesion or paraspinal collection.",
+ "diagnoses": [
+  {
+   "text": "L4-L5 right paracentral disc protrusion contacting the right L5 nerve root",
+   "kind": "finding",
+   "icd10": "M51.26",
+   "file": 1,
+   "box": null
+  },
+  {
+   "text": "Multilevel lumbar facet arthropathy",
+   "kind": "finding",
+   "icd10": "M47.816",
+   "file": 1,
+   "box": null
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "Consider spine or neurosurgical opinion if the radicular symptoms persist despite conservative management.",
+   "due": null,
+   "file": 1,
+   "box": null
+  }
+ ],
+ "notes": [
+  "Date printed day first (08/10/2026 read as 8 October 2026)."
+ ],
+ "sections": [
+  {
+   "heading": "Clinical information",
+   "text": "Low back pain for 6 weeks radiating to the right leg with tingling over the dorsum of the right foot. No bladder or bowel symptoms.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 258,
+    "x1": 1185,
+    "y1": 354
+   }
+  },
+  {
+   "heading": "Technique",
+   "text": "Multiplanar, multi-echo MRI of the lumbosacral spine was performed with sagittal T1W, T2W and STIR and axial T2W images through L1 to S1. No contrast was given.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 356,
+    "x1": 1185,
+    "y1": 452
+   }
+  },
+  {
+   "heading": "Findings",
+   "text": "Alignment: Normal lumbar lordosis is preserved. No spondylolisthesis.\nVertebral bodies: Normal height and marrow signal. Small Schmorl's node at the superior endplate of L3. No fracture or focal marrow lesion.\nConus medullaris: Ends at the L1 level and shows normal signal.\nL1-L2, L2-L3 and L3-L4: Discs are normal in height and signal. No significant canal or foraminal narrowing.\nL4-L5: Disc desiccation with a broad-based posterior bulge and a superimposed right paracentral protrusion indenting the thecal sac. This narrows the right lateral recess moderately and contacts the traversing right L5 nerve root. Mild bilateral neural foraminal narrowing; the exiting L4 roots are free. Facet joint hypertrophy and ligamentum flavum thickening are noted. AP canal diameter 10 mm.\nL5-S1: Mild disc desiccation and a small diffuse bulge without nerve root compression. Neural foramina are patent.\nParaspinal soft tissues: Normal. No collection.\nSacroiliac joints (partially seen): Unremarkable.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 454,
+    "x1": 1185,
+    "y1": 914
+   }
+  },
+  {
+   "heading": "Impression",
+   "text": "1. L4-L5: broad-based disc bulge with a superimposed right paracentral disc protrusion causing moderate right lateral recess narrowing and contact with the traversing right L5 nerve root. Mild bilateral neural foraminal narrowing.\n2. L5-S1: mild disc desiccation and bulge without nerve root compression.\n3. Multilevel facet arthropathy, worst at L4-L5. No spinal canal stenosis of significance at other levels.\n4. No fracture, marrow lesion or paraspinal collection.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 916,
+    "x1": 1185,
+    "y1": 1152
+   }
+  },
+  {
+   "heading": "Advice",
+   "text": "Clinical and neurological correlation is suggested. Consider spine or neurosurgical opinion if the radicular symptoms persist despite conservative management.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 1154,
+    "x1": 1185,
+    "y1": 1250
+   }
+  }
+ ],
+ "measurements": [],
+ "medications": []
+}

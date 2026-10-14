@@ -66,7 +66,13 @@ export async function extractLabReport(files: ExtractInput): Promise<ExtractOutp
     const report = ExtractionSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
     return { report, model: "fixture" };
   }
+  const { parsed, model } = await readWithClaude(ExtractionSchema, SYSTEM, files, "Transcribe this lab report.", "report");
+  return { report: parsed, model };
+}
 
+// The uploaded pages as Claude content blocks, with a legend giving each image's size
+// (bounding boxes are in those pixels).
+export function pageBlocks(files: ExtractInput, ask: string): Anthropic.Beta.BetaContentBlockParam[] {
   const content: Anthropic.Beta.BetaContentBlockParam[] = [];
   const legend: string[] = [];
   files.forEach((f, i) => {
@@ -82,23 +88,55 @@ export async function extractLabReport(files: ExtractInput): Promise<ExtractOutp
       legend.push(`File ${i + 1}: image, ${f.width ?? "?"}×${f.height ?? "?"} px`);
     }
   });
-  content.push({ type: "text", text: `${legend.join("\n")}\n\nTranscribe this lab report.` });
+  content.push({ type: "text", text: `${legend.join("\n")}\n\n${ask}` });
+  return content;
+}
 
-  const client = new Anthropic({ timeout: 5 * 60_000 });
-  const response = await client.beta.messages.parse({
+// One structured read of the pages. Streamed, so a long, wordy report (an MRI, a
+// written echo, a long discharge summary) can take as long as it needs instead of
+// running into an HTTP timeout, and with room for every word of it.
+export async function readWithClaude<S extends z.ZodType>(
+  schema: S,
+  system: string,
+  files: ExtractInput,
+  ask: string,
+  noun: string,
+  opts: { effort?: "low" | "medium" | "high"; maxTokens?: number } = {},
+): Promise<{ parsed: z.infer<S>; model: string }> {
+  const client = new Anthropic({ maxRetries: 2 });
+  const stream = client.beta.messages.stream({
     model: EXTRACTION_MODEL,
-    max_tokens: 32000,
+    max_tokens: opts.maxTokens ?? 64000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "high", format: betaZodOutputFormat(ExtractionSchema) },
-    system: SYSTEM,
-    messages: [{ role: "user", content }],
+    output_config: { effort: opts.effort ?? "high", format: betaZodOutputFormat(schema) },
+    system,
+    messages: [{ role: "user", content: pageBlocks(files, ask) }],
   });
-
-  if (response.stop_reason === "refusal") throw new Error("Claude declined to read this document.");
-  if (response.stop_reason === "max_tokens") throw new Error("The report was too long to read in one pass. Try uploading fewer pages at a time.");
+  const response = await stream.finalMessage();
+  if (response.stop_reason === "refusal") throw new Error(`Claude declined to read this ${noun}.`);
+  if (response.stop_reason === "max_tokens") throw new Error(`The ${noun} was too long to read in one pass. Try uploading fewer pages at a time.`);
   if (!response.parsed_output) throw new Error("Claude's answer didn't match the expected format. Try again.");
-  return { report: response.parsed_output, model: response.model };
+  return { parsed: response.parsed_output as z.infer<S>, model: response.model };
+}
+
+const KindSchema = z.object({
+  kind: z
+    .enum(["lab_results", "document"])
+    .describe("lab_results: mainly a table of lab test values (blood, urine, culture results). document: anything written in sentences or as a report: imaging (X-ray, CT, MRI, ultrasound, echocardiogram, ECG report), histopathology, discharge summary, prescription, letter, consult or procedure note"),
+});
+
+// For an upload marked "any report": which reader should take it.
+export async function classifyImport(files: ExtractInput): Promise<"lab" | "document"> {
+  const { parsed } = await readWithClaude(
+    KindSchema,
+    "You sort uploaded medical paperwork before it is transcribed. Look at the pages and say which kind they are.",
+    files,
+    "Is this mainly a table of lab results, or a written document?",
+    "upload",
+    { effort: "low", maxTokens: 4000 },
+  );
+  return parsed.kind === "lab_results" ? "lab" : "document";
 }
 
 // Turns SDK errors into something a clinician can act on.

@@ -44,6 +44,9 @@ export const DocMedSchema = z.object({
   addToList: z.boolean(),
   ...Source,
 });
+// A numbered measurement printed in the report (echo chambers and EF, Doppler, organ
+// sizes, DEXA scores), kept as printed so it can be read at a glance.
+export const DocMeasurementSchema = z.object({ id: z.string(), name: z.string(), value: z.string(), unit: z.string(), range: z.string(), group: z.string(), ...Source });
 export const DocFollowUpSchema = z.object({ id: z.string(), text: z.string(), due: z.string(), ...Source });
 
 export const DocDraftSchema = z.object({
@@ -66,6 +69,7 @@ export const DocDraftSchema = z.object({
   identityConfirmed: z.boolean(),
   notes: z.array(z.string()),
   sections: z.array(DocSectionSchema),
+  measurements: z.array(DocMeasurementSchema).default([]), // drafts saved before measurements existed have none
   diagnoses: z.array(DocDiagnosisSchema),
   meds: z.array(DocMedSchema),
   followUps: z.array(DocFollowUpSchema),
@@ -75,13 +79,14 @@ export type DocDraft = z.infer<typeof DocDraftSchema>;
 export type DocSection = z.infer<typeof DocSectionSchema>;
 export type DocDiagnosis = z.infer<typeof DocDiagnosisSchema>;
 export type DocMed = z.infer<typeof DocMedSchema>;
+export type DocMeasurement = z.infer<typeof DocMeasurementSchema>;
 export type DocFollowUp = z.infer<typeof DocFollowUpSchema>;
 
 // What a filed ClinicalDocument keeps in `content`: the reviewed structure and
 // where each part came from on the source pages.
 export type DocContent = Pick<
   DocDraft,
-  "admitDate" | "dischargeDate" | "modality" | "bodyPart" | "impression" | "printedName" | "printedDob" | "printedId" | "notes" | "sections" | "diagnoses" | "meds" | "followUps"
+  "admitDate" | "dischargeDate" | "modality" | "bodyPart" | "impression" | "printedName" | "printedDob" | "printedId" | "notes" | "sections" | "measurements" | "diagnoses" | "meds" | "followUps"
 >;
 
 export function docContent(d: DocDraft): DocContent {
@@ -97,6 +102,7 @@ export function docContent(d: DocDraft): DocContent {
     printedId: d.printedId.trim(),
     notes: d.notes,
     sections: keep(d.sections),
+    measurements: d.measurements.filter((m) => m.name.trim() && m.value.trim()),
     diagnoses: keep(d.diagnoses),
     meds: d.meds.filter((m) => m.drug.trim() || m.text.trim()),
     followUps: keep(d.followUps),
@@ -117,6 +123,7 @@ export function readContent(json: unknown): DocContent {
     printedId: c.printedId ?? "",
     notes: c.notes ?? [],
     sections: c.sections ?? [],
+    measurements: c.measurements ?? [],
     diagnoses: c.diagnoses ?? [],
     meds: c.meds ?? [],
     followUps: c.followUps ?? [],
@@ -278,6 +285,7 @@ export type ExtractedDocument = {
   impression: string | null;
   notes: string[];
   sections: ({ heading: string; text: string } & Src)[];
+  measurements: ({ name: string; value: string; unit: string | null; normal_range: string | null; group: string | null } & Src)[];
   diagnoses: ({ text: string; kind: keyof typeof DIAGNOSIS_KINDS; icd10: string | null } & Src)[];
   medications: ({ text: string; drug: string; dose: string | null; route: string | null; frequency: string | null; change: keyof typeof MED_CHANGES } & Src)[];
   follow_ups: ({ text: string; due: string | null } & Src)[];
@@ -311,6 +319,15 @@ export function docDraftFromExtraction(x: ExtractedDocument, pages: PageSize[]):
     identityConfirmed: false,
     notes: x.notes,
     sections: x.sections.map((s, i) => ({ id: `s${i + 1}`, heading: s.heading, text: s.text, ...src(s) })),
+    measurements: (x.measurements ?? []).map((m, i) => ({
+      id: `x${i + 1}`,
+      name: m.name,
+      value: m.value,
+      unit: m.unit ?? "",
+      range: m.normal_range ?? "",
+      group: m.group ?? "",
+      ...src(m),
+    })),
     diagnoses: x.diagnoses.map((d, i) => ({ id: `d${i + 1}`, text: d.text, kind: d.kind, icd10: (d.icd10 ?? "").toUpperCase(), addToProblems: false, ...src(d) })),
     meds: x.medications.map((m, i) => ({
       id: `m${i + 1}`,
@@ -349,6 +366,7 @@ export function emptyDocDraft(): DocDraft {
     identityConfirmed: false,
     notes: [],
     sections: [{ id: "s1", heading: "", text: "", file: 0, box: null }],
+    measurements: [],
     diagnoses: [],
     meds: [],
     followUps: [],

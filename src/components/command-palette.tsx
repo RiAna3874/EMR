@@ -30,6 +30,8 @@ const CHART: { slug: string; label: string; key?: string }[] = [
   { slug: "notes?new=1", label: "New note" },
   { slug: "documents", label: "Documents", key: "d" },
   { slug: "import?kind=document", label: "Import a document" },
+  { slug: "media", label: "Media (clinical photos and scans)" },
+  { slug: "media?add=1", label: "Take a clinical photo" },
   { slug: "notes?new=1&template=progress_soap", label: "New office visit note" },
   { slug: "notes?status=cosign", label: "Notes needing cosign" },
   { slug: "orders", label: "Orders", key: "o" },

@@ -27,6 +27,7 @@ An outpatient electronic medical record that follows the workflows clinicians kn
   - **Orders**: search labs, imaging, procedures, referrals and a small formulary, or add an order set (annual labs, diabetes, anemia, heart failure, new hypertension). Orders wait in a pending list until signed together. Safety checks run as you order: drug and contrast allergies (by class, e.g. penicillin → amoxicillin), duplicates, labs repeated too soon (a recent CMP counts against a BMP), contrast with low eGFR, and for prescriptions the full prescribing checks below. A hard stop needs an override reason, which is kept on the order. Signed prescriptions go to the medication list; a lab result that arrives (including an imported report) completes the matching lab order and links to it.
   - **Appointments**: upcoming and past visits, including cancellations (with reason) and no-shows, with **Make appointment**.
   - **Documents**: outside records in one list (imaging reports, discharge summaries, referral and consult letters, imported lab reports) with page thumbnails, filters by type, a reading view, and uploads still waiting for review. See [Outside document import](#outside-document-import).
+  - **Media**: clinical photos (hands, skin, wounds, eyes), ECG strips, consent forms, ID cards and other paper kept as is. Take a photo (the phone's camera, or the computer's webcam in a window), or upload photos and PDFs; give each a name, what it is, the body site and the date taken before filing. Items are grouped by date with a large zoomable viewer, filters by kind, side-by-side comparison with earlier photos of the same site, renaming, "entered in error", and **Read as a report** to send a photo of a report to Import.
   - **Import**: turn a photo, scan or PDF of an outside lab report into filed, flagged results, or of any other outside document into a structured chart document. See below.
 - **Inbox**: abnormal results (critical first), normal results (acknowledge all at once), outside documents to review, imports to verify, notes to sign, notes to cosign, orders to sign, pharmacy refill requests and residents' prescriptions to cosign. A result shows the previous value, the change, and a sparkline for each component; acknowledge it with an optional comment and the next one opens. Results go to the clinician who ordered them; outside reports with no order go to the PCP, unless the PCP filed them.
 - **Printing**: a clean laboratory report for any result (all panels drawn together print as one report, with previous values, flags and, for imported results, where they came from and who verified them); a plain-language **patient letter** for the same results; an order requisition for active labs, imaging and referrals; a paper **prescription** for print-class medications; and the patient's own **medication list**.
@@ -72,6 +73,7 @@ Each role sees and does what fits it. Every server action checks the role itself
 | Sign and discontinue orders | ✓ | ✓ | | |
 | Upload and review outside reports | ✓ | ✓ | ✓ | |
 | Verify and file imported results and documents | ✓ | ✓ | | |
+| Take, upload and rename clinical photos (Media) | ✓ | ✓ | ✓ | |
 | Acknowledge results (Inbox) | ✓ | ✓ | | |
 | Register new patients | ✓ | ✓ | ✓ | ✓ |
 | Book, reschedule and cancel appointments | ✓ | ✓ | ✓ | ✓ |
@@ -149,7 +151,9 @@ Set `ANTHROPIC_API_KEY` in `.env`. To work on the review screen without an API k
 
 ## Outside document import
 
-The same Import tab reads documents that aren't lab tables: imaging reports, hospital discharge summaries, referral letters and consult letters (plus procedure and pathology reports, or "other"). Choose **Clinical document** before uploading.
+The same Import tab reads documents that aren't lab tables: imaging reports (X-ray, CT, MRI, ultrasound, written echocardiography), hospital discharge summaries, referral letters and consult letters (plus procedure and pathology reports, or "other"). Uploads default to **Any report**: Claude first looks at the pages and decides whether they are lab results or a written report, then reads them that way. A "lab" upload in which no lab values are found is read again as a written report. **Lab results** and **Written report or letter** skip that step.
+
+Long, wordy reports are read in one streamed pass with room for every sentence, so an MRI or a narrative echo report is transcribed whole rather than timing out. Numbered measurements (echo chamber sizes and EF, Doppler values, organ sizes, DEXA scores) are also listed in their own table with units and normal ranges, kept as printed.
 
 1. **Read**: Claude transcribes the document word for word: title, facility, author, dates, the impression, every section's text, and the diagnoses, medications (marked new, changed, continued or stopped) and follow-up recommendations the document itself states, each with where it sits on the page. It doesn't summarize or add anything. If the pages turn out to be a lab report, a banner offers to read them as lab results instead (and the header link switches either way).
 2. **Review**, side by side with the pages; clicking a highlight finds the item in the form and the reverse. The app:
@@ -160,7 +164,7 @@ The same Import tab reads documents that aren't lab tables: imaging reports, hos
 
 A nurse can upload and prepare a document but not file it. Filed documents show on the Documents tab and the Summary ("Outside records"), print in our own layout with their provenance, and wait in the Inbox under "Outside documents" for the clinician who ordered them or, with no order, the PCP, unless that clinician filed it.
 
-To work without an API key, set `MERIDIAN_DOCUMENT_FIXTURES=samples` (development only) and upload one of the synthetic documents in `samples/` (`synthetic-discharge-summary-p1.png` with `-p2.png`, `synthetic-dxa-report.png`, `synthetic-ct-chest-report.png`, `synthetic-ruq-ultrasound.png`, `synthetic-eye-consult-letter.png`); the saved transcription is matched by file name. The seed files a CT and an ultrasound and leaves an eye consult letter waiting for review.
+To work without an API key, set `MERIDIAN_DOCUMENT_FIXTURES=samples` (development only) and upload one of the synthetic documents in `samples/` (`synthetic-discharge-summary-p1.png` with `-p2.png`, `synthetic-dxa-report.png`, `synthetic-ct-chest-report.png`, `synthetic-ruq-ultrasound.png`, `synthetic-eye-consult-letter.png`, and the narrative `synthetic-echo-report.png` (Marcus Okonkwo-Hale) and `synthetic-mri-lumbar-report.png` (Theodore Vance)); the saved transcription is matched by file name. The seed files a CT and an ultrasound and leaves an eye consult letter waiting for review.
 
 ## Stack
 

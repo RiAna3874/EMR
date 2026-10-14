@@ -98,6 +98,26 @@ export function DocView({ doc, patientId, print = false }: { doc: FiledDoc; pati
         </section>
       )}
 
+      {c.measurements.length > 0 && (
+        <section>
+          <div className={sectionTitle}>Measurements</div>
+          <table className="w-full overflow-hidden rounded border border-line text-[12.5px]">
+            <tbody className="divide-y divide-line">
+              {c.measurements.map((m, i) => (
+                <tr key={m.id}>
+                  <td className="px-2.5 py-1 text-[11px] text-ink-3">{m.group !== c.measurements[i - 1]?.group ? m.group : ""}</td>
+                  <td className="px-2.5 py-1">{m.name}</td>
+                  <td className="px-2.5 py-1 text-right font-medium tabular-nums">
+                    {m.value} {m.unit && <span className="font-normal text-ink-2">{m.unit}</span>}
+                  </td>
+                  <td className="px-2.5 py-1 text-ink-3">{m.range}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {(c.diagnoses.length > 0 || meds.length > 0) && (
         <div className={`grid grid-cols-1 gap-4 ${print ? "" : "2xl:grid-cols-2"}`}>
           {c.diagnoses.length > 0 && (
