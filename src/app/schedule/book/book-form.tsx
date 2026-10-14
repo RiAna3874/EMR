@@ -10,6 +10,7 @@ export function BookForm(props: {
   providerId: string;
   visitType: string;
   start: string;
+  minutes: number;
   reason: string;
   rescheduleId?: string;
   open: boolean;
@@ -23,7 +24,6 @@ export function BookForm(props: {
       <input type="hidden" name="patientId" value={props.patientId} />
       <input type="hidden" name="providerId" value={props.providerId} />
       <input type="hidden" name="visitType" value={props.visitType} />
-      <input type="hidden" name="start" value={props.start} />
       <input type="hidden" name="reason" value={props.reason} />
       {props.rescheduleId && <input type="hidden" name="rescheduleId" value={props.rescheduleId} />}
       <div className="flex items-center justify-between gap-3 rounded border border-line bg-panel-muted px-3 py-2">
@@ -31,6 +31,14 @@ export function BookForm(props: {
         <Link href={props.changeHref} className="shrink-0 text-[12px] text-accent hover:underline">
           Pick another time
         </Link>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Field label="Start">
+          <input type="datetime-local" name="start" required step={300} defaultValue={props.start} className={inputCls} />
+        </Field>
+        <Field label="Length (minutes)">
+          <input type="number" name="minutes" required min={5} max={480} step={5} defaultValue={props.minutes} className={`${inputCls} w-28`} />
+        </Field>
       </div>
       <Field label="Note for the clinic (optional)">
         <input name="note" placeholder="e.g. needs interpreter, fasting labs" className={inputCls} />
