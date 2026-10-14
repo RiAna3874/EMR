@@ -249,6 +249,7 @@ model Practitioner {
   importJobs         ImportJob[]          @relation("ImportCreatedBy")
   filedImports       ImportJob[]          @relation("ImportFiledBy")
   reviewedReports    DiagnosticReport[]   @relation("ReviewedReports")
+  resultCorrections  ObservationCorrection[]
   orders             ServiceRequest[]
   cosignMeds         MedicationRequest[]  @relation("MedCosigner")
   endedMeds          MedicationRequest[]  @relation("MedEndedBy")
@@ -665,8 +666,32 @@ model Observation {
   enteredInErrorAt     DateTime?
   enteredInErrorReason String?
   enteredInErrorById   String?
+  // A result whose number was typed or read wrong and fixed later. The value above is the
+  // corrected one; each earlier value is kept in ObservationCorrection.
+  correctedAt          DateTime?
+  corrections          ObservationCorrection[]
 
   @@index([patientId, category, effectiveAt])
+}
+
+// The value a lab result had before someone corrected it, with who changed it, when and why.
+model ObservationCorrection {
+  id            String       @id @default(cuid())
+  observationId String
+  observation   Observation  @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  valueNum      Float?
+  valueText     String?
+  unit          String?
+  refLow        Float?
+  refHigh       Float?
+  refText       String?
+  flag          Flag?
+  reason        String
+  correctedById String
+  correctedBy   Practitioner @relation(fields: [correctedById], references: [id])
+  correctedAt   DateTime     @default(now())
+
+  @@index([observationId, correctedAt])
 }
 
 model DiagnosticReport {
@@ -692,6 +717,8 @@ model DiagnosticReport {
   reviewedById         String?
   reviewedBy           Practitioner?   @relation("ReviewedReports", fields: [reviewedById], references: [id])
   reviewComment        String?
+  // Last time one of its values was corrected (see ObservationCorrection).
+  correctedAt          DateTime?
   // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
   // checks, kept for the record. See src/lib/db.ts.
   enteredInErrorAt     DateTime?

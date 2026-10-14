@@ -40,6 +40,7 @@ export const MODEL_LABELS: Record<string, string> = {
   MedicationDispense: "Dispense",
   RefillRequest: "Refill request",
   Observation: "Result or vital",
+  ObservationCorrection: "Result correction",
   DiagnosticReport: "Lab report",
   Note: "Note",
   NoteAddendum: "Note addendum",

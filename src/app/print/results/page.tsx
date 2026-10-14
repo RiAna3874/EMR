@@ -206,7 +206,10 @@ export default async function PrintResults({ searchParams }: { searchParams: Pro
                 return (
                   <tr key={o.id} className={`border-t border-black/15 ${flagged ? "font-bold" : ""}`}>
                     <td className="py-[3px] pr-2">{o.display}</td>
-                    <td className="tabular py-[3px] pr-2 text-right">{fmtValue(o)}</td>
+                    <td className="tabular py-[3px] pr-2 text-right">
+                      {fmtValue(o)}
+                      {o.correctedAt && <span title="Corrected value"> (C)</span>}
+                    </td>
                     <td className="py-[3px] pr-2">{flagged ? o.flag : ""}</td>
                     <td className="py-[3px] pr-2 font-normal">{unitLabel(o.unit)}</td>
                     <td className="tabular py-[3px] pr-2 font-normal">{fmtRange(o)}</td>
@@ -230,7 +233,9 @@ export default async function PrintResults({ searchParams }: { searchParams: Pro
       ))}
 
       {reviews.length > 0 && <p className="mt-4 text-[10.5px]">{reviews.join(" ")}</p>}
-      <p className="mt-1 text-[10.5px]">Flags: H high, L low, HH critically high, LL critically low, A abnormal. Previous shows the most recent earlier result for the same test.</p>
+      <p className="mt-1 text-[10.5px]">Flags: H high, L low, HH critically high, LL critically low, A abnormal. Previous shows the most recent earlier result for the same test.
+        {reports.some((r) => r.observations.some((o) => o.correctedAt)) && " (C) marks a value corrected after it was first filed."}
+      </p>
 
       <PrintFooter>
         {imported && (

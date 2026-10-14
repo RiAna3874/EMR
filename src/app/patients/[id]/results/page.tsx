@@ -13,6 +13,11 @@ import { acknowledgeResult } from "@/app/inbox/actions";
 import { logChartView } from "@/lib/audit/server";
 import { EnteredInError } from "@/components/entered-in-error";
 import { markReportInError } from "../error-actions";
+import { CorrectResultForm } from "@/components/correct-result-form";
+import { canCorrectResult } from "@/lib/labs/correction";
+import { correctLabResult } from "./actions";
+import { displayName, type SessionUser } from "@/lib/roles";
+import type { Flag, Sex } from "@prisma/client";
 
 const MAX_COLUMNS = 6;
 
@@ -21,7 +26,7 @@ export default async function Results({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string }>;
+  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string; correct?: string; corrected?: string }>;
 }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
@@ -31,8 +36,9 @@ export default async function Results({
   const reports = await db.diagnosticReport.findMany({
     where: { patientId: id },
     orderBy: { effectiveAt: "desc" },
-    include: { observations: { orderBy: { sortOrder: "asc" } }, verifiedBy: true, reviewedBy: true },
+    include: REPORT_INCLUDE,
   });
+  const patient = await db.patient.findUniqueOrThrow({ where: { id }, select: { sex: true } });
   const view = sp.view === "reports" ? "reports" : sp.view === "graph" ? "graph" : "grid";
 
   return (
@@ -67,15 +73,34 @@ export default async function Results({
       ) : view === "graph" ? (
         <GraphView reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
-        <ReportView reports={reports} selected={sp.report} base={base} canReview={can(currentUser.role, "reviewResults")} canFile={can(currentUser.role, "fileImports")} />
+        <ReportView
+          reports={reports}
+          selected={sp.report}
+          base={base}
+          canReview={can(currentUser.role, "reviewResults")}
+          canFile={can(currentUser.role, "fileImports")}
+          user={currentUser}
+          sex={patient.sex}
+          correcting={sp.correct}
+          justCorrected={sp.corrected}
+        />
       )}
     </div>
   );
 }
 
-type ReportWithObs = Awaited<
-  ReturnType<typeof db.diagnosticReport.findMany<{ include: { observations: true; verifiedBy: true; reviewedBy: true } }>>
->[number];
+const REPORT_INCLUDE = {
+  observations: {
+    orderBy: { sortOrder: "asc" },
+    include: { corrections: { orderBy: { correctedAt: "asc" }, include: { correctedBy: { select: { name: true, credentials: true } } } } },
+  },
+  verifiedBy: true,
+  reviewedBy: true,
+  importJob: { select: { createdById: true } },
+} as const;
+
+type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ include: typeof REPORT_INCLUDE }>>>[number];
+type ObsWithCorrections = ReportWithObs["observations"][number];
 
 function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }) {
   // One section per panel type, newest results on the left.
@@ -147,6 +172,7 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
                             <>
                               {fmtValue(o)}
                               <FlagBadge flag={o.flag} />
+                              {o.correctedAt && <CorrectedMark />}
                             </>
                           ) : (
                             <span className="text-ink-3">—</span>
@@ -170,8 +196,31 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
   );
 }
 
-function ReportView({ reports, selected, base, canReview, canFile }: { reports: ReportWithObs[]; selected?: string; base: string; canReview: boolean; canFile: boolean }) {
+function ReportView({
+  reports,
+  selected,
+  base,
+  canReview,
+  canFile,
+  user,
+  sex,
+  correcting,
+  justCorrected,
+}: {
+  reports: ReportWithObs[];
+  selected?: string;
+  base: string;
+  canReview: boolean;
+  canFile: boolean;
+  user: SessionUser;
+  sex: Sex;
+  correcting?: string;
+  justCorrected?: string;
+}) {
   const current = reports.find((r) => r.id === selected) ?? reports[0];
+  const here = `${base}?view=reports&report=${current.id}`;
+  const canCorrect = canCorrectResult(user, current);
+  const corrections = current.observations.flatMap((o) => o.corrections.map((c, i) => ({ ...c, obs: o, after: o.corrections[i + 1] ?? o })));
   return (
     <div className="flex gap-3">
       <ul className="w-72 shrink-0 overflow-hidden rounded-md border border-line bg-panel">
@@ -231,6 +280,11 @@ function ReportView({ reports, selected, base, canReview, canFile }: { reports: 
               <dd className="capitalize">
                 {current.status}
                 {current.source === "imported" && <span className="ml-1.5 rounded bg-low-soft px-1 text-[10.5px] font-semibold text-low">IMPORTED</span>}
+                {current.correctedAt && (
+                  <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn" title={`Last corrected ${fmtDateTime(current.correctedAt)}`}>
+                    CORRECTED
+                  </span>
+                )}
               </dd>
             </div>
           </dl>
@@ -267,26 +321,87 @@ function ReportView({ reports, selected, base, canReview, canFile }: { reports: 
               <th className="px-3 py-2 font-medium">Reference range</th>
               <th className="px-3 py-2 font-medium">Units</th>
               <th className="px-3 py-2 font-medium">LOINC</th>
+              {canCorrect && <th className="w-20 px-3 py-2" />}
             </tr>
           </thead>
           <tbody>
-            {current.observations.map((o) => (
-              <tr key={o.id} className="border-t border-line">
-                <td className="px-4 py-1.5">{o.display}</td>
-                <td className={`tabular px-3 py-1.5 text-right font-medium ${flagText(o.flag)}`}>{fmtValue(o)}</td>
-                <td className="px-3 py-1.5">
-                  <FlagBadge flag={o.flag} />
-                </td>
-                <td className="tabular px-3 py-1.5 text-ink-2">{fmtRange(o)}</td>
-                <td className="px-3 py-1.5 text-ink-2">{unitLabel(o.unit)}</td>
-                <td className="px-3 py-1.5 font-mono text-[11.5px] text-ink-3">{o.code}</td>
-              </tr>
-            ))}
+            {current.observations.map((o) =>
+              correcting === o.id && canCorrect ? (
+                <tr key={o.id} id={o.id} className="border-t border-line">
+                  <td colSpan={7} className="p-0">
+                    <CorrectResultForm
+                      result={o}
+                      sex={sex}
+                      action={correctLabResult.bind(null, current.patientId, o.id)}
+                      cancelHref={here}
+                    />
+                  </td>
+                </tr>
+              ) : (
+                <tr key={o.id} id={o.id} className={`scroll-mt-4 border-t border-line ${justCorrected === o.id ? "bg-warn-soft/60" : ""}`}>
+                  <td className="px-4 py-1.5">{o.display}</td>
+                  <td className={`tabular px-3 py-1.5 text-right font-medium ${flagText(o.flag)}`}>
+                    {fmtValue(o)}
+                    {o.correctedAt && <CorrectedMark obs={o} />}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <FlagBadge flag={o.flag} />
+                  </td>
+                  <td className="tabular px-3 py-1.5 text-ink-2">{fmtRange(o)}</td>
+                  <td className="px-3 py-1.5 text-ink-2">{unitLabel(o.unit)}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11.5px] text-ink-3">{o.code}</td>
+                  {canCorrect && (
+                    <td className="px-3 py-1.5 text-right">
+                      <Link href={`${here}&correct=${o.id}#${o.id}`} className="text-[12px] font-medium text-accent hover:underline" title="Fix a value that was typed or read wrong">
+                        Correct
+                      </Link>
+                    </td>
+                  )}
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
+        {corrections.length > 0 && (
+          <section className="border-t border-line px-4 py-3">
+            <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Corrections</h3>
+            <ul className="space-y-1 text-[12.5px]">
+              {corrections
+                .sort((a, b) => b.correctedAt.getTime() - a.correctedAt.getTime())
+                .map((c) => (
+                  <li key={c.id} className="flex flex-wrap gap-x-1.5">
+                    <span className="font-medium">{c.obs.display}</span>
+                    <span className="tabular text-ink-2">
+                      changed from <s>{resultWords(c)}</s> to {resultWords(c.after)}
+                    </span>
+                    <span className="text-ink-3">
+                      by {displayName(c.correctedBy)} on {fmtDateTime(c.correctedAt)}. {c.reason}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
       </article>
     </div>
   );
+}
+
+// "C" for a corrected value, as on lab reports; hovering shows what it was before.
+function CorrectedMark({ obs }: { obs?: ObsWithCorrections }) {
+  const first = obs?.corrections[0];
+  const title = first ? `Corrected. Originally filed as ${resultWords(first)}.` : "Corrected value. See the report for what it was.";
+  return (
+    <span title={title} className="ml-1 inline-block rounded bg-warn-soft px-1 align-[1px] text-[9.5px] font-bold leading-[14px] text-warn">
+      C
+    </span>
+  );
+}
+
+function resultWords(o: { valueNum: number | null; valueText: string | null; unit: string | null; refLow: number | null; refHigh: number | null; refText: string | null; flag: Flag | null }) {
+  const flag = o.flag && o.flag !== "N" ? ` (${flagTitle(o.flag).toLowerCase()})` : "";
+  const range = fmtRange(o);
+  return `${fmtValue(o) || "blank"}${o.unit ? ` ${unitLabel(o.unit)}` : ""}${flag}${range ? `, range ${range}` : ""}`;
 }
 
 function ImportedMark() {
@@ -312,6 +427,10 @@ function Legend() {
       <span>
         <ImportedMark />
         Imported
+      </span>
+      <span>
+        <CorrectedMark />
+        Corrected
       </span>
     </div>
   );
