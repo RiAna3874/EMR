@@ -4,6 +4,7 @@ import { db, type Tx } from "@/lib/db";
 import type { SessionUser } from "@/lib/roles";
 import { ACTIVE_STATUSES, canTransition, TRANSITIONS, type WorkflowAction } from "./workflow";
 import { fitsSchedule, openSlots, type Busy } from "./slots";
+import { standardSessions } from "@/lib/clinic";
 
 const DAY = 86_400_000;
 
@@ -13,13 +14,21 @@ export const startOfDay = (d: Date) => {
   return x;
 };
 
-// Providers who keep a clinic schedule (anyone with at least one session).
-export function scheduledProviders() {
-  return db.practitioner.findMany({
-    where: { active: true, scheduleSessions: { some: {} } },
+// Physicians and residents keep a clinic schedule, plus anyone else given
+// sessions. Someone with no weekly sessions of their own works the clinic's
+// standard hours (src/lib/clinic.ts), so a new clinic has open times from day one.
+export async function scheduledProviders() {
+  const providers = await db.practitioner.findMany({
+    where: { active: true, OR: [{ role: { in: ["physician", "resident"] } }, { scheduleSessions: { some: {} } }] },
     orderBy: { name: "asc" },
     include: { scheduleSessions: true },
   });
+  return providers.map(withHours);
+}
+
+function withHours<P extends { id: string; scheduleSessions: { weekday: number; startMin: number; endMin: number; slotMinutes: number }[] }>(p: P) {
+  const standardHours = p.scheduleSessions.length === 0;
+  return { ...p, standardHours, scheduleSessions: standardHours ? standardSessions(p.id) : p.scheduleSessions };
 }
 
 // Booked appointments and blocked time for these providers between from and to.
@@ -42,7 +51,7 @@ async function busyTimes(providerIds: string[], from: Date, to: Date, ignoreId?:
 
 // Open slots for a visit of `minutes`, across `days` days from `from`, per provider.
 export async function findSlots({ providerIds, minutes, from, days }: { providerIds: string[]; minutes: number; from: Date; days: number }) {
-  const providers = await db.practitioner.findMany({ where: { id: { in: providerIds } }, include: { scheduleSessions: true } });
+  const providers = (await db.practitioner.findMany({ where: { id: { in: providerIds } }, include: { scheduleSessions: true } })).map(withHours);
   const first = startOfDay(from);
   const busy = await busyTimes(providerIds, first, new Date(first.getTime() + (days + 1) * DAY));
   const now = new Date();
@@ -62,7 +71,7 @@ export async function findSlots({ providerIds, minutes, from, days }: { provider
 // Whether [start, end) is open on the provider's schedule; otherwise booking it is an overbook.
 export async function isOpen(providerId: string, start: Date, end: Date, ignoreId?: string) {
   const [sessions, busy] = await Promise.all([
-    db.scheduleSession.findMany({ where: { practitionerId: providerId } }),
+    db.scheduleSession.findMany({ where: { practitionerId: providerId } }).then((s) => (s.length ? s : standardSessions(providerId))),
     busyTimes([providerId], startOfDay(start), new Date(startOfDay(start).getTime() + DAY), ignoreId),
   ]);
   return fitsSchedule({ start, end }, sessions, busy.get(providerId) ?? []);

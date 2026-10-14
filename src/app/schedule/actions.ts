@@ -31,7 +31,10 @@ export async function bookAppointment(_prev: BookState, form: FormData): Promise
   if (!patientId || !providerId || !isVisitType(typeId) || Number.isNaN(start.getTime())) return { error: "Choose a patient, provider, visit type and time." };
   if (start < startOfDay(new Date())) return { error: "That day has passed. Pick a time from today on." };
   const vt = visitType(typeId);
-  const end = new Date(start.getTime() + vt.minutes * 60_000);
+  // The visit type sets the usual length; the booker can change it.
+  const typed = Math.round(Number(str(form, "minutes")));
+  const minutes = Number.isFinite(typed) && typed >= 5 && typed <= 480 ? typed : vt.minutes;
+  const end = new Date(start.getTime() + minutes * 60_000);
 
   const [patient, provider, old] = await Promise.all([
     db.patient.findUnique({ where: { id: patientId } }),

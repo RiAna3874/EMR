@@ -43,6 +43,7 @@ Environment variables:
 | `TZ` | `Asia/Dhaka` (the clinic's time zone). **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. |
 | `MERIDIAN_SETUP_TOKEN` | A long random value, made with `openssl rand -base64 24`. Keep it private; you type it once to create the first administrator. |
 | `MERIDIAN_CLINIC_NAME`, `MERIDIAN_CLINIC_ADDRESS`, `MERIDIAN_CLINIC_PHONE`, `MERIDIAN_CLINIC_FAX` | Printed on letters, requisitions and prescriptions |
+| `MERIDIAN_CLINIC_DAYS`, `MERIDIAN_CLINIC_HOURS` | Optional: the standard clinic week for doctors who have no hours of their own, such as `Sun,Mon,Tue,Wed,Thu` and `09:00-17:00` (the defaults). Each doctor's own hours are set at Schedule, Provider templates. |
 | `MERIDIAN_APP_NAME`, `MERIDIAN_APP_FULL_NAME`, `MERIDIAN_LOGO_URL`, `MERIDIAN_ACCENT_COLOR` | Optional: your own product name, logo and color. See [Your own name and look](#your-own-name-and-look). |
 | `ANTHROPIC_API_KEY` | **Leave unset** until you have a signed agreement with Anthropic (see GO-LIVE.md). Without it, the Import tab says import isn't configured and nothing leaves your server. |
 

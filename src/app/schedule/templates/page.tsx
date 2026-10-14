@@ -5,6 +5,7 @@ import { fmtDate, fmtTime } from "@/lib/format";
 import { Button, Field, inputCls } from "@/components/form";
 import { Panel, Empty } from "@/components/panel";
 import { ActionButton } from "@/components/action-button";
+import { clinicHours } from "@/lib/clinic";
 import { addBlock, addSession, deleteBlock, deleteSession } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function Templates({ searchParams }: { searchParams: Promis
           >
             {p.name}
             <span className="block text-[11px] text-ink-3">
-              {p.scheduleSessions.length ? `${new Set(p.scheduleSessions.map((s) => s.weekday)).size} clinic days a week` : "No schedule"}
+              {p.scheduleSessions.length ? `${new Set(p.scheduleSessions.map((s) => s.weekday)).size} clinic days a week` : "Clinic standard hours"}
             </span>
           </Link>
         ))}
@@ -58,7 +59,11 @@ export default async function Templates({ searchParams }: { searchParams: Promis
 
           <Panel title="Weekly sessions">
             {current.scheduleSessions.length === 0 ? (
-              <Empty>No sessions. Add one below to open this provider&apos;s schedule.</Empty>
+              <Empty>
+                No hours of their own yet, so {current.name} works the clinic&apos;s standard hours:{" "}
+                {clinicHours.weekdays.map((d) => WEEKDAYS[d]).join(", ")}, {hhmm(clinicHours.startMin)} to {hhmm(clinicHours.endMin)}, {clinicHours.slotMinutes}-minute slots. Add
+                sessions below to set different hours; once a provider has any, only theirs are used.
+              </Empty>
             ) : (
               <table className="w-full">
                 <thead className="text-left text-[11.5px] text-ink-3">
@@ -92,20 +97,20 @@ export default async function Templates({ searchParams }: { searchParams: Promis
               <fieldset className="flex items-center gap-2 pb-1">
                 {WEEKDAYS.map((d, i) => (
                   <label key={d} className="flex items-center gap-1">
-                    <input type="checkbox" name="weekday" value={i} />
+                    <input type="checkbox" name="weekday" value={i} defaultChecked={current.scheduleSessions.length === 0 && clinicHours.weekdays.includes(i)} />
                     {d}
                   </label>
                 ))}
               </fieldset>
               <Field label="From">
-                <input type="time" name="start" defaultValue="08:00" step={900} className={inputCls} />
+                <input type="time" name="start" defaultValue={hhmm(clinicHours.startMin)} step={300} className={inputCls} />
               </Field>
               <Field label="To">
-                <input type="time" name="end" defaultValue="12:00" step={900} className={inputCls} />
+                <input type="time" name="end" defaultValue={hhmm(clinicHours.endMin)} step={300} className={inputCls} />
               </Field>
               <Field label="Slot length">
                 <select name="slotMinutes" defaultValue="20" className={inputCls}>
-                  {[10, 15, 20, 30, 40].map((m) => (
+                  {[5, 10, 15, 20, 30, 40, 60].map((m) => (
                     <option key={m} value={m}>
                       {m} min
                     </option>
