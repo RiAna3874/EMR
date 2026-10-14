@@ -30,7 +30,7 @@ Rough cost: a Starter web service plus a paid Postgres plan with point-in-time r
 | Pre-deploy command | `npm run db:migrate` |
 | Start command | `npm start` |
 | Health check path | `/login` |
-| Instance | Starter or larger, **one instance** (the sign-in lockout counter lives in memory) |
+| Instance | Starter or larger, **one instance** is enough |
 
 `--include=dev` matters: the build needs Tailwind, TypeScript and the Prisma CLI, which are dev dependencies. If your plan has no pre-deploy command, use `npm run db:migrate && npm start` as the start command instead.
 
@@ -40,7 +40,7 @@ Environment variables:
 |---|---|
 | `DATABASE_URL` | The Internal Database URL from step 1 |
 | `NODE_ENV` | `production` |
-| `TZ` | `Asia/Dhaka` (the clinic's time zone). **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. |
+| `TZ` | `Asia/Dhaka` (the clinic's time zone). **Required**: "today", the clinic schedule and visit times use the server clock, which is UTC otherwise. A production server refuses to start without it. |
 | `MERIDIAN_SETUP_TOKEN` | A long random value, made with `openssl rand -base64 24`. Keep it private; you type it once to create the first administrator. |
 | `MERIDIAN_CLINIC_NAME`, `MERIDIAN_CLINIC_ADDRESS`, `MERIDIAN_CLINIC_PHONE`, `MERIDIAN_CLINIC_FAX` | Printed on letters, requisitions and prescriptions |
 | `MERIDIAN_CLINIC_DAYS`, `MERIDIAN_CLINIC_HOURS` | Optional: the standard clinic week for doctors who have no hours of their own, such as `Sun,Mon,Tue,Wed,Thu` and `09:00-17:00` (the defaults). Each doctor's own hours are set at Schedule, Provider templates. |

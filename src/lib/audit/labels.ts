@@ -12,6 +12,8 @@ export const AUDIT_ACTIONS = {
   two_step_failed: "Two-step code wrong",
   recovery_code_used: "Used a recovery code",
   sign_out: "Signed out",
+  screen_locked: "Screen locked",
+  screen_unlocked: "Unlocked the screen",
   password_changed: "Changed password",
   two_step_on: "Turned on two-step sign-in",
   account: "Staff account change",

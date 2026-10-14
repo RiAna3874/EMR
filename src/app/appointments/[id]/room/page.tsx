@@ -16,9 +16,9 @@ export const dynamic = "force-dynamic";
 
 // Rooming: pick an exam room, take the chief complaint and vitals, and review
 // allergies and medications, so the visit is ready for the provider.
-export default async function Room({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function Room({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; detail?: string }> }) {
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, detail } = await searchParams;
   const user = await requirePermission("roomPatients");
   const appt = await db.encounter.findUnique({
     where: { id },
@@ -85,6 +85,7 @@ export default async function Room({ params, searchParams }: { params: Promise<{
             <div className="flex flex-wrap items-end gap-2 p-3">
               <VitalsFields lastHeight={lastHeight} />
             </div>
+            {error === "vitals" && detail && <p className="px-3 pb-3 text-crit">{detail}</p>}
           </Panel>
         )}
 

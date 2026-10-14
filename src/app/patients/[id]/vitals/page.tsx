@@ -27,11 +27,12 @@ const GRAPHS: { title: string; codes: string[]; unit: string; low?: number; high
   { title: "Temperature", codes: ["8310-5"], unit: "°C", low: 36.1, high: 37.8 },
 ];
 
-export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string }> }) {
+export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string; error?: string }> }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
   await logChartView(id, "Vitals");
-  const graph = (await searchParams).view === "graph";
+  const sp = await searchParams;
+  const graph = sp.view === "graph";
   const observations = await db.observation.findMany({ where: { patientId: id, category: "vital_signs" } });
   const { times, rows } = pivot(observations);
   const cols = times.slice(0, MAX_COLUMNS);
@@ -46,6 +47,7 @@ export default async function Vitals({ params, searchParams }: { params: Promise
             <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Enter vitals</h2>
             <span className="text-[11.5px] text-ink-3">Recorded now. Leave any field blank to skip it.</span>
           </div>
+          {sp.error && <p className="mb-2 text-crit">{sp.error}</p>}
           <div className="flex flex-wrap items-end gap-2">
             <VitalsFields lastHeight={lastHeight} />
             <Button type="submit">File vitals</Button>

@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function TwoStep() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.locked) redirect("/lock");
   if (user.mustChangePassword) redirect("/account/password");
   const row = await db.practitioner.findUniqueOrThrow({ where: { id: user.id } });
 

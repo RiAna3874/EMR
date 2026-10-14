@@ -40,5 +40,13 @@
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.30"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    }
   }
 }

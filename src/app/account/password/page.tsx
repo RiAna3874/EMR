@@ -9,6 +9,7 @@ export const metadata = { title: "Change password" };
 export default async function ChangePassword() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.locked) redirect("/lock");
   return (
     <div className="h-full overflow-y-auto bg-bg">
       <div className="mx-auto max-w-md px-6 py-8">

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { can, displayName } from "@/lib/roles";
 import { age, fmtDate, fmtDateTime, fmtDayLong, fmtDob, fmtTime, fullName, sexShort } from "@/lib/format";
-import { canTransition, eventLabel, TRANSITIONS, type WorkflowAction } from "@/lib/scheduling/workflow";
+import { canTransition, eventLabel, paymentText, TRANSITIONS, type WorkflowAction } from "@/lib/scheduling/workflow";
 import { CANCEL_REASONS, visitType } from "@/lib/scheduling/visit-types";
 import { Panel } from "@/components/panel";
 import { Button, inputCls } from "@/components/form";
@@ -148,7 +148,7 @@ export default async function Appointment({ params, searchParams }: { params: Pr
             </Link>
           )}
           {quick("noShow", "secondary", `Mark ${p.firstName} ${p.lastName} as a no-show?`)}
-          {quick("undoArrival", "ghost", "Undo this check-in? The copay record is cleared.")}
+          {quick("undoArrival", "ghost", "Undo this check-in? The payment record is cleared.")}
           {quick("undoNoShow", "ghost")}
           <Link href={`/patients/${p.id}`} className="ml-auto text-accent hover:underline">
             Open chart
@@ -214,8 +214,8 @@ export default async function Appointment({ params, searchParams }: { params: Pr
               )}
               {appt.arrivedAt && (
                 <>
-                  <dt className="text-ink-3">Copay</dt>
-                  <dd>{appt.copayCents ? `$${(appt.copayCents / 100).toFixed(2)} (${appt.copayMethod ?? "unknown"})` : appt.copayMethod === "waived" ? "Waived" : "None collected"}</dd>
+                  <dt className="text-ink-3">Payment</dt>
+                  <dd>{paymentText(appt.copayCents, appt.copayMethod)}</dd>
                 </>
               )}
               {appt.chiefComplaint && (

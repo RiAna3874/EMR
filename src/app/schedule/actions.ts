@@ -7,7 +7,7 @@ import { requirePermission, requireUser } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { vitalObservations } from "@/lib/vitals";
 import { advance, isOpen, startOfDay } from "@/lib/scheduling/server";
-import { ACTIVE_STATUSES, type WorkflowAction } from "@/lib/scheduling/workflow";
+import { ACTIVE_STATUSES, PAYMENT_METHODS, type WorkflowAction } from "@/lib/scheduling/workflow";
 import { CANCEL_REASONS, ROOMS, isVisitType, visitType } from "@/lib/scheduling/visit-types";
 import { DEFAULT_LANGUAGE, formatPhone } from "@/lib/registration/registration";
 import { fmtDateTime, fmtTime } from "@/lib/format";
@@ -97,16 +97,18 @@ export async function quickAction(encounterId: string, action: Extract<WorkflowA
   if (ok && action === "start" && enc) redirect(`/patients/${enc.patientId}`);
 }
 
-// Front desk check-in: confirm demographics and coverage, collect the copay, mark arrived.
+// Front desk check-in: confirm demographics and coverage, record any visit fee paid, mark arrived.
 export async function checkInPatient(encounterId: string, form: FormData) {
   const user = await requirePermission("checkIn");
   const enc = await db.encounter.findUniqueOrThrow({ where: { id: encounterId } });
-  const dollars = Number(str(form, "copay") || "0");
-  const method = ["cash", "card", "waived"].includes(str(form, "copayMethod")) ? str(form, "copayMethod") : null;
+  const taka = Number(str(form, "copay") || "0");
+  const paid = Number.isFinite(taka) && taka > 0 ? Math.round(taka * 100) : null;
+  const method = PAYMENT_METHODS.some((m) => m.id === str(form, "copayMethod")) ? str(form, "copayMethod") : null;
+  if (paid && (!method || method === "waived")) redirect(`/appointments/${encounterId}/check-in?error=payment`);
   await db.$transaction(async (tx) => {
     const ok = await advance(encounterId, "arrive", user, {
       tx,
-      data: { copayCents: Number.isFinite(dollars) && dollars > 0 ? Math.round(dollars * 100) : null, copayMethod: method },
+      data: { copayCents: paid, copayMethod: paid || method === "waived" ? method : null },
     });
     if (!ok) return;
     await tx.patient.update({
@@ -132,6 +134,9 @@ export async function roomPatient(encounterId: string, form: FormData) {
   const room = ROOMS.includes(str(form, "room")) ? str(form, "room") : null;
   if (enc.type === "office" && !room) redirect(`/appointments/${encounterId}/room?error=room`);
   const now = new Date();
+  const { dob } = await db.patient.findUniqueOrThrow({ where: { id: enc.patientId }, select: { dob: true } });
+  const vitals = can(user.role, "recordVitals") ? vitalObservations(form, { patientId: enc.patientId, at: now, encounterId, dob }) : { data: [], error: null };
+  if (vitals.error) redirect(`/appointments/${encounterId}/room?error=vitals&detail=${encodeURIComponent(vitals.error)}`);
   await db.$transaction(async (tx) => {
     const ok = await advance(encounterId, "room", user, {
       tx,
@@ -148,8 +153,7 @@ export async function roomPatient(encounterId: string, form: FormData) {
     if (form.get("medsReviewed") === "on" && can(user.role, "reviewMeds")) {
       await tx.patient.update({ where: { id: enc.patientId }, data: { medsReviewedAt: now, medsReviewedById: user.id } });
     }
-    const vitals = can(user.role, "recordVitals") ? vitalObservations(form, { patientId: enc.patientId, at: now, encounterId }) : [];
-    if (vitals.length) await tx.observation.createMany({ data: vitals });
+    if (vitals.data.length) await tx.observation.createMany({ data: vitals.data });
   });
   refresh(enc.patientId);
   redirect(str(form, "next") || "/");

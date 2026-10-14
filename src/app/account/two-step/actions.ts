@@ -14,6 +14,7 @@ export type TwoStepState = { error?: string; codes?: string[]; ok?: string } | u
 async function me() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.locked) redirect("/lock");
   if (user.mustChangePassword) redirect("/account/password");
   return { user, row: await db.practitioner.findUniqueOrThrow({ where: { id: user.id } }) };
 }

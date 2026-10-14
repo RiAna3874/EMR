@@ -13,6 +13,7 @@ export type PasswordState = { error?: string; done?: boolean } | undefined;
 export async function changePassword(_prev: PasswordState, form: FormData): Promise<PasswordState> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.locked) redirect("/lock");
   const current = String(form.get("current") ?? "");
   const next = String(form.get("password") ?? "");
   const row = await db.practitioner.findUniqueOrThrow({ where: { id: user.id } });

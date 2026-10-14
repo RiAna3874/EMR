@@ -8,14 +8,16 @@ import { Button, Field, inputCls } from "@/components/form";
 import { Panel } from "@/components/panel";
 import { checkInPatient } from "@/app/schedule/actions";
 import { LANGUAGES } from "@/lib/registration/registration";
+import { PAYMENT_METHODS } from "@/lib/scheduling/workflow";
 
 export const dynamic = "force-dynamic";
 
 
 // Front desk check-in: confirm who the patient is, how to reach them and their
-// coverage, collect the copay, then mark them arrived.
-export default async function CheckIn({ params }: { params: Promise<{ id: string }> }) {
+// coverage, take the visit fee if there is one, then mark them arrived.
+export default async function CheckIn({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params;
+  const { error } = await searchParams;
   await requirePermission("checkIn");
   const appt = await db.encounter.findUnique({ where: { id }, include: { patient: true, provider: true } });
   if (!appt) notFound();
@@ -73,20 +75,22 @@ export default async function CheckIn({ params }: { params: Promise<{ id: string
           </div>
         </Panel>
 
-        <Panel title="Copay">
+        <Panel title="Payment">
           <div className="flex flex-wrap items-end gap-3 p-3">
-            <Field label="Amount ($)">
-              <input name="copay" inputMode="decimal" defaultValue={appt.type === "telehealth" ? "0" : "25"} className={`${inputCls} w-24`} />
+            <Field label="Amount paid (৳)">
+              <input name="copay" type="number" min={0} step="any" inputMode="decimal" placeholder="0" className={`${inputCls} w-28`} />
             </Field>
             <fieldset className="flex items-center gap-3 pb-1">
-              {["card", "cash", "waived"].map((m, i) => (
-                <label key={m} className="flex items-center gap-1 capitalize">
-                  <input type="radio" name="copayMethod" value={m} defaultChecked={i === 0} />
-                  {m}
+              {PAYMENT_METHODS.map((m) => (
+                <label key={m.id} className="flex items-center gap-1">
+                  <input type="radio" name="copayMethod" value={m.id} />
+                  {m.label}
                 </label>
               ))}
             </fieldset>
+            <span className="pb-1 text-[12px] text-ink-3">Leave blank if nothing was paid.</span>
           </div>
+          {error === "payment" && <p className="px-3 pb-3 text-crit">Choose how it was paid.</p>}
         </Panel>
 
         <div className="flex items-center gap-3">
