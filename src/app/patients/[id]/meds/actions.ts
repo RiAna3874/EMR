@@ -10,6 +10,7 @@ import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { daysSupplyFor } from "@/lib/meds/sig";
 import { refillReview, writePrescription } from "@/lib/meds/server";
+import { problemLink } from "@/lib/problems/server";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const TAKING: PatientTaking[] = ["taking", "not_taking", "taking_differently"];
@@ -42,6 +43,7 @@ export async function documentOutsideMed(patientId: string, form: FormData) {
   const drug = str(form, "drug");
   if (!drug) return;
   const product = productFor({ drug });
+  const link = await problemLink(patientId, str(form, "conditionId"), str(form, "indication"));
   await db.medicationRequest.create({
     data: {
       patientId,
@@ -50,7 +52,7 @@ export async function documentOutsideMed(patientId: string, form: FormData) {
       dose: str(form, "dose") || product?.dose || "",
       route: str(form, "route") || product?.route || "oral",
       frequency: str(form, "frequency") || product?.frequency || "",
-      indication: str(form, "indication") || null,
+      ...link,
       status: "active",
       start: new Date(),
       rxClass: "historical",
@@ -149,6 +151,7 @@ export async function approveRefill(requestId: string, next: string, form: FormD
       daw: med.daw,
       patientInstructions: med.patientInstructions,
       indication: med.indication,
+      conditionId: med.conditionId,
       replacesId: med.id,
       refillRequestId: req.id,
       prescriberId: currentUser.id,
@@ -164,6 +167,7 @@ export async function approveRefill(requestId: string, next: string, form: FormD
         display: med.drug,
         status: "completed",
         indication: med.indication,
+        conditionId: med.conditionId,
         instructions: ["Refill request approved", override && `Alert overridden: ${override}`].filter(Boolean).join("\n"),
         details: { dose: med.dose, route: med.route, frequency, quantity, refills, rxClass: "print" },
         orderedById: currentUser.id,

@@ -41,7 +41,7 @@ export async function refillReview(medicationId: string) {
 // start date and replaces the prescription it follows.
 export async function writePrescription(
   tx: Tx,
-  rx: RxDetails & { patientId: string; drug: string; rxnorm: string | null; indication: string | null; prescriberId: string; cosignerId: string | null; pharmacyNote?: string | null },
+  rx: RxDetails & { patientId: string; drug: string; rxnorm: string | null; indication: string | null; conditionId?: string | null; prescriberId: string; cosignerId: string | null; pharmacyNote?: string | null },
 ) {
   const now = new Date();
   // A pending order written before e-prescribing was switched off still prints.
@@ -74,6 +74,8 @@ export async function writePrescription(
       prn: rx.prn ?? false,
       prnReason: rx.prnReason ?? null,
       indication: rx.indication ?? prior?.indication ?? null,
+      // A reorder or change stays under the problem the medication was for.
+      conditionId: rx.conditionId ?? (rx.indication ? null : prior?.conditionId) ?? null,
       status: "active",
       start: prior?.start ?? now,
       end: rx.durationDays ? new Date(now.getTime() + rx.durationDays * 86_400_000) : null,

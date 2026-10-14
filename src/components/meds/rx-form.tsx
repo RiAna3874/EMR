@@ -9,6 +9,7 @@ import { RX_CLASSES, rxClassFor, rxSummary, type RxDetails } from "@/lib/meds/rx
 import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "@/components/orders/order-bits";
 import { doseSuggestions } from "@/lib/meds/dosing";
+import { ProblemPicker, type ProblemOption } from "@/components/problem-picker";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 
 export type PharmacyOption = { id: string; name: string; address: string; mailOrder: boolean };
@@ -31,10 +32,10 @@ export function RxForm({
 }: {
   product: Product;
   ctx: OrderContext;
-  problems: string[];
+  problems: ProblemOption[];
   pharmacies: PharmacyOption[];
   preferredPharmacyId: string | null;
-  initial?: Partial<RxDetails> & { indication?: string | null; pharmacyNote?: string | null };
+  initial?: Partial<RxDetails> & { indication?: string | null; conditionId?: string | null; pharmacyNote?: string | null };
   replaces?: { id: string; drug: string; mode: "reorder" | "modify" };
   refillRequestId?: string;
   pending: boolean;
@@ -190,14 +191,7 @@ export function RxForm({
       {pharmacy && rxClass !== "print" && <p className="-mt-2 text-[11.5px] text-ink-3">{pharmacy.address}</p>}
 
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Indication">
-          <input name="indication" list="rx-indications" defaultValue={initial?.indication ?? ""} className={`${inputCls} w-64`} placeholder="Pick a problem or type one" />
-        </Field>
-        <datalist id="rx-indications">
-          {problems.map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
+        <ProblemPicker problems={problems} defaultConditionId={initial?.conditionId} defaultIndication={initial?.indication} />
         <Field label="Patient instructions" className="min-w-56 flex-1">
           <input name="patientInstructions" defaultValue={initial?.patientInstructions ?? ""} className={inputCls} placeholder="e.g. Take with food" />
         </Field>

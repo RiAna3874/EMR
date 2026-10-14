@@ -44,7 +44,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
     db.refillRequest.findMany({ where: { patientId: id, status: { in: ["requested", "pended"] } }, include: { medication: true, pharmacy: true, pendedBy: true }, orderBy: { requestedAt: "asc" } }),
     db.serviceRequest.findMany({ where: { patientId: id, status: "pending" }, orderBy: { createdAt: "asc" }, include: { orderedBy: true } }),
     orderContext(id),
-    db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { display: true } }),
+    db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { id: true, display: true } }),
     db.pharmacy.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, address: true, mailOrder: true } }),
     needsCosign(currentUser.role) ? db.practitioner.findMany({ where: { role: "physician", active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : null,
   ]);
@@ -90,6 +90,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         pharmacyId: target.pharmacyId,
         rxClass: target.rxClass === "historical" ? undefined : target.rxClass,
         indication: target.indication,
+        conditionId: target.conditionId,
       },
       replaces: { id: target.id, drug: target.drug, mode: sp.modify ? "modify" : "reorder" },
       refillRequestId: sp.refill,
@@ -206,7 +207,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
           <RxComposer
             key={`${sp.rx ?? ""}:${sp.modify ?? ""}:${sp.refill ?? ""}`}
             ctx={ctx}
-            problems={problems.map((p) => p.display)}
+            problems={problems}
             pharmacies={pharmacies}
             preferredPharmacyId={patient.preferredPharmacyId}
             start={start}
@@ -394,7 +395,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         </section>
 
         {canReview && (
-          <OutsideMedForm action={documentOutsideMed.bind(null, id)} />
+          <OutsideMedForm action={documentOutsideMed.bind(null, id)} problems={problems} />
         )}
       </div>
 

@@ -15,6 +15,7 @@ import { productFor } from "../src/lib/meds/formulary";
 import { hashPassword } from "../src/lib/password";
 import { docContent, docDraftFromExtraction, suggestOrder, type DocDraft, type ExtractedDocument } from "../src/lib/documents/draft";
 import { readFileSync } from "node:fs";
+import { matchProblem } from "../src/lib/problems/link";
 
 const prisma = new PrismaClient();
 const orderables = new Map(ORDERABLES.map((o) => [o.code, o]));
@@ -1160,6 +1161,23 @@ async function seedChat() {
 
   await prisma.practitioner.update({ where: { id: "prac_marsh" }, data: { chatStatus: "busy", chatStatusNote: "Reading echos until noon" } });
   await prisma.practitioner.update({ where: { id: "prac_ibarra" }, data: { chatStatus: "away", chatStatusNote: "Hospital rounds" } });
+
+  // Link each medication and order to the problem its indication names, so the
+  // problem list and a note's assessment and plan show them under it.
+  for (const c of await prisma.patient.findMany({ select: { id: true, conditions: { where: { status: "active" }, select: { id: true, display: true } } } })) {
+    const [meds, orders] = await Promise.all([
+      prisma.medicationRequest.findMany({ where: { patientId: c.id, indication: { not: null } }, select: { id: true, indication: true } }),
+      prisma.serviceRequest.findMany({ where: { patientId: c.id, indication: { not: null } }, select: { id: true, indication: true } }),
+    ]);
+    for (const m of meds) {
+      const p = matchProblem(m.indication, c.conditions);
+      if (p) await prisma.medicationRequest.update({ where: { id: m.id }, data: { conditionId: p.id } });
+    }
+    for (const o of orders) {
+      const p = matchProblem(o.indication, c.conditions);
+      if (p) await prisma.serviceRequest.update({ where: { id: o.id }, data: { conditionId: p.id } });
+    }
+  }
 }
 
 main()

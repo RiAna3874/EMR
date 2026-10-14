@@ -27,7 +27,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
       orderBy: { createdAt: "desc" },
       include: { orderedBy: true, reports: { select: { id: true }, take: 1 } },
     }),
-    db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { display: true } }),
+    db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { id: true, display: true } }),
     orderContext(id),
     db.patient.findUniqueOrThrow({ where: { id }, select: { preferredPharmacyId: true } }),
     db.pharmacy.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, address: true, mailOrder: true } }),
@@ -61,7 +61,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
           <OrderComposer
             key={sp.add ?? ""}
             ctx={ctx}
-            problems={problems.map((p) => p.display)}
+            problems={problems}
             initialCode={sp.add}
             pharmacies={pharmacies}
             preferredPharmacyId={patient.preferredPharmacyId}

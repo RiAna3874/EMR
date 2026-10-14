@@ -102,3 +102,17 @@ export async function reactivateProblem(patientId: string, conditionId: string) 
   await db.condition.update({ where: { id: conditionId, patientId }, data: { status: "active", resolvedAt: null } });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
+
+// Links a medication ("med:<id>") or order ("order:<id>") to a problem, or with
+// no conditionId, unlinks it. The indication follows the problem's name.
+export async function linkToProblem(patientId: string, conditionId: string | null, form: FormData) {
+  await requirePermission("editProblems");
+  const [kind, id] = str(form, "item").split(":");
+  if (!id) return;
+  const problem = conditionId ? await db.condition.findFirst({ where: { id: conditionId, patientId, status: "active" } }) : null;
+  if (conditionId && !problem) return;
+  const data = problem ? { conditionId: problem.id, indication: problem.display } : { conditionId: null };
+  if (kind === "med") await db.medicationRequest.update({ where: { id, patientId, status: { in: ["active", "on_hold"] } }, data });
+  else if (kind === "order") await db.serviceRequest.update({ where: { id, patientId, status: { in: ["pending", "signed"] } }, data });
+  revalidatePath(`/patients/${patientId}`, "layout");
+}
