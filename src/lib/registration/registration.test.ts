@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { findDuplicates, formatPhone, normName, parseDob, validateRegistration } from "./registration";
 
 const today = new Date(2026, 9, 13);
-const base = { firstName: "Maria", lastName: "Gonzalez", dob: "1984-07-21", sex: "female", phone: "503 555 0142" };
+const base = { firstName: "Nusrat", lastName: "Jahan", dob: "1984-07-21", sex: "female", phone: "01712-345678" };
 
-test("a minimal registration needs name, date of birth, sex and a way to reach the patient", () => {
+test("a minimal registration needs name, date of birth and sex", () => {
   const r = validateRegistration(base, today);
   assert.ok(r.ok);
-  assert.equal(r.value.phone, "(503) 555-0142");
+  assert.equal(r.value.phone, "+880 1712-345678");
+  assert.equal(r.value.preferredLanguage, "Bangla");
   assert.equal(r.value.dob.toISOString(), "1984-07-21T00:00:00.000Z");
   assert.equal(r.value.address, null);
   assert.equal(r.value.insurancePayer, null);
@@ -16,7 +17,16 @@ test("a minimal registration needs name, date of birth, sex and a way to reach t
 
   const empty = validateRegistration({}, today);
   assert.ok(!empty.ok);
-  assert.deepEqual(Object.keys(empty.errors).sort(), ["dob", "firstName", "lastName", "phone", "sex"]);
+  assert.deepEqual(Object.keys(empty.errors).sort(), ["dob", "firstName", "lastName", "sex"]);
+  assert.ok(validateRegistration({ ...base, phone: "" }, today).ok, "a patient without a phone can still be registered");
+});
+
+test("names may be written in Bangla script", () => {
+  const r = validateRegistration({ ...base, firstName: "করিম", lastName: "হোসেন" }, today);
+  assert.ok(r.ok);
+  assert.equal(r.value.firstName, "করিম");
+  assert.ok(validateRegistration({ ...base, firstName: "Md. Abdul" }, today).ok);
+  assert.ok(!validateRegistration({ ...base, firstName: "Karim1" }, today).ok);
 });
 
 test("dates of birth must be real, past and plausible", () => {
@@ -32,22 +42,29 @@ test("dates of birth must be real, past and plausible", () => {
   assert.match(bad("1984-13-01")!, /real date/);
 });
 
-test("phone numbers are normalised and checked", () => {
-  assert.equal(formatPhone("+1 (503) 555-0142"), "(503) 555-0142");
-  assert.equal(formatPhone("555-0142"), null);
-  const r = validateRegistration({ ...base, phone: "", email: "maria@example.com" }, today);
-  assert.ok(r.ok, "email alone is enough contact");
+test("Bangladeshi phone numbers are normalised and checked", () => {
+  for (const raw of ["01712345678", "01712-345678", "+880 1712 345678", "8801712345678"]) assert.equal(formatPhone(raw), "+880 1712-345678", raw);
+  assert.equal(formatPhone("02-9123456"), "+880 2-9123456");
+  assert.equal(formatPhone("031-2345678"), "+880 31-2345678");
+  assert.equal(formatPhone("1712345678"), null, "a mobile without its leading 0 is refused");
+  assert.equal(formatPhone("0171234567"), null, "one digit short");
+  assert.equal(formatPhone("+1 (503) 555-0142"), null);
   const bad = validateRegistration({ ...base, phone: "12345" }, today);
   assert.ok(!bad.ok && bad.errors.phone);
 });
 
-test("a partly entered address is an error; a full one becomes one line", () => {
-  const partial = validateRegistration({ ...base, city: "Portland" }, today);
+test("an address needs its first line; district and a 4-digit postcode are optional", () => {
+  const partial = validateRegistration({ ...base, city: "Dhaka" }, today);
   assert.ok(!partial.ok);
-  assert.deepEqual(Object.keys(partial.errors).sort(), ["state", "street", "zip"]);
-  const full = validateRegistration({ ...base, street: "120 SE Alder St", unit: "Apt 4", city: "Portland", state: "or", zip: "97214" }, today);
+  assert.deepEqual(Object.keys(partial.errors), ["street"]);
+  const full = validateRegistration({ ...base, street: "House 12, Road 5, Dhanmondi", city: "Dhaka", postcode: "1205" }, today);
   assert.ok(full.ok);
-  assert.equal(full.value.address, "120 SE Alder St Apt 4, Portland, OR 97214");
+  assert.equal(full.value.address, "House 12, Road 5, Dhanmondi, Dhaka 1205");
+  const village = validateRegistration({ ...base, street: "Village Char Kukri" }, today);
+  assert.ok(village.ok);
+  assert.equal(village.value.address, "Village Char Kukri");
+  const zip = validateRegistration({ ...base, street: "House 12", postcode: "97214" }, today);
+  assert.ok(!zip.ok && zip.errors.postcode);
 });
 
 test("insurance: blank is self-pay, a plan needs a member ID, a dependent needs the holder", () => {
@@ -99,4 +116,12 @@ test("a one-letter typo or a short form of the first name still matches", () => 
 
 test("names compare without case, accents or punctuation", () => {
   assert.equal(normName("O'Brien-Núñez"), "obriennunez");
+});
+
+test("names in Bangla script are compared letter by letter, not as blanks", () => {
+  assert.equal(normName("করিম"), "করিম");
+  const dob = new Date(Date.UTC(1980, 3, 3));
+  const existing = [{ id: "1", mrn: "M1", firstName: "রহিম", lastName: "উদ্দিন", dob }];
+  assert.deepEqual(findDuplicates({ firstName: "করিম", lastName: "হোসেন", dob }, existing), []);
+  assert.equal(findDuplicates({ firstName: "রহিম", lastName: "উদ্দিন", dob }, existing)[0]?.strength, "exact");
 });

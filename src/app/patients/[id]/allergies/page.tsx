@@ -5,6 +5,7 @@ import { can } from "@/lib/roles";
 import { fmtDate } from "@/lib/format";
 import { Button, Field, inputCls } from "@/components/form";
 import { addAllergy, markNoKnownAllergies, removeAllergy } from "../actions";
+import { ALLERGY_REMOVAL_REASONS } from "@/components/entered-in-error";
 import { logChartView } from "@/lib/audit/server";
 
 const severityStyles = {
@@ -68,7 +69,15 @@ export default async function Allergies({ params }: { params: Promise<{ id: stri
                   <td className="tabular px-3 py-1.5 text-ink-2">{fmtDate(a.recordedAt)}</td>
                   <td className="px-3 py-1.5 text-right">
                     {canEdit && (
-                      <form action={removeAllergy.bind(null, id, a.id)}>
+                      <form action={removeAllergy.bind(null, id, a.id)} className="flex justify-end gap-1">
+                        <select name="reason" required defaultValue="" aria-label={`Why remove ${a.substance}`} className={`${inputCls} py-0.5 text-[12px]`}>
+                          <option value="" disabled>
+                            Reason to remove
+                          </option>
+                          {ALLERGY_REMOVAL_REASONS.map((r) => (
+                            <option key={r}>{r}</option>
+                          ))}
+                        </select>
                         <Button variant="danger">Remove</Button>
                       </form>
                     )}

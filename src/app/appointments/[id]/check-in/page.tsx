@@ -7,10 +7,10 @@ import { visitType } from "@/lib/scheduling/visit-types";
 import { Button, Field, inputCls } from "@/components/form";
 import { Panel } from "@/components/panel";
 import { checkInPatient } from "@/app/schedule/actions";
+import { LANGUAGES } from "@/lib/registration/registration";
 
 export const dynamic = "force-dynamic";
 
-const LANGUAGES = ["English", "Spanish", "Vietnamese", "Mandarin", "Russian", "Somali", "Arabic", "Other"];
 
 // Front desk check-in: confirm who the patient is, how to reach them and their
 // coverage, collect the copay, then mark them arrived.

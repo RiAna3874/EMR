@@ -27,7 +27,7 @@ export default async function ImportJobPage({ params }: { params: Promise<{ id: 
       createdBy: true,
       filedBy: true,
       documents: { select: { id: true, mimeType: true, fileName: true, width: true, height: true }, orderBy: { position: "asc" } },
-      reports: { select: { id: true, display: true }, orderBy: { display: "asc" } },
+      reports: { where: { enteredInErrorAt: null }, select: { id: true, display: true }, orderBy: { display: "asc" } },
       clinicalDoc: { select: { id: true, title: true } },
     },
   });

@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import type { AllergySeverity, AllergyType } from "@prisma/client";
-import { db } from "@/lib/db";
+import { baseDb, db } from "@/lib/db";
+import { logEvent } from "@/lib/audit/server";
+import { ALLERGY_REMOVAL_REASONS } from "@/components/entered-in-error";
 import { requirePermission } from "@/lib/session";
 import { vitalObservations } from "@/lib/vitals";
 
@@ -35,9 +37,20 @@ export async function addAllergy(patientId: string, form: FormData) {
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
-export async function removeAllergy(patientId: string, allergyId: string) {
+// Removing an allergy needs a reason. The access log keeps what was removed and why,
+// since the allergy itself is gone from the chart.
+export async function removeAllergy(patientId: string, allergyId: string, form: FormData) {
   await requirePermission("editAllergies");
-  await db.allergyIntolerance.delete({ where: { id: allergyId, patientId } });
+  const reason = str(form, "reason");
+  if (!ALLERGY_REMOVAL_REASONS.includes(reason)) return;
+  const a = await baseDb.allergyIntolerance.delete({ where: { id: allergyId, patientId } });
+  await logEvent({
+    action: "delete",
+    subject: "Allergy",
+    patientId,
+    recordId: a.id,
+    detail: `${a.substance}${a.reaction ? ` (${a.reaction})` : ""}, ${a.severity}. Reason: ${reason}`,
+  });
   const remaining = await db.allergyIntolerance.count({ where: { patientId } });
   if (remaining === 0) await db.patient.update({ where: { id: patientId }, data: { allergyStatus: "not_reviewed" } });
   revalidatePath(`/patients/${patientId}`, "layout");

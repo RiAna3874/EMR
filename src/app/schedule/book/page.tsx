@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
-import { age, fmtDate, fmtDayShort, fmtDob, fmtTime, fullName, parseLocalDate, sexShort, toLocalDate, toLocalDateTime } from "@/lib/format";
+import { age, fmtDate, fmtDayShort, fmtDob, fmtTime, fullName, parseLocalDate, parseTypedDob, sexShort, toLocalDate, toLocalDateTime } from "@/lib/format";
 import { findSlots, isOpen, scheduledProviders } from "@/lib/scheduling/server";
 import { VISIT_TYPES, isVisitType, visitType } from "@/lib/scheduling/visit-types";
 import { inputCls, Field } from "@/components/form";
@@ -107,7 +107,7 @@ export default async function Book({ searchParams }: { searchParams: Promise<Par
                     {sp.start && <input type="hidden" name="start" value={sp.start} />}
                     {sp.provider && <input type="hidden" name="provider" value={sp.provider} />}
                     {sp.type && <input type="hidden" name="type" value={sp.type} />}
-                    <input name="q" defaultValue={sp.q} autoFocus placeholder="Name, MRN or MM/DD/YYYY" className={`${inputCls} min-w-0 flex-1`} />
+                    <input name="q" defaultValue={sp.q} autoFocus placeholder="Name, MRN or DD/MM/YYYY" className={`${inputCls} min-w-0 flex-1`} />
                     <button className="rounded border border-line px-2.5 text-[12.5px] hover:bg-panel-muted">Search</button>
                   </form>
                   {sp.q && (
@@ -328,7 +328,7 @@ function searchPatients(q: string) {
     { mrn: { contains: q, mode: "insensitive" } },
     { AND: words.map((w) => ({ OR: [{ firstName: { startsWith: w, mode: "insensitive" as const } }, { lastName: { contains: w, mode: "insensitive" as const } }] })) },
   ];
-  const dob = q.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dob) or.push({ dob: new Date(Date.UTC(+dob[3], +dob[1] - 1, +dob[2])) });
+  const dob = parseTypedDob(q);
+  if (dob) or.push({ dob });
   return db.patient.findMany({ where: { OR: or }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], take: 10 });
 }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Flag, Sex } from "@prisma/client";
 import { analyteByLoinc, findAnalyte, normKey, PANELS, type Analyte } from "./catalog";
 import { conversionFor, normalizeUnit, roundConverted, type Conversion } from "./units";
-import { unitLabel } from "@/lib/format";
+import { toLocalDate, unitLabel } from "@/lib/format";
 
 export const BoxSchema = z.object({ x0: z.number(), y0: z.number(), x1: z.number(), y1: z.number() });
 export type Box = z.infer<typeof BoxSchema>; // fractions of the page, 0–1
@@ -271,7 +271,8 @@ const nameTokens = (s: string) =>
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .split(/[^a-z]+/)
+    // Letters and vowel signs of any script, so a name in Bangla is compared too.
+    .split(/[^\p{L}\p{M}]+/u)
     .filter((t) => t.length > 0 && !["mr", "mrs", "ms", "miss", "dr", "md", "baby", "of"].includes(t));
 
 export function checkIdentity(d: Pick<Draft, "printedName" | "printedDob" | "printedAge" | "printedSex" | "collectedDate">, p: PatientFacts): IdentityCheck {
@@ -335,7 +336,9 @@ export function assessDraft(draft: Draft, patient: PatientFacts, history: Histor
   const blockers: string[] = [];
   const included = draft.rows.filter((r) => r.include);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.collectedDate)) blockers.push("Enter the collection date.");
-  else if (draft.collectedDate > new Date().toISOString().slice(0, 10)) blockers.push("Collection date is in the future.");
+  // Today in the clinic's time zone, not UTC: Dhaka is six hours ahead, so a report collected
+  // after midnight would otherwise count as tomorrow's.
+  else if (draft.collectedDate > toLocalDate(new Date())) blockers.push("Collection date is in the future.");
   if (draft.collectedTime && !/^\d{2}:\d{2}$/.test(draft.collectedTime)) blockers.push("Collection time should look like 08:30.");
   if (identity.status === "mismatch" && !draft.identityConfirmed) blockers.push("Confirm this report belongs to this patient.");
   if (included.length === 0) blockers.push("Include at least one result.");

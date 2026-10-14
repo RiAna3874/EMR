@@ -604,6 +604,11 @@ model Observation {
   flag        Flag?
   effectiveAt DateTime
   sortOrder   Int                 @default(0)
+  // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
+  // checks, kept for the record. See src/lib/db.ts.
+  enteredInErrorAt     DateTime?
+  enteredInErrorReason String?
+  enteredInErrorById   String?
 
   @@index([patientId, category, effectiveAt])
 }
@@ -631,6 +636,11 @@ model DiagnosticReport {
   reviewedById  String?
   reviewedBy    Practitioner?   @relation("ReviewedReports", fields: [reviewedById], references: [id])
   reviewComment String?
+  // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
+  // checks, kept for the record. See src/lib/db.ts.
+  enteredInErrorAt     DateTime?
+  enteredInErrorReason String?
+  enteredInErrorById   String?
 
   observations Observation[]
 
@@ -805,6 +815,11 @@ model ClinicalDocument {
   reviewedById  String?
   reviewedBy    Practitioner?   @relation("DocReviewedBy", fields: [reviewedById], references: [id])
   reviewComment String?
+  // Entered in error (wrong patient, duplicate, mistyped): hidden from the chart, Inbox and
+  // checks, kept for the record. See src/lib/db.ts.
+  enteredInErrorAt     DateTime?
+  enteredInErrorReason String?
+  enteredInErrorById   String?
 
   @@index([patientId, serviceDate])
   @@index([reviewedAt])

@@ -12,6 +12,8 @@ import { DocTypeChip, DocView } from "@/components/documents/doc-view";
 import { ImportStatusChip } from "@/components/import/status-chip";
 import { acknowledgeDocument } from "../import/document-actions";
 import { logChartView } from "@/lib/audit/server";
+import { EnteredInError } from "@/components/entered-in-error";
+import { markDocumentInError } from "../error-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,7 @@ export default async function Documents({ params, searchParams }: { params: Prom
   const { id } = await params;
   const sp = await searchParams;
   const currentUser = await requirePermission("viewClinical");
+  const canFile = can(currentUser.role, "fileImports");
   await logChartView(id, "Documents");
   const base = `/patients/${id}/documents`;
 
@@ -37,7 +40,7 @@ export default async function Documents({ params, searchParams }: { params: Prom
     db.importJob.findMany({
       where: { patientId: id, kind: "lab", status: "filed" },
       orderBy: { filedAt: "desc" },
-      include: { documents: { select: { id: true, mimeType: true }, orderBy: { position: "asc" }, take: 1 }, reports: { select: { id: true, display: true, effectiveAt: true, performer: true } } },
+      include: { documents: { select: { id: true, mimeType: true }, orderBy: { position: "asc" }, take: 1 }, reports: { where: { enteredInErrorAt: null }, select: { id: true, display: true, effectiveAt: true, performer: true } } },
     }),
     db.importJob.findMany({ where: { patientId: id, status: { in: ["extracting", "needs_review", "failed"] } }, orderBy: { createdAt: "desc" }, include: { createdBy: true } }),
     db.patient.findUniqueOrThrow({ where: { id }, select: { pcpId: true } }),
@@ -170,6 +173,11 @@ export default async function Documents({ params, searchParams }: { params: Prom
                 Print
               </Link>
             </div>
+            {canFile && (
+              <div className="border-b border-line px-4 py-1.5">
+                <EnteredInError action={markDocumentInError.bind(null, id, full.id)} what="this document" />
+              </div>
+            )}
             {canAck && (
               <form action={acknowledgeDocument.bind(null, full.id, href({ doc: full.id }))} className="flex flex-wrap items-center gap-2 border-b border-warn/30 bg-warn-soft/60 px-4 py-2">
                 <span className="text-[12.5px] font-medium text-warn">Waiting for your review.</span>

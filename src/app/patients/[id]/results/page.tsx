@@ -11,6 +11,8 @@ import { TrendChart } from "@/components/trend-chart";
 import { Button } from "@/components/form";
 import { acknowledgeResult } from "@/app/inbox/actions";
 import { logChartView } from "@/lib/audit/server";
+import { EnteredInError } from "@/components/entered-in-error";
+import { markReportInError } from "../error-actions";
 
 const MAX_COLUMNS = 6;
 
@@ -65,7 +67,7 @@ export default async function Results({
       ) : view === "graph" ? (
         <GraphView reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
-        <ReportView reports={reports} selected={sp.report} base={base} canReview={can(currentUser.role, "reviewResults")} />
+        <ReportView reports={reports} selected={sp.report} base={base} canReview={can(currentUser.role, "reviewResults")} canFile={can(currentUser.role, "fileImports")} />
       )}
     </div>
   );
@@ -168,7 +170,7 @@ function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }
   );
 }
 
-function ReportView({ reports, selected, base, canReview }: { reports: ReportWithObs[]; selected?: string; base: string; canReview: boolean }) {
+function ReportView({ reports, selected, base, canReview, canFile }: { reports: ReportWithObs[]; selected?: string; base: string; canReview: boolean; canFile: boolean }) {
   const current = reports.find((r) => r.id === selected) ?? reports[0];
   return (
     <div className="flex gap-3">
@@ -249,6 +251,11 @@ function ReportView({ reports, selected, base, canReview }: { reports: ReportWit
                 </Link>
               )}
             </p>
+          )}
+          {canFile && (
+            <div className="mt-2">
+              <EnteredInError action={markReportInError.bind(null, current.patientId, current.id)} what="this report" />
+            </div>
           )}
         </header>
         <table className="w-full">

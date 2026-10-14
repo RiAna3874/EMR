@@ -88,3 +88,25 @@ export async function registerPatient(_prev: RegisterState, form: FormData): Pro
   revalidatePath("/patients");
   redirect(form.get("returnTo") === "book" ? `/schedule/book?patient=${patientId}` : `/patients/${patientId}?registered=1`);
 }
+
+// Corrects an existing patient's registration: a misspelt name, a wrong date of birth,
+// a new phone number, the PCP. The access log records which fields changed and who changed them.
+export async function updatePatient(patientId: string, _prev: RegisterState, form: FormData): Promise<RegisterState> {
+  await requirePermission("registerPatients");
+  const result = validateRegistration(Object.fromEntries(FIELDS.map((k) => [k, String(form.get(k) ?? "")])));
+  if (!result.ok) return { errors: result.errors, error: "Check the highlighted fields." };
+  const v = result.value;
+  const [pcp, pharmacy] = await Promise.all([
+    v.pcpId ? db.practitioner.findFirst({ where: { id: v.pcpId, role: "physician", active: true } }) : null,
+    v.preferredPharmacyId ? db.pharmacy.findUnique({ where: { id: v.preferredPharmacyId } }) : null,
+  ]);
+  if (v.pcpId && !pcp) return { errors: { pcpId: "Choose a physician from the list." } };
+  if (v.preferredPharmacyId && !pharmacy) return { errors: { preferredPharmacyId: "Choose a pharmacy from the list." } };
+  // Only what changed, so the access log names exactly the corrected fields.
+  const current = await db.patient.findUniqueOrThrow({ where: { id: patientId } });
+  const same = (a: unknown, b: unknown) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b);
+  const changes = Object.fromEntries(Object.entries(v).filter(([k, val]) => !same(val, current[k as keyof typeof current])));
+  if (Object.keys(changes).length) await db.patient.update({ where: { id: patientId }, data: changes });
+  revalidatePath("/", "layout");
+  redirect(`/patients/${patientId}`);
+}
