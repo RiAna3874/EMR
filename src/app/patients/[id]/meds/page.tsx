@@ -9,12 +9,13 @@ import { productFor } from "@/lib/meds/formulary";
 import { rxClassLabel, type RxDetails } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
 import { Empty } from "@/components/panel";
-import { Button, Field, inputCls } from "@/components/form";
+import { Button, inputCls } from "@/components/form";
 import { ActionButton } from "@/components/action-button";
 import { PendingOrders, type PendingRow } from "@/components/orders/pending-orders";
 import { medSig } from "@/components/orders/order-bits";
 import { RxComposer, type RxStart } from "@/components/meds/rx-composer";
 import { DiscontinueButton, TakingControl } from "@/components/meds/med-controls";
+import { OutsideMedForm } from "@/components/meds/outside-med-form";
 import { addOrder, removePendingOrder, signOrders, updatePendingOrder } from "../orders/actions";
 import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMedsReviewed, setPreferredPharmacy, setTaking } from "./actions";
 import { logChartView } from "@/lib/audit/server";
@@ -395,34 +396,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         </section>
 
         {canReview && (
-          <form action={documentOutsideMed.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
-            <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add an outside or over-the-counter medication</h2>
-            <p className="mb-2 text-[12px] text-ink-3">For medications the patient takes but this clinic didn&apos;t prescribe. Nothing is sent to a pharmacy.</p>
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="Medication" className="min-w-64 flex-1">
-                <input name="drug" required placeholder="e.g. Fish oil 1000 mg capsule" className={inputCls} />
-              </Field>
-              <Field label="Dose">
-                <input name="dose" placeholder="1000 mg" className={`${inputCls} w-24`} />
-              </Field>
-              <Field label="Route">
-                <select name="route" className={inputCls} defaultValue="oral">
-                  {["oral", "inhaled", "subcutaneous", "intramuscular", "topical", "sublingual", "ophthalmic", "nasal"].map((r) => (
-                    <option key={r}>{r}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Frequency">
-                <input name="frequency" placeholder="once daily" className={`${inputCls} w-36`} />
-              </Field>
-              <Field label="Prescribed by / source">
-                <input name="source" placeholder="Over the counter" className={`${inputCls} w-44`} />
-              </Field>
-              <Button type="submit" variant="secondary">
-                Add
-              </Button>
-            </div>
-          </form>
+          <OutsideMedForm action={documentOutsideMed.bind(null, id)} />
         )}
       </div>
 
