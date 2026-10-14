@@ -11,7 +11,7 @@ import { SmartEditor, type SmartEditorHandle } from "./smart-editor";
 type Ctx = {
   links: Record<string, string>;
   phrases: Phrase[];
-  problems: { id: string; display: string; code: string; lastPlan: string | null; lastPlanDate: string | null }[];
+  problems: { id: string; display: string; code: string; linked: string; lastPlan: string | null; lastPlanDate: string | null }[];
   encounters: { id: string; label: string }[];
   cosigners: { id: string; label: string }[];
   cosignRequired: boolean;
@@ -217,7 +217,7 @@ export function NoteEditor({
           ))}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {panel === "problems" && <ProblemsPanel problems={ctx.problems} insert={(t) => editor.current?.insert(t, { block: true, gap: true })} />}
+          {panel === "problems" && <ProblemsPanel problems={ctx.problems} fullAP={ctx.links.APPROBLEMS ?? ""} insert={(t) => editor.current?.insert(t, { block: true, gap: true })} />}
           {panel === "phrases" && <PhrasesPanel phrases={ctx.phrases} insert={(t) => editor.current?.insert(t, { block: true })} />}
           {panel === "chart" && <ChartPanel links={ctx.links} insert={(t) => editor.current?.insert(t, { block: true })} />}
         </div>
@@ -226,29 +226,40 @@ export function NoteEditor({
   );
 }
 
-function ProblemsPanel({ problems, insert }: { problems: Ctx["problems"]; insert: (t: string) => void }) {
-  if (!problems.length) return <p className="p-3 text-ink-3">No active problems on the problem list.</p>;
+function ProblemsPanel({ problems, fullAP, insert }: { problems: Ctx["problems"]; fullAP: string; insert: (t: string) => void }) {
+  const withLinked = (block: string, linked: string) => (linked ? `${block}\n${linked}` : block);
   return (
     <div>
-      <p className="px-3 pt-2.5 pb-1 text-[11.5px] text-ink-3">Build the assessment and plan by problem. Place the cursor, then add a problem.</p>
-      <ul>
-        {problems.map((p) => (
-          <li key={p.id} className="border-b border-line px-3 py-2">
-            <div className="font-medium leading-snug">{p.display}</div>
-            <div className="font-mono text-[11px] text-ink-3">{p.code}</div>
-            {p.lastPlan && (
-              <p className="mt-1 line-clamp-3 border-l-2 border-line pl-2 text-[11.5px] text-ink-2" title={p.lastPlan}>
-                <span className="text-ink-3">Last plan ({p.lastPlanDate}): </span>
-                {p.lastPlan.replace(/^.*?\)\s*:?\s*/, "")}
-              </p>
-            )}
-            <div className="mt-1.5 flex gap-1.5">
-              <SideButton onClick={() => insert(problemBlock(p))}>Add to A&amp;P</SideButton>
-              {p.lastPlan && <SideButton onClick={() => insert(`# ${p.lastPlan}`)}>Carry forward</SideButton>}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <div className="border-b border-line px-3 py-2.5">
+        <SideButton onClick={() => insert(fullAP)}>Insert problem-based A&amp;P</SideButton>
+        <p className="mt-1 text-[11.5px] text-ink-3">Every active problem with its medications and orders under it. Anything not linked to a problem goes under Other.</p>
+      </div>
+      {!problems.length ? (
+        <p className="p-3 text-ink-3">No active problems on the problem list.</p>
+      ) : (
+        <>
+          <p className="px-3 pt-2.5 pb-1 text-[11.5px] text-ink-3">Or add one problem at a time. Place the cursor, then add a problem.</p>
+          <ul>
+            {problems.map((p) => (
+              <li key={p.id} className="border-b border-line px-3 py-2">
+                <div className="font-medium leading-snug">{p.display}</div>
+                <div className="font-mono text-[11px] text-ink-3">{p.code}</div>
+                {p.linked && <p className="mt-1 whitespace-pre-line text-[11.5px] text-ink-2">{p.linked}</p>}
+                {p.lastPlan && (
+                  <p className="mt-1 line-clamp-3 border-l-2 border-line pl-2 text-[11.5px] text-ink-2" title={p.lastPlan}>
+                    <span className="text-ink-3">Last plan ({p.lastPlanDate}): </span>
+                    {p.lastPlan.replace(/^.*?\([A-Z][0-9][0-9A-Z.]*\)\s*:?\s*/, "")}
+                  </p>
+                )}
+                <div className="mt-1.5 flex gap-1.5">
+                  <SideButton onClick={() => insert(withLinked(problemBlock(p), p.linked))}>Add to A&amp;P</SideButton>
+                  {p.lastPlan && <SideButton onClick={() => insert(withLinked(`# ${p.lastPlan}`, p.linked))}>Carry forward</SideButton>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

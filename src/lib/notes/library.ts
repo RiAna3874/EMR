@@ -26,7 +26,7 @@ export const chartLinks: { name: string; description: string }[] = [
   { name: "VITALS", description: "Latest vital signs" },
   { name: "MEDS", description: "Active medications" },
   { name: "PROBLEMS", description: "Active problem list" },
-  { name: "APPROBLEMS", description: "Assessment and plan, one block per active problem" },
+  { name: "APPROBLEMS", description: "Assessment and plan by problem, with each problem's medications and orders" },
   { name: "ALLERGIES", description: "Allergies" },
   { name: "LABS", description: "Latest labs from the last 6 months" },
   { name: "ABNLABS", description: "Abnormal labs from the last 6 months" },
@@ -40,7 +40,7 @@ export const systemPhrases: Phrase[] = [
   { name: "problems", description: "Active problems", body: "@PROBLEMS@" },
   { name: "allergies", description: "Allergies", body: "@ALLERGIES@" },
   { name: "labs", description: "Recent labs", body: "@LABS@" },
-  { name: "ap", description: "Problem-based assessment and plan", body: "@APPROBLEMS@" },
+  { name: "ap", description: "Problem-based assessment and plan with linked medications and orders", body: "@APPROBLEMS@" },
   {
     name: "hpi",
     description: "HPI scaffold for a new complaint",

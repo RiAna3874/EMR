@@ -7,10 +7,11 @@ import { FORMULARY, offListProduct, productFor, type Product } from "@/lib/meds/
 import { isControlled, medWarnings } from "@/lib/meds/checks";
 import type { RxDetails } from "@/lib/meds/rx";
 import { RxForm, type PharmacyOption } from "./rx-form";
+import type { ProblemOption } from "@/components/problem-picker";
 
 export type RxStart = {
   code: string;
-  initial?: Partial<RxDetails> & { indication?: string | null };
+  initial?: Partial<RxDetails> & { indication?: string | null; conditionId?: string | null };
   replaces?: { id: string; drug: string; mode: "reorder" | "modify" };
   refillRequestId?: string;
 };
@@ -33,7 +34,7 @@ export function RxComposer({
   canSign,
 }: {
   ctx: OrderContext;
-  problems: string[];
+  problems: ProblemOption[];
   pharmacies: PharmacyOption[];
   preferredPharmacyId: string | null;
   start?: RxStart;

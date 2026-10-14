@@ -2,12 +2,12 @@ import { db } from "@/lib/db";
 import { latestVitals, pivot } from "@/lib/chart";
 import { age, fmtDate, fmtDob, fmtRange, fmtShortDate, fmtValue, isAbnormal, unitLabel } from "@/lib/format";
 import { displayName, type SessionUser } from "@/lib/roles";
-import { problemBlock } from "@/lib/notes/smarttext";
+import { problemBasedAP } from "@/lib/notes/problem-ap";
 
 // Builds the value of each chart link (@VITALS@, @MEDS@, ...) for the note editor.
 // See chartLinks in src/lib/notes/library.ts for the list.
 export async function smartTextFor(patientId: string, currentUser: SessionUser): Promise<Record<string, string>> {
-  const [vitals, meds, conditions, allergies, patient, labs, today] = await Promise.all([
+  const [vitals, meds, conditions, allergies, patient, labs, today, orders] = await Promise.all([
     latestVitals(patientId),
     db.medicationRequest.findMany({ where: { patientId, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
     db.condition.findMany({ where: { patientId, status: "active" }, orderBy: { priority: "asc" } }),
@@ -20,6 +20,7 @@ export async function smartTextFor(patientId: string, currentUser: SessionUser):
       where: { patientId, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)), lt: new Date(new Date().setHours(24, 0, 0, 0)) } },
       orderBy: { start: "asc" },
     }),
+    apOrders(patientId),
   ]);
 
   const v = Object.fromEntries(vitals.map((o) => [o.code, o]));
@@ -64,7 +65,7 @@ export async function smartTextFor(patientId: string, currentUser: SessionUser):
   const abnormal = latest.filter((o) => isAbnormal(o.flag));
   const abnLabsText = abnormal.length ? "Abnormal labs:\n" + abnormal.map(labLine).join("\n") : "Abnormal labs: none in the last 6 months.";
 
-  const apText = conditions.length ? conditions.map((c, i) => problemBlock(c, i + 1)).join("\n\n") : "1. ***\nPlan: ***";
+  const apText = problemBasedAP(conditions, meds, orders);
 
   return {
     NAME: `${patient.firstName} ${patient.lastName}`,
@@ -84,4 +85,16 @@ export async function smartTextFor(patientId: string, currentUser: SessionUser):
     LABS: labsText,
     ABNLABS: abnLabsText,
   };
+}
+
+// Orders a note's assessment and plan lists: open ones, and tests or referrals
+// completed today. A signed prescription is on the medication list instead.
+export function apOrders(patientId: string) {
+  return db.serviceRequest.findMany({
+    where: {
+      patientId,
+      OR: [{ status: { in: ["pending", "signed"] } }, { status: "completed", type: { not: "medication" }, completedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } }],
+    },
+    orderBy: { createdAt: "asc" },
+  });
 }

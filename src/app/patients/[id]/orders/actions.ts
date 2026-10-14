@@ -10,6 +10,7 @@ import { productFor } from "@/lib/meds/formulary";
 import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
 import { writePrescription } from "@/lib/meds/server";
 import { needsCosign, RX_COSIGNER_REQUIRED } from "@/lib/roles";
+import { problemLink } from "@/lib/problems/server";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const PRIORITIES: OrderPriority[] = ["routine", "urgent", "stat"];
@@ -45,11 +46,12 @@ export async function addOrder(patientId: string, form: FormData) {
       details.pharmacyId = p?.preferredPharmacyId ?? null;
     }
   }
+  const link = await problemLink(patientId, str(form, "conditionId"), str(form, "indication"));
   await db.serviceRequest.create({
     data: {
       ...baseOrder(patientId, currentUser.id, o),
       priority: PRIORITIES.includes(priority) ? priority : "routine",
-      indication: str(form, "indication") || null,
+      ...link,
       instructions: (product ? str(form, "pharmacyNote") : str(form, "instructions")) || null,
       expectedAt: expected ? new Date(expected) : null,
       details: details as Prisma.InputJsonValue | undefined,
@@ -167,6 +169,7 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
           drug: p.display,
           rxnorm: p.code.replace(/^RX:/, ""),
           indication: p.indication,
+          conditionId: p.conditionId,
           prescriberId: currentUser.id,
           cosignerId,
           pharmacyNote: p.instructions,

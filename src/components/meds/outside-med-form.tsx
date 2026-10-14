@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button, Field, inputCls } from "@/components/form";
+import { ProblemPicker, type ProblemOption } from "@/components/problem-picker";
 import { PickInput } from "@/components/pick-input";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 import { MED_CHOICES, doseSuggestions, medChoiceByName, type PickOption } from "@/lib/meds/dosing";
@@ -15,7 +16,7 @@ const MED_OPTIONS: PickOption[] = MED_CHOICES.map((m) => ({
 // Documents a medication the patient takes that this clinic didn't prescribe.
 // Picking a known medication fills in its usual dose, route and frequency; all
 // of them stay editable, and anything can be typed.
-export function OutsideMedForm({ action }: { action: (form: FormData) => void | Promise<void> }) {
+export function OutsideMedForm({ action, problems }: { action: (form: FormData) => void | Promise<void>; problems: ProblemOption[] }) {
   const [drug, setDrug] = useState("");
   const [dose, setDose] = useState("");
   const [route, setRoute] = useState("oral");
@@ -67,6 +68,7 @@ export function OutsideMedForm({ action }: { action: (form: FormData) => void | 
         <Field label="Prescribed by / source">
           <input name="source" placeholder="Over the counter" className={`${inputCls} w-44`} />
         </Field>
+        <ProblemPicker problems={problems} />
         <Button type="submit" variant="secondary">
           Add
         </Button>

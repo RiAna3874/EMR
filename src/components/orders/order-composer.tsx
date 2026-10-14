@@ -7,10 +7,11 @@ import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "./order-bits";
 import { RxForm, type PharmacyOption } from "@/components/meds/rx-form";
 import { productByCode } from "@/lib/meds/formulary";
+import { ProblemPicker, type ProblemOption } from "@/components/problem-picker";
 
 type Props = {
   ctx: OrderContext;
-  problems: string[];
+  problems: ProblemOption[];
   initialCode?: string;
   addOrder: (form: FormData) => Promise<void>;
   addOrderSet: (setId: string) => Promise<void>;
@@ -179,7 +180,7 @@ function Composer({
 }: {
   o: Orderable;
   ctx: OrderContext;
-  problems: string[];
+  problems: ProblemOption[];
   pending: boolean;
   onCancel: () => void;
   onSubmit: (form: FormData) => void;
@@ -212,14 +213,7 @@ function Composer({
             <input name="expectedAt" type="date" className={inputCls} defaultValue={new Date().toLocaleDateString("en-CA")} />
           </Field>
         )}
-        <Field label={o.type === "referral" ? "Reason for referral" : "Indication"}>
-          <input name="indication" list="order-indications" className={`${inputCls} w-72`} placeholder="Pick a problem or type one" />
-        </Field>
-        <datalist id="order-indications">
-          {problems.map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
+        <ProblemPicker problems={problems} label={o.type === "referral" ? "Reason for referral" : "For problem"} />
       </div>
       <Field label="Instructions">
         <input name="instructions" className={`${inputCls} w-full`} />

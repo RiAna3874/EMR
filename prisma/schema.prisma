@@ -465,6 +465,10 @@ model Condition {
   priority   Int             @default(100) // lower sorts first
   comment    String?
 
+  // Medications and orders linked to this problem, for problem-based charting.
+  medications MedicationRequest[]
+  orders      ServiceRequest[]
+
   @@index([patientId])
 }
 
@@ -497,6 +501,9 @@ model MedicationRequest {
   prn                 Boolean            @default(false)
   prnReason           String?
   indication          String?
+  // The problem this medication treats. Set when prescribed or from the problem list.
+  conditionId         String?
+  condition           Condition?         @relation(fields: [conditionId], references: [id], onDelete: SetNull)
   status              MedStatus
   start               DateTime           @db.Date // when the patient started this therapy
   end                 DateTime?          @db.Date
@@ -534,6 +541,7 @@ model MedicationRequest {
   refillResults  RefillRequest[]      @relation("RefillResult")
 
   @@index([patientId])
+  @@index([conditionId])
   @@index([cosignerId, cosignedAt])
 }
 
@@ -779,6 +787,9 @@ model ServiceRequest {
   status         OrderStatus   @default(pending)
   priority       OrderPriority @default(routine)
   indication     String?
+  // The problem this order is for. Set when ordered or from the problem list.
+  conditionId    String?
+  condition      Condition?    @relation(fields: [conditionId], references: [id], onDelete: SetNull)
   instructions   String?
   details        Json? // medication: dose, route, frequency, quantity, refills
   orderSet       String?
@@ -796,6 +807,7 @@ model ServiceRequest {
 
   @@index([patientId, status])
   @@index([orderedById, status])
+  @@index([conditionId])
 }
 
 // An outside clinical document filed from a verified import: an imaging report,
