@@ -2,7 +2,7 @@
 // match the DiagnosticReport codes results file under (seeded and imported), so
 // a result arriving for an ordered panel completes that order.
 import type { OrderType } from "@prisma/client";
-import { FORMULARY } from "@/lib/meds/formulary";
+import { FORMULARY, productFor, type Product } from "@/lib/meds/formulary";
 import { classesOf } from "@/lib/meds/drugs";
 
 export type MedDefaults = { dose: string; route: string; frequency: string; quantity: string; refills: number };
@@ -66,18 +66,28 @@ export const ORDERABLES: Orderable[] = [
   { code: "REF:nutrition", display: "Referral to Nutrition (dietitian)", type: "referral", keywords: ["diet", "weight", "dietitian"] },
 
   // Medications: the prescribing formulary (src/lib/meds/formulary.ts).
-  ...FORMULARY.map(
-    (p): Orderable => ({
-      code: `RX:${p.rxnorm}`,
-      display: p.display,
-      type: "medication",
-      keywords: p.keywords,
-      med: { dose: p.dose, route: p.route, frequency: p.frequency, quantity: p.quantity, refills: p.refills, classes: classesOf(p.display) },
-    }),
-  ),
+  ...FORMULARY.map(medOrderable),
 ];
 
+function medOrderable(p: Product): Orderable {
+  return {
+    code: `RX:${p.rxnorm}`,
+    display: p.display,
+    type: "medication",
+    keywords: p.keywords,
+    med: { dose: p.dose, route: p.route, frequency: p.frequency, quantity: p.quantity, refills: p.refills, classes: classesOf(p.display) },
+  };
+}
+
 export const orderableByCode = new Map(ORDERABLES.map((o) => [o.code, o]));
+
+// As orderableByCode, plus medications prescribed off-list by name.
+export function orderableFor(code: string): Orderable | undefined {
+  const known = orderableByCode.get(code);
+  if (known) return known;
+  const offList = code.startsWith("RX:") ? productFor({ code }) : undefined;
+  return offList?.offList ? medOrderable(offList) : undefined;
+}
 
 export type OrderSet = { id: string; name: string; description: string; codes: string[] };
 

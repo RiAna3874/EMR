@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { inboxCounts, inboxFolderAllowed, inboxResults, refillsWhere } from "@/lib/inbox";
 import { age, fmtDate, fmtDateTime, fmtRange, fmtValue, fullName, isAbnormal, relativeDays, sexShort, unitLabel } from "@/lib/format";
-import { orderableByCode } from "@/lib/orders/catalog";
+import { orderableFor } from "@/lib/orders/catalog";
 import { orderWarnings } from "@/lib/orders/checks";
 import { orderContext } from "@/lib/orders/server";
 import { Empty } from "@/components/panel";
@@ -351,7 +351,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
           <DetailHeader patient={current[0].patient} title="Unsigned orders" meta={`Started ${fmtDateTime(current[0].createdAt)}`} />
           <ul>
             {current.map((o) => {
-              const def = orderableByCode.get(o.code);
+              const def = orderableFor(o.code);
               const warnings = def ? orderWarnings(def, { ...ctx, openOrders: ctx.openOrders.filter((x) => x.status !== "pending") }) : [];
               return (
                 <li key={o.id} className="space-y-1 border-b border-line px-4 py-2">

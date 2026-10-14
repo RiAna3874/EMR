@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { OrderContext } from "@/lib/orders/checks";
 import type { Product } from "@/lib/meds/formulary";
-import { maxRefills, medWarnings, scheduleOf } from "@/lib/meds/checks";
+import { isControlled, maxRefills, medWarnings } from "@/lib/meds/checks";
 import { daysSupplyFor, suggestQuantity } from "@/lib/meds/sig";
 import { RX_CLASSES, rxClassFor, rxSummary, type RxDetails } from "@/lib/meds/rx";
 import { Button, Field, inputCls } from "@/components/form";
@@ -42,7 +42,7 @@ export function RxForm({
   onSubmit: (form: FormData) => void;
   onCancel: () => void;
 }) {
-  const shortCourse = product.refills === 0 && product.days <= 14;
+  const shortCourse = product.refills === 0 && product.days > 0 && product.days <= 14;
   const [dose, setDose] = useState(initial?.dose ?? product.dose);
   const [route, setRoute] = useState(initial?.route ?? product.route);
   const [frequency, setFrequency] = useState((initial?.frequency ?? product.frequency).replace(/\s+for \d+ days?$/, ""));
@@ -62,7 +62,6 @@ export function RxForm({
   const autoQty = useMemo(() => suggestQuantity(product, { dose, frequency }, days || product.days), [product, dose, frequency, days]);
   const shownQty = qtyTouched ? quantity : (autoQty ?? quantity);
   const daysSupply = daysSupplyFor(product, { dose, frequency }, shownQty) ?? (days || product.days);
-  const schedule = scheduleOf(product.display);
   const limit = maxRefills(product.display);
 
   const warnings = useMemo(() => {
@@ -77,6 +76,8 @@ export function RxForm({
 
   const summary = rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
   const pharmacy = pharmacies.find((p) => p.id === pharmacyId);
+  // An off-list medication has no defaults, so the prescriber writes the whole sig.
+  const incomplete = !!product.offList && (!dose.trim() || !frequency.trim() || !shownQty.trim());
 
   return (
     <form action={onSubmit} className="space-y-3 bg-accent-soft/30 p-3" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
@@ -90,7 +91,8 @@ export function RxForm({
       <div className="flex flex-wrap items-center gap-2">
         <OrderTypeIcon type="medication" />
         <h3 className="text-[14px] font-semibold">{product.display}</h3>
-        {schedule && <span className="rounded bg-crit-soft px-1.5 text-[10.5px] font-bold text-crit">C-{schedule}</span>}
+        {isControlled(product.display) && <span className="rounded bg-crit-soft px-1.5 text-[10.5px] font-bold text-crit">Controlled</span>}
+        {product.offList && <span className="rounded bg-warn-soft px-1.5 text-[10.5px] font-semibold text-warn">Not on the list</span>}
         {product.otc && <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2">OTC</span>}
         {replaces && (
           <span className="ml-auto rounded bg-warn-soft px-1.5 py-0.5 text-[11.5px] text-warn">
@@ -209,13 +211,14 @@ export function RxForm({
         {summary}
       </p>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
+      <div className="flex items-center gap-2">
+        <Button type="submit" disabled={pending || incomplete}>
           {submitLabel}
         </Button>
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
+        {incomplete && <span className="text-[12px] text-ink-3">Fill in the dose, frequency and amount to dispense.</span>}
       </div>
     </form>
   );

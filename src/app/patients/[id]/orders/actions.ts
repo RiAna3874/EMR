@@ -4,11 +4,10 @@ import { revalidatePath } from "next/cache";
 import type { OrderPriority, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
-import { ORDER_SETS, orderableByCode, type Orderable } from "@/lib/orders/catalog";
+import { ORDER_SETS, orderableByCode, orderableFor, type Orderable } from "@/lib/orders/catalog";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { productFor } from "@/lib/meds/formulary";
 import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
-import { scheduleOf } from "@/lib/meds/checks";
 import { writePrescription } from "@/lib/meds/server";
 import { needsCosign, RX_COSIGNER_REQUIRED } from "@/lib/roles";
 
@@ -30,12 +29,14 @@ function baseOrder(patientId: string, orderedById: string, o: Orderable, orderSe
 
 export async function addOrder(patientId: string, form: FormData) {
   const currentUser = await requirePermission("pendOrders");
-  const o = orderableByCode.get(str(form, "code"));
+  const o = orderableFor(str(form, "code"));
   if (!o) return;
   const priority = str(form, "priority") as OrderPriority;
   const expected = str(form, "expectedAt");
   const product = o.type === "medication" ? productFor({ code: o.code }) : undefined;
   const details = product ? rxFromForm(form, product) : undefined;
+  // Off-list medications have no defaults to fall back on.
+  if (product?.offList && (!details?.dose || !details.frequency || !details.quantity)) return;
   if (details) {
     // One pending prescription per medication being replaced.
     if (details.replacesId) await db.serviceRequest.deleteMany({ where: { patientId, status: "pending", details: { path: ["replacesId"], equals: details.replacesId } } });
@@ -99,8 +100,7 @@ export async function updatePendingOrder(patientId: string, orderId: string, for
 // signer becomes the ordering clinician. If an order was pended or removed, or a new
 // hard-stop alert appeared, after the page was loaded, nothing is signed and the list
 // refreshes for another look. Orders with a hard-stop warning need an override reason.
-// Prescriptions become medication list entries: a controlled substance needs the
-// prescription monitoring program checked, and a resident names a cosigning attending.
+// Prescriptions become medication list entries; a resident names a cosigning attending.
 // How the pending list differs from the one on the signer's screen, or null if it doesn't.
 function listChanged(pending: { id: string; display: string }[], shownIds: string[]) {
   const shown = new Set(shownIds);
@@ -132,10 +132,6 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
   if (stops.length && !reason) return { error: `Give an override reason to sign ${stops.map((s) => s.display).join(", ")}.` };
 
   const meds = pending.filter((p) => p.type === "medication");
-  const controlled = meds.filter((m) => scheduleOf(m.display));
-  if (controlled.length && form.get("pdmpChecked") !== "on") {
-    return { error: `Confirm you checked the prescription monitoring program for ${controlled.map((m) => m.display).join(", ")}.` };
-  }
   let cosignerId: string | null = null;
   if (meds.length && needsCosign(currentUser.role)) {
     const attending = await db.practitioner.findFirst({ where: { id: str(form, "cosignerId"), role: "physician", active: true } });

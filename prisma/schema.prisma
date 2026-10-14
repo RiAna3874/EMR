@@ -343,6 +343,11 @@ model Patient {
   registeredBy             Practitioner?       @relation("RegisteredBy", fields: [registeredById], references: [id])
   // Set when the registrar saw possible duplicates and confirmed this is someone else.
   duplicateCheckNote       String?
+  // A duplicate chart merged into another (src/lib/registration/merge.ts): its records moved
+  // there, and it no longer appears in lists or search. Opening it goes to the chart it joined.
+  mergedIntoId             String?
+  mergedAt                 DateTime?
+  mergedById               String?
 
   encounters     Encounter[]
   conditions     Condition[]

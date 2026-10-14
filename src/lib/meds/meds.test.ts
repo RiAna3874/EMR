@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FORMULARY, productByCode, productFor } from "./formulary";
-import { INGREDIENTS, interactionsBetween } from "./drugs";
+import { INGREDIENTS, ingredientsOf, interactionsBetween } from "./drugs";
 import { fillStatus, interactionsAmong, maxRefills, medWarnings, refillProtocol, type MedCheckContext } from "./checks";
 import { daysSupplyFor, doseMg, numberWords, sigText, suggestQuantity, timesPerDay, unitsHint } from "./sig";
 
@@ -15,6 +15,26 @@ test("every formulary product has a unique code and a known ingredient", () => {
   for (const p of FORMULARY) assert.ok(INGREDIENTS.some((i) => i.match.test(p.display)), p.display);
   assert.equal(productFor({ rxnorm: "314077" })?.display, "Lisinopril 20 mg tablet");
   assert.equal(productFor({ drug: "Apixaban 5 mg tablet" })?.rxnorm, "1364445");
+});
+
+test("Bangladeshi brands are checked as their generic", () => {
+  // Napa is paracetamol: the daily maximum applies to it typed as free text.
+  assert.ok(levels("Napa Extra", ctx(), { dose: "2000 mg", frequency: "every 6 hours" }).includes("stop:dose"));
+  assert.ok(levels("Seclo 20 mg", ctx({ activeMeds: ["Esomeprazole 20 mg capsule"] })).includes("caution:duplicate"));
+  assert.ok(levels("Filmet 400 mg", ctx({ activeMeds: ["Warfarin 5 mg tablet"] })).includes("stop:interaction"));
+  assert.ok(levels("Cef-3 200 mg", ctx({ allergies: [{ substance: "Ceftriaxone", severity: "moderate" }] })).includes("stop:allergy"));
+  // Esomeprazole isn't mistaken for omeprazole.
+  assert.deepEqual(ingredientsOf("Esomeprazole 20 mg capsule").map((i) => i.id), ["esomeprazole"]);
+});
+
+test("off-list medications round-trip by name and say they weren't checked", () => {
+  const p = productFor({ code: "RX:OFFLIST:Tufnil  200 mg" });
+  assert.equal(p?.display, "Tufnil 200 mg");
+  assert.equal(p?.offList, true);
+  assert.equal(productFor({ rxnorm: p!.rxnorm })?.display, "Tufnil 200 mg");
+  assert.equal(productFor({ code: "RX:OFFLIST:" }), undefined);
+  assert.deepEqual(levels("Tufnil 200 mg", ctx()), ["caution:not checked"]);
+  assert.ok(!levels("Paracetamol 500 mg tablet", ctx()).includes("caution:not checked"));
 });
 
 test("frequency and dose parsing", () => {
@@ -73,9 +93,9 @@ test("dose limits, older adults, kidneys", () => {
   assert.deepEqual(levels("Alendronate 70 mg tablet", ctx({ egfr: 30 })), ["stop:kidney"]);
 });
 
-test("controlled substances limit refills", () => {
+test("controlled drugs get no refills", () => {
   assert.equal(maxRefills("Oxycodone 5 mg tablet"), 0);
-  assert.equal(maxRefills("Tramadol 50 mg tablet"), 5);
+  assert.equal(maxRefills("Tramadol 50 mg tablet"), 0);
   assert.equal(maxRefills("Lisinopril 10 mg tablet"), 11);
   assert.ok(levels("Oxycodone 5 mg tablet", ctx(), { refills: 1 }).includes("stop:controlled"));
   assert.ok(levels("Oxycodone 5 mg tablet", ctx(), { refills: 0 }).includes("caution:controlled"));

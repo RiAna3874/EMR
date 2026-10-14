@@ -5,7 +5,6 @@ import { can } from "@/lib/roles";
 import { fmtDate, fmtDateOnly } from "@/lib/format";
 import { typeLabels } from "@/lib/orders/catalog";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
-import { scheduleOf } from "@/lib/meds/checks";
 import { needsCosign } from "@/lib/roles";
 import { Empty } from "@/components/panel";
 import { OrderComposer } from "@/components/orders/order-composer";
@@ -52,7 +51,6 @@ export default async function Orders({ params, searchParams }: { params: Promise
       orderSet: o.orderSet,
       pendedBy: o.orderedById === currentUser.id ? null : o.orderedBy.name,
       warnings: warnings.get(o.id) ?? [],
-      controlled: o.type === "medication" && !!scheduleOf(o.display),
     };
   });
 

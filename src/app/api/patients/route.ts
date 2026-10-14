@@ -18,6 +18,9 @@ export async function GET(req: NextRequest) {
     AND: words.map((w) => ({ OR: [{ firstName: { startsWith: w, mode: "insensitive" as const } }, { lastName: { contains: w, mode: "insensitive" as const } }] })),
   });
 
+  // An old MRN from a merged duplicate still finds the patient.
+  const merged = await db.patient.findFirst({ where: { mrn: { equals: q, mode: "insensitive" }, mergedIntoId: { not: null } }, select: { mergedIntoId: true } });
+  if (merged?.mergedIntoId) or.push({ id: merged.mergedIntoId });
   const patients = await db.patient.findMany({ where: { OR: or }, orderBy: [{ lastName: "asc" }, { firstName: "asc" }], take: 8 });
   return NextResponse.json(
     patients.map((p) => ({ id: p.id, name: fullName(p), detail: `${age(p.dob)} y ${sexShort(p.sex)} · ${fmtDob(p.dob)} · ${p.mrn}` })),
