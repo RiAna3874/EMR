@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { ExtractedReport } from "./draft";
+import { parseJsonReply, schemaInstructions } from "./json-reply";
 
 export const EXTRACTION_MODEL = "claude-opus-5-5";
 
@@ -92,32 +93,68 @@ export function pageBlocks(files: ExtractInput, ask: string): Anthropic.Beta.Bet
   return content;
 }
 
+type ReadOpts = { effort?: "low" | "medium" | "high"; maxTokens?: number; mode?: "strict" | "json" };
+
 // One structured read of the pages. Streamed, so a long, wordy report (an MRI, a
 // written echo, a long discharge summary) can take as long as it needs instead of
 // running into an HTTP timeout, and with room for every word of it.
+// "strict" constrains the answer with structured outputs. "json" puts the schema in
+// the prompt and checks the answer here, for schemas too large for the API to
+// compile; a strict read the API refuses for that reason is retried that way.
 export async function readWithClaude<S extends z.ZodType>(
   schema: S,
   system: string,
   files: ExtractInput,
   ask: string,
   noun: string,
-  opts: { effort?: "low" | "medium" | "high"; maxTokens?: number } = {},
+  opts: ReadOpts = {},
 ): Promise<{ parsed: z.infer<S>; model: string }> {
   const client = new Anthropic({ maxRetries: 2 });
-  const stream = client.beta.messages.stream({
+  const base = {
     model: EXTRACTION_MODEL,
     max_tokens: opts.maxTokens ?? 64000,
     betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: opts.effort ?? "high", format: betaZodOutputFormat(schema) },
-    system,
-    messages: [{ role: "user", content: pageBlocks(files, ask) }],
-  });
-  const response = await stream.finalMessage();
-  if (response.stop_reason === "refusal") throw new Error(`Claude declined to read this ${noun}.`);
-  if (response.stop_reason === "max_tokens") throw new Error(`The ${noun} was too long to read in one pass. Try uploading fewer pages at a time.`);
-  if (!response.parsed_output) throw new Error("Claude's answer didn't match the expected format. Try again.");
-  return { parsed: response.parsed_output as z.infer<S>, model: response.model };
+    fallbacks: "default" as const,
+  };
+  const effort = opts.effort ?? "high";
+  const checked = <M extends Anthropic.Beta.BetaMessage>(r: M): M => {
+    if (r.stop_reason === "refusal") throw new Error(`Claude declined to read this ${noun}.`);
+    if (r.stop_reason === "max_tokens") throw new Error(`The ${noun} was too long to read in one pass. Try uploading fewer pages at a time.`);
+    return r;
+  };
+
+  if (opts.mode !== "json") {
+    try {
+      const response = checked(
+        await client.beta.messages
+          .stream({ ...base, output_config: { effort, format: betaZodOutputFormat(schema) }, system, messages: [{ role: "user", content: pageBlocks(files, ask) }] })
+          .finalMessage(),
+      );
+      if (!response.parsed_output) throw new Error("Claude's answer didn't match the expected format. Try again.");
+      return { parsed: response.parsed_output as z.infer<S>, model: response.model };
+    } catch (e) {
+      if (!(e instanceof Anthropic.BadRequestError && /grammar/i.test(e.message))) throw e;
+      console.warn(`Structured output schema too large for this ${noun}; reading it as checked JSON instead.`);
+    }
+  }
+
+  const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: pageBlocks(files, ask) }];
+  const jsonSystem = `${system}\n\n${schemaInstructions(schema)}`;
+  let error = "";
+  // One read, and if the answer doesn't fit the schema, one chance to correct it.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = checked(await client.beta.messages.stream({ ...base, output_config: { effort }, system: jsonSystem, messages }).finalMessage());
+    const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+    const reply = parseJsonReply(text, schema);
+    if (reply.ok) return { parsed: reply.data, model: response.model };
+    error = reply.error;
+    messages.push(
+      { role: "assistant", content: response.content as Anthropic.Beta.BetaContentBlockParam[] },
+      { role: "user", content: `${error}\n\nReply again with the whole corrected JSON object only.` },
+    );
+  }
+  console.error(`Claude's ${noun} JSON didn't match the schema: ${error}`);
+  throw new Error("Claude's answer didn't match the expected format. Try again.");
 }
 
 const KindSchema = z.object({
