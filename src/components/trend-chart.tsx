@@ -23,7 +23,7 @@ function niceStep(span: number, target: number) {
 const fmtNum = (v: number) => (Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100));
 function fmtTick(t: number, span: number) {
   const d = new Date(t);
-  const month = d.toLocaleDateString("en-US", { month: "short" });
+  const month = d.toLocaleDateString("en-GB", { month: "short" });
   return span > 400 * 86_400_000 ? `${month} ’${String(d.getFullYear()).slice(2)}` : `${month} ${d.getDate()}`;
 }
 
@@ -160,7 +160,7 @@ export function TrendChart({
           className="pointer-events-none absolute z-10 whitespace-nowrap rounded border border-line bg-panel px-2 py-1 text-[12px] shadow-md"
           style={{ left: Math.min(x(hp.t) + 10, width - 170), top: Math.max(0, y(hp.v) - 46) }}
         >
-          <div className="text-ink-3">{new Date(hp.t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+          <div className="text-ink-3">{new Date(hp.t).toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" })}</div>
           <div className="tabular font-semibold" style={{ color: flagColor(hp.flag, "var(--ink)") }}>
             {series.length > 1 && <span className="font-normal text-ink-2">{series[hover.s].name}: </span>}
             {fmtNum(hp.v)} {unit}

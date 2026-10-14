@@ -62,7 +62,7 @@ export default async function PatientLists({
       _count: {
         select: {
           observations: {
-            where: { category: "laboratory", flag: { in: ["L", "H", "LL", "HH", "A"] }, effectiveAt: { gte: recentCutoff } },
+            where: { category: "laboratory", flag: { in: ["L", "H", "LL", "HH", "A"] }, effectiveAt: { gte: recentCutoff }, enteredInErrorAt: null },
           },
         },
       },

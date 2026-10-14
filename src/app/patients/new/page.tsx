@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
+import { parseTypedDob } from "@/lib/format";
 import { RegisterForm } from "./register-form";
 
 export const dynamic = "force-dynamic";
 
-// Prefill from a search that found nobody: "Gonzalez, Maria", "Maria Gonzalez" or "07/21/1984".
+// Prefill from a search that found nobody: "Hossain, Karim", "Karim Hossain" or "21/07/1984".
 function prefill(q: string | undefined) {
   const out: Record<string, string> = {};
   const s = (q ?? "").trim();
-  const dob = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dob) out.dob = `${dob[3]}-${dob[1].padStart(2, "0")}-${dob[2].padStart(2, "0")}`;
+  const dob = parseTypedDob(s);
+  if (dob) out.dob = dob.toISOString().slice(0, 10);
   else if (s.includes(",")) [out.lastName, out.firstName] = s.split(",").map((x) => x.trim());
   else if (s && !/\d/.test(s)) {
     const words = s.split(/\s+/);

@@ -3,7 +3,9 @@ import type { Sex } from "@prisma/client";
 // Patient registration rules: what a new patient record needs, and which existing
 // patients might be the same person. Pure, so it can be tested without a database.
 
-export const LANGUAGES = ["English", "Spanish", "Vietnamese", "Mandarin", "Russian", "Somali", "Arabic", "Other"];
+// Bangla first: the clinic is in Bangladesh.
+export const LANGUAGES = ["Bangla", "English", "Hindi", "Urdu", "Arabic", "Chakma", "Other"];
+export const DEFAULT_LANGUAGE = "Bangla";
 export const RELATIONSHIPS = ["Spouse", "Partner", "Parent", "Child", "Sibling", "Guardian", "Friend", "Other"];
 export const SUBSCRIBER_RELATIONSHIPS = ["Self", "Spouse", "Parent", "Other"];
 const SEXES: Sex[] = ["female", "male", "other", "unknown"];
@@ -34,7 +36,7 @@ export type RegistrationInput = {
 // The registration form's field names.
 export const FIELDS = [
   "firstName", "middleName", "lastName", "preferredName", "dob", "sex",
-  "phone", "email", "street", "unit", "city", "state", "zip", "preferredLanguage",
+  "phone", "email", "street", "city", "postcode", "preferredLanguage",
   "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone",
   "pcpId", "preferredPharmacyId",
   "insurancePayer", "insuranceMemberId", "insuranceGroup", "subscriberName", "subscriberRelation",
@@ -45,12 +47,19 @@ export type FieldErrors = Partial<Record<string, string>>;
 const clean = (v: string | undefined) => (v ?? "").trim().replace(/\s+/g, " ");
 const orNull = (v: string) => v || null;
 
-// "5035550142" or "+1 (503) 555-0142" → "(503) 555-0142"; anything else is an error.
+// Bangladeshi numbers, stored in one international form so they read and dial the same way.
+// Mobiles: "01712345678", "01712-345678", "+880 1712 345678" → "+880 1712-345678".
+// Landlines (area code after the 0): "02-9123456" → "+880 2-9123456". Anything else is an error.
 export function formatPhone(raw: string): string | null {
   let digits = raw.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
-  if (digits.length !== 10) return null;
-  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.startsWith("880")) digits = digits.slice(3);
+  else if (digits.startsWith("0")) digits = digits.slice(1);
+  else return null;
+  if (/^1[3-9]\d{8}$/.test(digits)) return `+880 ${digits.slice(0, 4)}-${digits.slice(4)}`;
+  // Landline: Dhaka is 2 + 7 or 8 digits; other areas a 2- to 4-digit code and 5 to 7 digits.
+  if (/^2\d{7,8}$/.test(digits)) return `+880 2-${digits.slice(1)}`;
+  if (/^[3-9]\d{7,9}$/.test(digits)) return `+880 ${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return null;
 }
 
 // A date input's "YYYY-MM-DD" as a date-only value (UTC midnight, like every DOB column).
@@ -73,7 +82,8 @@ export function validateRegistration(
   if (!f.firstName) errors.firstName = "Enter the legal first name.";
   if (!f.lastName) errors.lastName = "Enter the legal last name.";
   for (const k of ["firstName", "middleName", "lastName", "preferredName"] as const) {
-    if (f[k] && !/^[\p{L}][\p{L}' .-]*$/u.test(f[k])) errors[k] = "Use letters, spaces, hyphens and apostrophes only.";
+    // \p{M} for the vowel signs and other marks of Bangla script (করিম).
+    if (f[k] && !/^\p{L}[\p{L}\p{M}' .-]*$/u.test(f[k])) errors[k] = "Use letters, spaces, dots, hyphens and apostrophes only.";
   }
 
   const dob = f.dob ? parseDob(f.dob) : null;
@@ -86,22 +96,17 @@ export function validateRegistration(
   if (!SEXES.includes(f.sex as Sex)) errors.sex = "Choose legal sex.";
 
   const phone = f.phone ? formatPhone(f.phone) : null;
-  if (f.phone && !phone) errors.phone = "Enter a 10-digit phone number.";
+  if (f.phone && !phone) errors.phone = "Enter a Bangladeshi number, e.g. 01712-345678.";
   const ecPhone = f.emergencyContactPhone ? formatPhone(f.emergencyContactPhone) : null;
-  if (f.emergencyContactPhone && !ecPhone) errors.emergencyContactPhone = "Enter a 10-digit phone number.";
-  if (!phone && !f.email) errors.phone ??= "Enter a phone number or email so the clinic can reach the patient.";
+  if (f.emergencyContactPhone && !ecPhone) errors.emergencyContactPhone = "Enter a Bangladeshi number, e.g. 01712-345678.";
   if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) errors.email = "Enter a valid email address.";
 
-  // The address is entered in parts and stored as one line, the way the chart shows it.
-  const state = f.state.toUpperCase();
-  const anyAddress = f.street || f.city || f.state || f.zip;
-  if (anyAddress) {
-    if (!f.street) errors.street = "Enter the street address.";
-    if (!f.city) errors.city = "Enter the city.";
-    if (!/^[A-Z]{2}$/.test(state)) errors.state = "Two letters, e.g. OR.";
-    if (!/^\d{5}(-\d{4})?$/.test(f.zip)) errors.zip = "Five digits.";
-  }
-  const address = anyAddress ? `${f.street}${f.unit ? ` ${f.unit}` : ""}, ${f.city}, ${state} ${f.zip}` : null;
+  // The address is entered in parts and stored as one line, the way the chart shows it:
+  // "House 12, Road 5, Dhanmondi, Dhaka 1205". Area and postcode are optional.
+  const anyAddress = f.street || f.city || f.postcode;
+  if (anyAddress && !f.street) errors.street = "Enter the house, road and area, or the village.";
+  if (f.postcode && !/^\d{4}$/.test(f.postcode)) errors.postcode = "Four digits, e.g. 1205.";
+  const address = anyAddress ? [f.street, [f.city, f.postcode].filter(Boolean).join(" ")].filter(Boolean).join(", ") : null;
 
   if ((f.emergencyContactPhone || f.emergencyContactRelation) && !f.emergencyContactName) errors.emergencyContactName = "Enter the contact's name.";
   if (f.emergencyContactName && !ecPhone && !errors.emergencyContactPhone) errors.emergencyContactPhone = "Enter the contact's phone number.";
@@ -126,7 +131,7 @@ export function validateRegistration(
       phone,
       email: orNull(f.email.toLowerCase()),
       address,
-      preferredLanguage: LANGUAGES.includes(f.preferredLanguage) ? f.preferredLanguage : "English",
+      preferredLanguage: LANGUAGES.includes(f.preferredLanguage) ? f.preferredLanguage : DEFAULT_LANGUAGE,
       emergencyContactName: orNull(f.emergencyContactName),
       emergencyContactRelation: f.emergencyContactName ? orNull(f.emergencyContactRelation) : null,
       emergencyContactPhone: f.emergencyContactName ? ecPhone : null,
@@ -146,13 +151,14 @@ export function validateRegistration(
 export type DuplicateCandidate = { id: string; mrn: string; firstName: string; lastName: string; dob: Date };
 export type DuplicateMatch<C extends DuplicateCandidate = DuplicateCandidate> = { patient: C; strength: "exact" | "likely" | "possible"; reason: string };
 
-// Lowercase letters only, accents dropped: "O'Brien-Núñez" → "obriennunez".
+// Lowercase letters only, Latin accents dropped: "O'Brien-Núñez" → "obriennunez".
+// Other scripts keep their letters and vowel signs: "করিম" stays "করিম".
 export const normName = (s: string) =>
   s
     .normalize("NFD")
-    .replace(/\p{M}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^a-z]/g, "");
+    .replace(/[^\p{L}\p{M}]/gu, "");
 
 function editDistance(a: string, b: string) {
   const row = Array.from({ length: b.length + 1 }, (_, j) => j);

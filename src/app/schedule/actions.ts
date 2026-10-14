@@ -9,6 +9,8 @@ import { vitalObservations } from "@/lib/vitals";
 import { advance, isOpen, startOfDay } from "@/lib/scheduling/server";
 import { ACTIVE_STATUSES, type WorkflowAction } from "@/lib/scheduling/workflow";
 import { CANCEL_REASONS, ROOMS, isVisitType, visitType } from "@/lib/scheduling/visit-types";
+import { DEFAULT_LANGUAGE, formatPhone } from "@/lib/registration/registration";
+import { fmtDateTime, fmtTime } from "@/lib/format";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -48,7 +50,7 @@ export async function bookAppointment(_prev: BookState, form: FormData): Promise
   const clash = await db.encounter.findFirst({
     where: { patientId, status: { in: ACTIVE_STATUSES }, start: { lt: end }, end: { gt: start }, id: rescheduleId ? { not: rescheduleId } : undefined },
   });
-  if (clash) return { error: `${patient.firstName} already has an appointment at ${clash.start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} that day.` };
+  if (clash) return { error: `${patient.firstName} already has an appointment at ${fmtTime(clash.start)} that day.` };
   if (!(await isOpen(providerId, start, end, rescheduleId ?? undefined)) && form.get("overbook") !== "on") {
     return { error: "That time isn't open on the provider's schedule. Tick Overbook to book it anyway.", overbook: true };
   }
@@ -66,7 +68,7 @@ export async function bookAppointment(_prev: BookState, form: FormData): Promise
     if (old) {
       await tx.encounter.update({ where: { id: old.id }, data: { status: "cancelled", statusAt: new Date(), cancelReason: "Rescheduled", rescheduledToId: appt.id } });
       await tx.encounterEvent.create({
-        data: { encounterId: old.id, action: "rescheduled", byId: user.id, detail: `Moved to ${start.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` },
+        data: { encounterId: old.id, action: "rescheduled", byId: user.id, detail: `Moved to ${fmtDateTime(start)}` },
       });
     }
     return appt;
@@ -110,9 +112,10 @@ export async function checkInPatient(encounterId: string, form: FormData) {
     await tx.patient.update({
       where: { id: enc.patientId },
       data: {
-        phone: str(form, "phone") || null,
+        // Normalised when it's a Bangladeshi number; kept as typed otherwise, so check-in isn't held up.
+        phone: formatPhone(str(form, "phone")) ?? (str(form, "phone") || null),
         address: str(form, "address") || null,
-        preferredLanguage: str(form, "language") || "English",
+        preferredLanguage: str(form, "language") || DEFAULT_LANGUAGE,
         insurancePayer: str(form, "insurancePayer") || null,
         insuranceMemberId: str(form, "insuranceMemberId") || null,
       },

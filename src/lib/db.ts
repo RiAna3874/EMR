@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import type { ITXClientDenyList } from "@prisma/client/runtime/library";
 import { recordWrite } from "@/lib/audit/record";
+import { withoutEnteredInError } from "@/lib/entered-in-error";
 
 // Reuse one client across hot reloads in dev.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -18,7 +19,7 @@ export const db = baseDb.$extends(
     query: {
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          const result = await query(args);
+          const result = await query(withoutEnteredInError(model, operation, args) as typeof args);
           try {
             await recordWrite(baseDb, model, operation, args as Record<string, unknown>, result);
           } catch (e) {

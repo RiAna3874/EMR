@@ -63,6 +63,9 @@ export function PatientRail({
           <dt className="text-ink-3">Phone</dt>
           <dd className="tabular">{p.phone}</dd>
         </dl>
+        <Link href={`${base}/edit`} className="mt-1 inline-block text-[11.5px] text-accent hover:underline">
+          Edit patient details
+        </Link>
         <div className={`mt-3 rounded px-2 py-1 text-center text-[11.5px] font-semibold ${p.codeStatus === "Full code" ? "bg-panel-muted text-ink-2" : "bg-ink text-white"}`}>
           Code status: {p.codeStatus}
         </div>

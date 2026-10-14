@@ -12,6 +12,8 @@ import { VitalsFields } from "@/components/vitals-fields";
 import { TrendChart, type TrendSeries } from "@/components/trend-chart";
 import { recordVitals } from "../actions";
 import { logChartView } from "@/lib/audit/server";
+import { EnteredInError } from "@/components/entered-in-error";
+import { markVitalsInError } from "../error-actions";
 
 const MAX_COLUMNS = 8;
 
@@ -129,6 +131,19 @@ export default async function Vitals({ params, searchParams }: { params: Promise
               ))}
             </tbody>
           </table>
+          {can(currentUser.role, "recordVitals") && (
+            <div className="space-y-1 border-t border-line px-3 py-2">
+              <div className="text-[11.5px] text-ink-3">A set of vitals entered on the wrong patient or mistyped can be removed:</div>
+              {cols.map((t) => (
+                <div key={t} className="flex items-start gap-2">
+                  <span className="tabular w-36 shrink-0 pt-0.5 text-[12px] text-ink-2">
+                    {fmtShortDate(new Date(t))} {fmtTime(new Date(t))}
+                  </span>
+                  <EnteredInError action={markVitalsInError.bind(null, id, new Date(t).toISOString())} what="these vitals" />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
     </div>

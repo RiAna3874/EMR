@@ -11,18 +11,30 @@ export const sexShort = (s: Sex) => ({ male: "M", female: "F", other: "X", unkno
 
 export const fullName = (p: { firstName: string; lastName: string }) => `${p.lastName}, ${p.firstName}`;
 
+// Day before month, as dates are written in Bangladesh: 21/07/1984, 14 Oct 2026, 2:30 pm.
+const LOCALE = "en-GB";
+
 // Date-only columns are stored at UTC midnight; format them in UTC so they never shift a day.
 export const fmtDob = (d: Date) =>
-  d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", timeZone: "UTC" });
+  d.toLocaleDateString(LOCALE, { month: "2-digit", day: "2-digit", year: "numeric", timeZone: "UTC" });
+
+// A date of birth typed into a search box, day first: "21/07/1984", "21-7-1984" or "21.07.1984".
+// Returns the UTC-midnight date the DOB column holds, or null.
+export function parseTypedDob(q: string): Date | null {
+  const m = q.trim().match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  return d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[1] ? d : null;
+}
 
 export const fmtDateOnly = (d: Date | null | undefined) =>
-  d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "";
+  d ? d.toLocaleDateString(LOCALE, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "";
 
-export const fmtDate = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+export const fmtDate = (d: Date) => d.toLocaleDateString(LOCALE, { month: "short", day: "numeric", year: "numeric" });
 
-export const fmtShortDate = (d: Date) => d.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+export const fmtShortDate = (d: Date) => d.toLocaleDateString(LOCALE, { month: "2-digit", day: "2-digit", year: "2-digit" });
 
-export const fmtTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+export const fmtTime = (d: Date) => d.toLocaleTimeString(LOCALE, { hour: "numeric", minute: "2-digit", hour12: true });
 
 export const fmtDateTime = (d: Date) => `${fmtDate(d)} ${fmtTime(d)}`;
 
@@ -91,5 +103,5 @@ export function parseLocalDate(s: string | undefined) {
   return d;
 }
 
-export const fmtDayLong = (d: Date) => d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-export const fmtDayShort = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+export const fmtDayLong = (d: Date) => d.toLocaleDateString(LOCALE, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+export const fmtDayShort = (d: Date) => d.toLocaleDateString(LOCALE, { weekday: "short", month: "short", day: "numeric" });

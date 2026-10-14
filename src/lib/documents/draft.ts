@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { ClinicalDocType } from "@prisma/client";
 import { BoxSchema, checkIdentity, toFractionBox, type IdentityCheck, type PageSize, type PatientFacts } from "@/lib/labs/draft";
+import { toLocalDate } from "@/lib/format";
 
 export const DOC_TYPES: { id: ClinicalDocType; label: string; plural: string }[] = [
   { id: "imaging_report", label: "Imaging report", plural: "Imaging" },
@@ -220,7 +221,7 @@ export type DocAssessment = {
   blockers: string[];
 };
 
-export function assessDocDraft(d: DocDraft, patient: PatientFacts, chart: ChartFacts, today = new Date().toISOString().slice(0, 10)): DocAssessment {
+export function assessDocDraft(d: DocDraft, patient: PatientFacts, chart: ChartFacts, today = toLocalDate(new Date())): DocAssessment {
   const identity = checkIdentity({ ...d, collectedDate: d.serviceDate }, patient);
   const blockers: string[] = [];
   const problems = new Map(d.diagnoses.map((x) => [x.id, matchProblem(x, chart.problems)]));
