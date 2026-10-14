@@ -16,7 +16,7 @@ export default async function PrintNote({ searchParams }: { searchParams: Promis
   const { id } = await searchParams;
   await requirePermission("viewClinical");
   const note = id
-    ? await db.note.findUnique({
+    ? await db.note.findFirst({
         where: { id },
         include: { patient: true, author: true, cosigner: true, editedBy: true, _count: { select: { versions: true } }, addenda: { include: { author: true }, orderBy: { signedAt: "asc" } } },
       })

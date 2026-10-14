@@ -5,8 +5,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { ERROR_REASONS } from "@/components/entered-in-error";
+import { canEditSigned } from "@/lib/notes/edits";
 
-// Marking results, outside documents and vital signs entered in error. Nothing is deleted:
+// Marking results, outside documents, vital signs and signed notes entered in error. Nothing is deleted:
 // the record keeps who marked it, when and why, and src/lib/db.ts hides it from the chart.
 
 function reasonFrom(form: FormData): string | null {
@@ -48,4 +49,16 @@ export async function markVitalsInError(patientId: string, at: string, form: For
   if (!reason || Number.isNaN(when.getTime())) return;
   await db.observation.updateMany({ where: { patientId, category: "vital_signs", effectiveAt: when, enteredInErrorAt: null }, data: marked(user.id, reason) });
   revalidatePath(`/patients/${patientId}`, "layout");
+}
+
+// Deleting a signed note. The same people who may edit it (its author, or the cosigner
+// once cosigned) may take it off the chart; pended notes are truly deleted (deleteDraft).
+export async function markNoteInError(patientId: string, noteId: string, form: FormData) {
+  const user = await requirePermission("writeNotes");
+  const reason = reasonFrom(form);
+  const note = await db.note.findFirst({ where: { id: noteId, patientId } });
+  if (!reason || !note || !canEditSigned(note, user.id)) return;
+  await db.note.update({ where: { id: noteId, patientId, enteredInErrorAt: null }, data: marked(user.id, reason) });
+  revalidatePath("/", "layout");
+  redirect(`/patients/${patientId}/notes`);
 }

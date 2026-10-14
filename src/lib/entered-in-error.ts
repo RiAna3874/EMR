@@ -7,6 +7,7 @@ const HIDDEN_BY: Record<string, string> = {
   Observation: "enteredInErrorAt",
   DiagnosticReport: "enteredInErrorAt",
   ClinicalDocument: "enteredInErrorAt",
+  Note: "enteredInErrorAt",
   Patient: "mergedIntoId",
 };
 const LIST_READS = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "aggregate", "groupBy"]);

@@ -11,7 +11,11 @@ test("lists and counts of results leave out what was entered in error", () => {
   const byId = { where: { id: "r" } };
   assert.equal(withoutEnteredInError("DiagnosticReport", "findUnique", byId), byId);
   assert.equal(withoutEnteredInError("Observation", "updateMany", byId), byId);
-  assert.equal(withoutEnteredInError("Note", "findMany", byId), byId);
+  assert.equal(withoutEnteredInError("Encounter", "findMany", byId), byId);
+});
+
+test("deleted signed notes leave the notes list", () => {
+  assert.deepEqual(withoutEnteredInError("Note", "findMany", { where: { patientId: "p" } }), { where: { patientId: "p", enteredInErrorAt: null } });
 });
 
 test("patient lists and searches leave out charts merged into another", () => {
