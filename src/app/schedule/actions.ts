@@ -87,9 +87,13 @@ export async function cancelAppointment(encounterId: string, form: FormData) {
   refresh(enc?.patientId);
 }
 
+const QUICK_ACTIONS: WorkflowAction[] = ["undoArrival", "start", "checkOut", "noShow", "undoNoShow"];
+
 // One-click steps from My Day, the schedule and the appointment page.
-export async function quickAction(encounterId: string, action: Extract<WorkflowAction, "undoArrival" | "start" | "complete" | "checkOut" | "noShow" | "undoNoShow">) {
+// Closing a visit ("complete") isn't one of them: it goes through the visit screen's checks.
+export async function quickAction(encounterId: string, action: Extract<WorkflowAction, "undoArrival" | "start" | "checkOut" | "noShow" | "undoNoShow">) {
   const user = await requireUser();
+  if (!QUICK_ACTIONS.includes(action)) throw new Error("Not a one-click step.");
   const enc = await db.encounter.findUnique({ where: { id: encounterId }, select: { patientId: true } });
   const ok = await advance(encounterId, action, user);
   refresh(enc?.patientId);

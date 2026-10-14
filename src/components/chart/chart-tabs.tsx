@@ -10,6 +10,7 @@ import type { Permission } from "@/lib/roles";
 // `needs` is the permission a tab's page checks; tabs the user lacks it for are hidden.
 export const chartTabs: { slug: string; label: string; needs?: Permission }[] = [
   { slug: "", label: "Summary" },
+  { slug: "visit", label: "Visit", needs: "viewClinical" },
   { slug: "results", label: "Results", needs: "viewClinical" },
   { slug: "vitals", label: "Vitals", needs: "viewClinical" },
   { slug: "meds", label: "Medications", needs: "viewClinical" },

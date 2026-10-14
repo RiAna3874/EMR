@@ -4,7 +4,8 @@ import type { EncounterStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { can, displayName } from "@/lib/roles";
-import { age, fmtDate, fmtDateTime, fmtDayLong, fmtDob, fmtTime, fullName, sexShort } from "@/lib/format";
+import { age, fmtDate, fmtDateTime, fmtDayLong, fmtDob, fmtTime, fullName, sexShort, toLocalDate } from "@/lib/format";
+import { fromDbDate, followUpText } from "@/lib/visits/follow-up";
 import { canTransition, eventLabel, paymentText, TRANSITIONS, type WorkflowAction } from "@/lib/scheduling/workflow";
 import { CANCEL_REASONS, visitType } from "@/lib/scheduling/visit-types";
 import { Panel } from "@/components/panel";
@@ -38,6 +39,7 @@ export default async function Appointment({ params, searchParams }: { params: Pr
       events: { orderBy: { at: "asc" }, include: { by: true } },
       rescheduledTo: true,
       rescheduledFrom: true,
+      diagnoses: { orderBy: { rank: "asc" } },
     },
   });
   if (!appt) notFound();
@@ -51,7 +53,10 @@ export default async function Appointment({ params, searchParams }: { params: Pr
         {TRANSITIONS[a].label}
       </ActionButton>
     );
-  const followUp = `/schedule/book?patient=${p.id}&provider=${appt.providerId ?? "any"}&type=follow_up&reason=Follow-up`;
+  // The return the provider asked for at the visit, if any, opens booking on that date.
+  const returnText = followUpText(appt, fmtDate);
+  const followUp = `/schedule/book?patient=${p.id}&provider=${appt.providerId ?? "any"}&type=follow_up&reason=Follow-up${appt.followUpDate ? `&from=${toLocalDate(fromDbDate(appt.followUpDate))}` : ""}`;
+  const clinical = can(user.role, "viewClinical");
 
   return (
     <main className="h-full overflow-y-auto">
@@ -135,11 +140,20 @@ export default async function Appointment({ params, searchParams }: { params: Pr
             </Link>
           )}
           {quick("start", "primary")}
-          {quick("complete", "primary")}
+          {able("complete") && (
+            <Link href={`/patients/${p.id}/visit?e=${appt.id}`} className={`${linkBtn} border-accent bg-accent text-white hover:bg-accent/90`}>
+              Close visit
+            </Link>
+          )}
           {quick("checkOut", "primary")}
           {(appt.status === "finished" || appt.status === "checked_out") && can(user.role, "bookAppointments") && (
             <Link href={followUp} className={`${linkBtn} border-line bg-panel hover:bg-panel-muted`}>
-              Make follow-up
+              {appt.followUpDate ? `Book follow-up (${fmtDate(fromDbDate(appt.followUpDate))})` : "Make follow-up"}
+            </Link>
+          )}
+          {clinical && ["in_progress", "finished", "checked_out"].includes(appt.status) && (
+            <Link href={`/print/visit?encounter=${appt.id}`} className={`${linkBtn} border-line bg-panel hover:bg-panel-muted`}>
+              Print visit prescription
             </Link>
           )}
           {appt.status === "planned" && can(user.role, "bookAppointments") && (
@@ -222,6 +236,21 @@ export default async function Appointment({ params, searchParams }: { params: Pr
                 <>
                   <dt className="text-ink-3">Chief complaint</dt>
                   <dd>{appt.chiefComplaint}</dd>
+                </>
+              )}
+              {appt.diagnoses.length > 0 && clinical && (
+                <>
+                  <dt className="text-ink-3">Diagnoses</dt>
+                  <dd>{appt.diagnoses.map((d) => d.display).join("; ")}</dd>
+                </>
+              )}
+              {returnText && (
+                <>
+                  <dt className="text-ink-3">Return</dt>
+                  <dd className="font-medium">
+                    {returnText}
+                    {appt.followUpNote && <span className="font-normal text-ink-2"> · {appt.followUpNote}</span>}
+                  </dd>
                 </>
               )}
               {(appt.status === "roomed" || appt.room || appt.allergiesReviewedAt || appt.medsReviewedAt) && (

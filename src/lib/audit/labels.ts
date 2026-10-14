@@ -30,6 +30,7 @@ export const MODEL_LABELS: Record<string, string> = {
   Patient: "Demographics",
   Encounter: "Appointment",
   EncounterEvent: "Visit status",
+  EncounterDiagnosis: "Visit diagnosis",
   ScheduleSession: "Schedule template",
   ScheduleBlock: "Blocked time",
   Condition: "Problem",

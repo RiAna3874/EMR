@@ -12,6 +12,8 @@ import { RefreshWhile } from "@/components/import/refresh-while";
 import { VisitStatusChip } from "@/components/schedule/status-chip";
 import { NextStepButton } from "@/components/schedule/next-step";
 import { visitType } from "@/lib/scheduling/visit-types";
+import { startOfDay } from "@/lib/scheduling/server";
+import { OPEN_STATUSES } from "@/lib/visits/close";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   const currentUser = await requireUser();
   // Front desk gets the schedule; clinical panels need clinical access.
   const clinical = can(currentUser.role, "viewClinical");
-  const [schedule, abnormal, draftNotes, toVerify] = await Promise.all([
+  const [schedule, abnormal, draftNotes, toVerify, openVisits] = await Promise.all([
     todaysSchedule(),
     clinical ? recentAbnormalLabs(30) : [],
     db.note.count({ where: { authorId: currentUser.id, status: "draft" } }),
@@ -29,6 +31,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           where: { status: { in: ["needs_review", "failed"] } },
           orderBy: { createdAt: "asc" },
           include: { patient: true, createdBy: true, _count: { select: { documents: true } } },
+        })
+      : [],
+    // Visits from earlier days this provider never closed.
+    can(currentUser.role, "seePatients")
+      ? db.encounter.findMany({
+          where: { providerId: currentUser.id, status: { in: OPEN_STATUSES }, start: { lt: startOfDay(new Date()) } },
+          orderBy: { start: "asc" },
+          include: { patient: true },
         })
       : [],
   ]);
@@ -67,6 +77,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           {clinical && <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />}
           {can(currentUser.role, "writeNotes") && <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />}
         </div>
+
+        {openVisits.length > 0 && (
+          <Panel title="Open visits from earlier days" className="mb-4">
+            <ul>
+              {openVisits.map((e) => (
+                <li key={e.id} className="border-t border-line first:border-t-0">
+                  <Link href={`/patients/${e.patientId}/visit?e=${e.id}`} className="flex items-center gap-3 px-3 py-1.5 hover:bg-accent-soft/40">
+                    <span className="tabular w-40 shrink-0 text-ink-2">{fmtDate(e.start)} {fmtTime(e.start)}</span>
+                    <span className="font-medium">{fullName(e.patient)}</span>
+                    <span className="text-ink-3">{e.chiefComplaint ?? e.reason}</span>
+                    <span className="ml-auto text-[12px] text-warn">Not closed</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
 
         {toVerify.length > 0 && (
           <Panel title="Imported reports to verify" className="mb-4">
