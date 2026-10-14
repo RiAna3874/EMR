@@ -26,7 +26,7 @@ export function RxForm({
   replaces,
   refillRequestId,
   pending,
-  submitLabel = "Add to pending orders",
+  submitLabel = "Add to order basket",
   onSubmit,
   onCancel,
 }: {
@@ -70,7 +70,7 @@ export function RxForm({
     if (replaces && meds.includes(replaces.drug)) meds.splice(meds.indexOf(replaces.drug), 1);
     const out = medWarnings(product.display, { dose, frequency, refills }, { ...ctx, activeMeds: meds });
     if (!replaces && ctx.openOrders.some((o) => o.code === `RX:${product.rxnorm}` && o.status === "pending")) {
-      out.unshift({ level: "caution", kind: "duplicate", text: "Already in pending orders." });
+      out.unshift({ level: "caution", kind: "duplicate", text: "Already in the order basket." });
     }
     return out;
   }, [ctx, product, dose, frequency, refills, replaces]);

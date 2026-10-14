@@ -25,10 +25,10 @@ export type Orderable = {
 
 export const ORDERABLES: Orderable[] = [
   // Labs
-  { code: "58410-2", display: "Complete blood count (CBC)", type: "lab", keywords: ["cbc", "hemoglobin", "platelets", "wbc"], repeatDays: 7, specimen: "Blood, lavender top" },
+  { code: "58410-2", display: "Complete blood count (CBC)", type: "lab", keywords: ["cbc", "hemoglobin", "platelets", "wbc", "anemia"], repeatDays: 7, specimen: "Blood, lavender top" },
   { code: "24323-8", display: "Comprehensive metabolic panel (CMP)", type: "lab", keywords: ["cmp", "chem", "electrolytes", "liver", "kidney", "creatinine"], repeatDays: 7, specimen: "Blood, gold top" },
   { code: "51990-0", display: "Basic metabolic panel (BMP)", type: "lab", keywords: ["bmp", "chem 7", "electrolytes", "potassium"], repeatDays: 3, resultCodes: ["24323-8"], specimen: "Blood, gold top" },
-  { code: "57698-3", display: "Lipid panel", type: "lab", keywords: ["cholesterol", "ldl", "triglycerides", "lipids"], repeatDays: 60, specimen: "Blood, gold top (fasting preferred)" },
+  { code: "57698-3", display: "Lipid panel", type: "lab", keywords: ["cholesterol", "ldl", "triglycerides", "lipid"], repeatDays: 60, specimen: "Blood, gold top (fasting preferred)" },
   { code: "4548-4", display: "Hemoglobin A1c", type: "lab", keywords: ["a1c", "hba1c", "diabetes", "glycated"], repeatDays: 80, specimen: "Blood, lavender top" },
   { code: "3016-3", display: "TSH", type: "lab", keywords: ["thyroid", "tsh"], repeatDays: 42, specimen: "Blood, gold top" },
   { code: "local:thyroid", display: "Free T4", type: "lab", keywords: ["thyroid", "t4", "ft4"], repeatDays: 42, resultCodes: ["3024-7"], specimen: "Blood, gold top" },
@@ -89,14 +89,15 @@ export function orderableFor(code: string): Orderable | undefined {
   return offList?.offList ? medOrderable(offList) : undefined;
 }
 
-export type OrderSet = { id: string; name: string; description: string; codes: string[] };
+// `problem`: a word in the name of the problem the set is usually for, to link its orders by default.
+export type OrderSet = { id: string; name: string; description: string; codes: string[]; problem?: string };
 
 export const ORDER_SETS: OrderSet[] = [
   { id: "annual-labs", name: "Annual physical labs", description: "CBC, CMP, lipids, A1c, TSH", codes: ["58410-2", "24323-8", "57698-3", "4548-4", "3016-3"] },
-  { id: "diabetes", name: "Diabetes follow-up", description: "A1c, CMP, lipids, urine albumin, eye exam", codes: ["4548-4", "24323-8", "57698-3", "14959-1", "REF:ophthalmology"] },
-  { id: "anemia", name: "Anemia workup", description: "CBC, iron studies, B12", codes: ["58410-2", "local:iron", "2132-9"] },
-  { id: "heart-failure", name: "Heart failure check", description: "BMP, BNP, CBC, echo", codes: ["51990-0", "30934-4", "58410-2", "CPT:93306"] },
-  { id: "hypertension", name: "New hypertension", description: "BMP, lipids, UA, ECG", codes: ["51990-0", "57698-3", "24356-8", "CPT:93000"] },
+  { id: "diabetes", name: "Diabetes follow-up", description: "A1c, CMP, lipids, urine albumin, eye exam", codes: ["4548-4", "24323-8", "57698-3", "14959-1", "REF:ophthalmology"], problem: "diabetes" },
+  { id: "anemia", name: "Anemia workup", description: "CBC, iron studies, B12", codes: ["58410-2", "local:iron", "2132-9"], problem: "anemia" },
+  { id: "heart-failure", name: "Heart failure check", description: "BMP, BNP, CBC, echo", codes: ["51990-0", "30934-4", "58410-2", "CPT:93306"], problem: "heart failure" },
+  { id: "hypertension", name: "New hypertension", description: "BMP, lipids, UA, ECG", codes: ["51990-0", "57698-3", "24356-8", "CPT:93000"], problem: "hypertension" },
 ];
 
 export const typeLabels: Record<OrderType, string> = {
@@ -118,6 +119,18 @@ export function searchOrderables(q: string, limit = 12) {
   }).filter((x): x is { o: Orderable; score: number } => x !== null);
   return scored.sort((a, b) => a.score - b.score || a.o.display.localeCompare(b.o.display)).slice(0, limit).map((x) => x.o);
 }
+
+// Order sets whose name or contents match every typed word.
+export function searchOrderSets(q: string, limit = 4) {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  return ORDER_SETS.filter((s) => {
+    const hay = [s.name, s.description, "order set", s.problem ?? ""].join(" ").toLowerCase();
+    return terms.every((t) => hay.includes(t));
+  }).slice(0, limit);
+}
+
+export const orderSetById = new Map(ORDER_SETS.map((s) => [s.id, s]));
 
 // Report or result codes that satisfy (complete) a lab order.
 export const satisfyingCodes = (o: Pick<Orderable, "code" | "resultCodes">) => [o.code, ...(o.resultCodes ?? [])];

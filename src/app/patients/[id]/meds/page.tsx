@@ -11,8 +11,8 @@ import { sigText } from "@/lib/meds/sig";
 import { Empty } from "@/components/panel";
 import { Button, inputCls } from "@/components/form";
 import { ActionButton } from "@/components/action-button";
-import { PendingOrders, type PendingRow } from "@/components/orders/pending-orders";
-import { medSig } from "@/components/orders/order-bits";
+import { OrderBasket } from "@/components/orders/order-basket";
+import { basketRow } from "@/components/orders/order-bits";
 import { RxComposer, type RxStart } from "@/components/meds/rx-composer";
 import { DiscontinueButton, TakingControl } from "@/components/meds/med-controls";
 import { OutsideMedForm } from "@/components/meds/outside-med-form";
@@ -98,17 +98,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
   }
 
   const warnings = await pendingOrderWarnings(pendingOrders, ctx);
-  const rows: PendingRow[] = pendingOrders.map((o) => ({
-    id: o.id,
-    type: o.type,
-    display: o.display,
-    priority: o.priority,
-    indication: o.indication,
-    sig: medSig(o.details),
-    orderSet: o.orderSet,
-    pendedBy: o.orderedById === currentUser.id ? null : o.orderedBy.name,
-    warnings: warnings.get(o.id) ?? [],
-  }));
+  const rows = pendingOrders.map((o) => basketRow(o, currentUser.id, warnings.get(o.id)));
 
   const reviewedToday = patient.medsReviewedAt && patient.medsReviewedAt.toDateString() === new Date().toDateString();
 
@@ -401,10 +391,11 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
 
       <div className="xl:sticky xl:top-4 xl:w-[380px]">
         {canPend && (
-          <PendingOrders
+          <OrderBasket
             rows={rows}
+            problems={problems}
             remove={removePendingOrder.bind(null, id)}
-            setPriority={updatePendingOrder.bind(null, id)}
+            update={updatePendingOrder.bind(null, id)}
             sign={canSign ? signOrders.bind(null, id) : undefined}
             cosigners={attendings ?? undefined}
           />
