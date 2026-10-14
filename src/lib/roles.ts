@@ -33,9 +33,9 @@ export const PERMISSIONS = {
   useInbox: ["physician", "resident", "nurse"],
   // Scheduling and the clinic day. Anyone can book, reschedule and cancel.
   bookAppointments: ["physician", "resident", "nurse", "front_desk"],
-  // Registering a new patient (demographics, contacts, coverage, PCP) is a front desk
-  // job; nurses can too, as with check-in, for a walk-in when the desk is busy.
-  registerPatients: ["nurse", "front_desk"],
+  // Registering a new patient (demographics, contacts, coverage, PCP). Usually the front
+  // desk, but anyone can, so a walk-in isn't held up when the desk is busy.
+  registerPatients: ["physician", "resident", "nurse", "front_desk"],
   // Check-in (demographics, insurance, copay), no-shows and check-out.
   checkIn: ["nurse", "front_desk"],
   // Rooming records vitals, so it needs a clinician.

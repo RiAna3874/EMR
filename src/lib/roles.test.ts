@@ -50,9 +50,9 @@ test("the clinic day splits by role", () => {
   assert.equal(can("physician", "checkIn"), false);
 });
 
-test("front desk and nurses register new patients; providers don't", () => {
+test("every role can register a new patient", () => {
   assert.equal(can("front_desk", "registerPatients"), true);
   assert.equal(can("nurse", "registerPatients"), true);
-  assert.equal(can("physician", "registerPatients"), false);
-  assert.equal(can("resident", "registerPatients"), false);
+  assert.equal(can("physician", "registerPatients"), true);
+  assert.equal(can("resident", "registerPatients"), true);
 });
