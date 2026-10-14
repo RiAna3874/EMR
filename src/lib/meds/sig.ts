@@ -18,6 +18,8 @@ export function timesPerDay(frequency: string): number | null {
   const everyHours = f.match(/every\s+(\d+(?:\.\d+)?)\s*(?:to\s*\d+\s*)?hours?/);
   if (everyHours) return 24 / Number(everyHours[1]);
   if (/once weekly|every week|weekly/.test(f)) return 1 / 7;
+  if (/monthly|every month/.test(f)) return 1 / 30;
+  if (/every other day|alternate days/.test(f)) return 1 / 2;
   if (/four times|qid/.test(f)) return 4;
   if (/three times|tid/.test(f)) return 3;
   if (/twice|two times|bid/.test(f)) return 2;

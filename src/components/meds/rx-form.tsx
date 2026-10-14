@@ -8,23 +8,10 @@ import { daysSupplyFor, suggestQuantity } from "@/lib/meds/sig";
 import { RX_CLASSES, rxSummary, type RxDetails } from "@/lib/meds/rx";
 import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "@/components/orders/order-bits";
+import { doseSuggestions } from "@/lib/meds/dosing";
+import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 
 export type PharmacyOption = { id: string; name: string; address: string; mailOrder: boolean };
-
-const FREQUENCIES = [
-  "once daily",
-  "twice daily",
-  "three times daily",
-  "four times daily",
-  "nightly",
-  "once daily before breakfast",
-  "twice daily with meals",
-  "every 4 hours",
-  "every 6 hours",
-  "every 8 hours",
-  "every 12 hours",
-  "once weekly",
-];
 
 // The prescription fields with live checks: the sig, the quantity worked out
 // from it, refills within the drug's schedule, and how and where it is sent.
@@ -71,6 +58,7 @@ export function RxForm({
   );
   const [pharmacyId, setPharmacyId] = useState(initial?.pharmacyId ?? preferredPharmacyId ?? "");
 
+  const doseOptions = useMemo(() => doseSuggestions(product.display, product), [product]);
   const days = Number(duration) || 0;
   // Keep the quantity in step with the sig until the prescriber types their own.
   const autoQty = useMemo(() => suggestQuantity(product, { dose, frequency }, days || product.days), [product, dose, frequency, days]);
@@ -116,19 +104,14 @@ export function RxForm({
 
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Dose">
-          <input name="dose" value={dose} onChange={(e) => setDose(e.target.value)} className={`${inputCls} w-36`} autoFocus={replaces?.mode === "modify"} />
+          <DoseInput value={dose} onChange={setDose} suggestions={doseOptions} autoFocus={replaces?.mode === "modify"} />
         </Field>
         <Field label="Route">
-          <input name="route" value={route} onChange={(e) => setRoute(e.target.value)} className={`${inputCls} w-28`} />
+          <RouteInput value={route} onChange={setRoute} />
         </Field>
         <Field label="Frequency">
-          <input name="frequency" list="rx-frequencies" value={frequency} onChange={(e) => setFrequency(e.target.value)} className={`${inputCls} w-64`} />
+          <FrequencyInput value={frequency} onChange={setFrequency} className="w-64" />
         </Field>
-        <datalist id="rx-frequencies">
-          {FREQUENCIES.map((f) => (
-            <option key={f} value={f} />
-          ))}
-        </datalist>
         <label className="flex items-center gap-1.5 pb-1 text-[12.5px]">
           <input type="checkbox" name="prn" checked={prn} onChange={(e) => setPrn(e.target.checked)} />
           As needed
