@@ -25,11 +25,14 @@ export type RxDetails = {
   refillRequestId?: string | null;
 };
 
-export const RX_CLASSES: { id: Exclude<RxClass, "historical">; label: string }[] = [
-  { id: "e_prescribe", label: "E-prescribe" },
-  { id: "print", label: "Print" },
-  { id: "phone", label: "Phone in" },
-];
+// How a new prescription reaches the patient. The clinic has no electronic link to
+// any pharmacy, so every prescription is printed and handed to the patient. Add
+// "e_prescribe" or "phone" back here only once a prescription really gets sent.
+export const RX_CLASSES: { id: Exclude<RxClass, "historical">; label: string }[] = [{ id: "print", label: "Print" }];
+
+// The class a new prescription gets: what was asked for if the clinic offers it, else print.
+export const rxClassFor = (asked: string | null | undefined): Exclude<RxClass, "historical"> =>
+  RX_CLASSES.find((c) => c.id === asked)?.id ?? "print";
 
 export const rxClassLabel: Record<RxClass, string> = {
   e_prescribe: "E-prescribed",
@@ -51,7 +54,7 @@ export function rxFromForm(form: FormData, product: Product): RxDetails {
   const frequency = str(form, "frequency") || product.frequency;
   const quantity = str(form, "quantity") || product.quantity;
   const prn = form.get("prn") === "on";
-  const cls = str(form, "rxClass") as RxClass;
+  const cls = str(form, "rxClass");
   return {
     dose,
     route: str(form, "route") || product.route,
@@ -62,7 +65,7 @@ export function rxFromForm(form: FormData, product: Product): RxDetails {
     quantity,
     daysSupply: int(form, "daysSupply") ?? daysSupplyFor(product, { dose, frequency }, quantity),
     refills: Math.max(0, Math.min(maxRefills(product.display), int(form, "refills") ?? 0)),
-    rxClass: RX_CLASSES.some((c) => c.id === cls) ? cls : "e_prescribe",
+    rxClass: rxClassFor(cls),
     pharmacyId: str(form, "pharmacyId") || null,
     daw: form.get("daw") === "on",
     patientInstructions: str(form, "patientInstructions") || null,

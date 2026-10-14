@@ -13,7 +13,7 @@ export default async function StaffAccountsPage({ searchParams }: { searchParams
   const accounts = await db.practitioner.findMany({
     where: { username: { not: null } },
     orderBy: [{ active: "desc" }, { name: "asc" }],
-    select: { id: true, name: true, credentials: true, role: true, username: true, isAdmin: true, active: true, mustChangePassword: true, totpEnabledAt: true },
+    select: { id: true, name: true, credentials: true, registrationNumber: true, role: true, username: true, isAdmin: true, active: true, mustChangePassword: true, totpEnabledAt: true },
   });
   return (
     <div className="h-full overflow-y-auto bg-bg">

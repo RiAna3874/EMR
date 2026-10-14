@@ -95,10 +95,26 @@ export async function updatePendingOrder(patientId: string, orderId: string, for
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
-// Signs every pending order, including ones a nurse pended; the signer becomes the
-// ordering clinician. Orders with a hard-stop warning need an override reason.
+// Signs the pending orders the signer was shown, including ones a nurse pended; the
+// signer becomes the ordering clinician. If an order was pended or removed, or a new
+// hard-stop alert appeared, after the page was loaded, nothing is signed and the list
+// refreshes for another look. Orders with a hard-stop warning need an override reason.
 // Prescriptions become medication list entries: a controlled substance needs the
 // prescription monitoring program checked, and a resident names a cosigning attending.
+// How the pending list differs from the one on the signer's screen, or null if it doesn't.
+function listChanged(pending: { id: string; display: string }[], shownIds: string[]) {
+  const shown = new Set(shownIds);
+  const added = pending.filter((p) => !shown.has(p.id));
+  if (added.length) return `${added.map((p) => p.display).join(", ")} ${added.length === 1 ? "was" : "were"} added to pending orders since this page opened.`;
+  if (shown.size !== pending.length) return "Some pending orders were removed or signed since this page opened.";
+  return null;
+}
+
+function newAlerts(stops: { id: string; display: string }[], shownIds: string[]) {
+  const unseen = stops.filter((s) => !shownIds.includes(s.id));
+  return unseen.length ? `${unseen.map((s) => s.display).join(", ")} now ${unseen.length === 1 ? "has" : "have"} a hard-stop alert.` : null;
+}
+
 export async function signOrders(patientId: string, form: FormData): Promise<{ error: string } | void> {
   const currentUser = await requirePermission("signOrders");
   const pending = await db.serviceRequest.findMany({ where: { patientId, status: "pending" }, orderBy: { createdAt: "asc" } });
@@ -107,6 +123,11 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
   ctx.openOrders = ctx.openOrders.filter((o) => o.status !== "pending");
   const warnings = await pendingOrderWarnings(pending, ctx);
   const stops = pending.filter((p) => warnings.get(p.id)?.some((w) => w.level === "stop"));
+  const changed = listChanged(pending, form.getAll("orderId").map(String)) ?? newAlerts(stops, form.getAll("alertedId").map(String));
+  if (changed) {
+    revalidatePath(`/patients/${patientId}`, "layout");
+    return { error: `${changed} Nothing was signed. Check the list and sign again.` };
+  }
   const reason = str(form, "overrideReason");
   if (stops.length && !reason) return { error: `Give an override reason to sign ${stops.map((s) => s.display).join(", ")}.` };
 
@@ -140,7 +161,7 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
           quantity: d.quantity ?? "",
           daysSupply: d.daysSupply,
           refills: d.refills ?? 0,
-          rxClass: d.rxClass ?? "e_prescribe",
+          rxClass: d.rxClass,
           pharmacyId: d.pharmacyId ?? patient.preferredPharmacyId,
           daw: d.daw,
           patientInstructions: d.patientInstructions,

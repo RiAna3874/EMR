@@ -33,6 +33,7 @@ export async function addAccount(_prev: AdminState, form: FormData): Promise<Adm
     data: {
       name,
       credentials: str(form, "credentials") || null,
+      registrationNumber: str(form, "registrationNumber") || null,
       role,
       username,
       isAdmin: form.get("isAdmin") === "on",
@@ -100,7 +101,7 @@ export async function manageAccount(_prev: AdminState, form: FormData): Promise<
       const role = str(form, "role");
       if (!name) return { error: "Enter the person's full name." };
       if (!isRole(role)) return { error: "Choose a role." };
-      await db.practitioner.update({ where: { id: target.id }, data: { name, role, credentials: str(form, "credentials") || null } });
+      await db.practitioner.update({ where: { id: target.id }, data: { name, role, credentials: str(form, "credentials") || null, registrationNumber: str(form, "registrationNumber") || null } });
       await logAccount(admin, `Edited ${target.username}${role !== target.role ? `: role ${roleLabel[target.role]} to ${roleLabel[role]}` : ""}`, target.id);
       revalidatePath("/admin/users");
       return { ok: `Saved ${name}.` };

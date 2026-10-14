@@ -5,7 +5,7 @@ import type { OrderContext } from "@/lib/orders/checks";
 import type { Product } from "@/lib/meds/formulary";
 import { maxRefills, medWarnings, scheduleOf } from "@/lib/meds/checks";
 import { daysSupplyFor, suggestQuantity } from "@/lib/meds/sig";
-import { RX_CLASSES, rxSummary, type RxDetails } from "@/lib/meds/rx";
+import { RX_CLASSES, rxClassFor, rxSummary, type RxDetails } from "@/lib/meds/rx";
 import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "@/components/orders/order-bits";
 import { doseSuggestions } from "@/lib/meds/dosing";
@@ -53,9 +53,7 @@ export function RxForm({
   // A reorder keeps its quantity; a change of dose recalculates it.
   const [qtyTouched, setQtyTouched] = useState(!!initial?.quantity && replaces?.mode !== "modify");
   const [refills, setRefills] = useState(Math.min(initial?.refills ?? product.refills, maxRefills(product.display)));
-  const [rxClass, setRxClass] = useState<"e_prescribe" | "print" | "phone">(
-    initial?.rxClass && initial.rxClass !== "historical" ? initial.rxClass : scheduleOf(product.display) === "II" ? "print" : "e_prescribe",
-  );
+  const [rxClass, setRxClass] = useState(rxClassFor(initial?.rxClass));
   const [pharmacyId, setPharmacyId] = useState(initial?.pharmacyId ?? preferredPharmacyId ?? "");
 
   const doseOptions = useMemo(() => doseSuggestions(product.display, product), [product]);
@@ -156,20 +154,22 @@ export function RxForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Send">
-          <div className="flex overflow-hidden rounded border border-line text-[12px]">
-            {RX_CLASSES.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setRxClass(c.id)}
-                className={`border-l border-line px-2.5 py-1 first:border-l-0 ${rxClass === c.id ? "bg-chrome text-white" : "bg-panel text-ink-2 hover:bg-panel-muted"}`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </Field>
+        {RX_CLASSES.length > 1 && (
+          <Field label="Send">
+            <div className="flex overflow-hidden rounded border border-line text-[12px]">
+              {RX_CLASSES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setRxClass(c.id)}
+                  className={`border-l border-line px-2.5 py-1 first:border-l-0 ${rxClass === c.id ? "bg-chrome text-white" : "bg-panel text-ink-2 hover:bg-panel-muted"}`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
         {rxClass !== "print" && (
           <Field label="Pharmacy" className="min-w-72 flex-1">
             <select name="pharmacyId" value={pharmacyId} onChange={(e) => setPharmacyId(e.target.value)} className={inputCls} required>
@@ -183,7 +183,7 @@ export function RxForm({
             </select>
           </Field>
         )}
-        {rxClass === "print" && <p className="pb-1 text-[12px] text-ink-2">Prints for the patient to take to any pharmacy.</p>}
+        {rxClass === "print" && <p className="pb-1 text-[12px] text-ink-2">Printed for the patient to take to any pharmacy. Print it from the medication list once it&apos;s signed.</p>}
       </div>
       {pharmacy && rxClass !== "print" && <p className="-mt-2 text-[11.5px] text-ink-3">{pharmacy.address}</p>}
 

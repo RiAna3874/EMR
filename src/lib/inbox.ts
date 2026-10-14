@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { isAbnormal, isCritical } from "@/lib/format";
 import { can, type SessionUser } from "@/lib/roles";
 import { documentsWhere } from "@/lib/documents/server";
+import { isUnassigned, reviewOwnerWhere } from "@/lib/review-owner";
 
 // Which Inbox folders a role works.
 export type InboxFolder = "abnormal" | "normal" | "documents" | "imports" | "notes" | "cosign" | "orders" | "refills" | "rxcosign";
@@ -36,21 +37,21 @@ export function refillsWhere(user: Pick<SessionUser, "id" | "role">): Prisma.Ref
   return { status: { in: ["requested", "pended"] }, OR: [{ medication: { prescriberId: user.id } }, { patient: { pcpId: user.id } }] };
 }
 
-// A result belongs in a clinician's Inbox when they ordered it, or, with no
-// order (an imported outside report), when they are the patient's PCP.
+// Unreviewed results this clinician answers for (src/lib/review-owner.ts).
 export const resultsWhere = (userId: string): Prisma.DiagnosticReportWhereInput => ({
   reviewedAt: null,
-  OR: [{ order: { orderedById: userId } }, { orderId: null, patient: { pcpId: userId } }],
+  OR: reviewOwnerWhere(userId),
 });
 
 export async function inboxResults(userId: string) {
   const reports = await db.diagnosticReport.findMany({
     where: resultsWhere(userId),
     orderBy: [{ issuedAt: "desc" }],
-    include: { patient: true, observations: { orderBy: { sortOrder: "asc" } } },
+    include: { patient: true, order: { select: { orderedById: true } }, observations: { orderBy: { sortOrder: "asc" } } },
   });
   const tagged = reports.map((r) => ({
     ...r,
+    unassigned: isUnassigned(r, userId),
     abnormal: r.observations.some((o) => isAbnormal(o.flag)),
     critical: r.observations.some((o) => isCritical(o.flag)),
   }));

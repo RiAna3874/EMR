@@ -3,7 +3,7 @@ import { db, type Tx } from "@/lib/db";
 import { orderContext } from "@/lib/orders/server";
 import type { OrderContext } from "@/lib/orders/checks";
 import { fillStatus, refillProtocol } from "./checks";
-import type { RxDetails } from "./rx";
+import { rxClassFor, type RxDetails } from "./rx";
 
 // The order-check context without one medication: a reorder or dose change
 // shouldn't warn that the patient already takes the drug it replaces.
@@ -44,10 +44,12 @@ export async function writePrescription(
   rx: RxDetails & { patientId: string; drug: string; rxnorm: string | null; indication: string | null; prescriberId: string; cosignerId: string | null; pharmacyNote?: string | null },
 ) {
   const now = new Date();
+  // A pending order written before e-prescribing was switched off still prints.
+  const rxClass = rxClassFor(rx.rxClass);
   const prior = rx.replacesId
     ? await tx.medicationRequest.findFirst({ where: { id: rx.replacesId, patientId: rx.patientId, status: { in: ["active", "on_hold"] } } })
     : null;
-  const pharmacyId = rx.rxClass === "print" ? null : (rx.pharmacyId ?? null);
+  const pharmacyId = rxClass === "print" ? null : (rx.pharmacyId ?? null);
   if (prior) {
     await tx.medicationRequest.update({
       where: { id: prior.id },
@@ -76,7 +78,7 @@ export async function writePrescription(
       start: prior?.start ?? now,
       end: rx.durationDays ? new Date(now.getTime() + rx.durationDays * 86_400_000) : null,
       prescriberId: rx.prescriberId,
-      rxClass: rx.rxClass ?? "e_prescribe",
+      rxClass,
       authoredAt: now,
       quantity: rx.quantity,
       daysSupply: rx.daysSupply ?? null,
@@ -85,7 +87,7 @@ export async function writePrescription(
       patientInstructions: rx.patientInstructions ?? null,
       pharmacyNote: rx.pharmacyNote ?? null,
       pharmacyId,
-      sentAt: rx.rxClass === "print" ? null : now,
+      sentAt: rxClass === "print" ? null : now,
       priorId: prior?.id ?? null,
       taking: prior?.taking ?? null,
       takingAt: prior?.takingAt ?? null,

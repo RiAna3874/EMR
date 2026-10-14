@@ -313,7 +313,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                             {fs.refillsLeft === 0 && <div className="text-warn">No refills left</div>}
                           </>
                         ) : (
-                          <div className="mt-1 text-ink-3">{m.sentAt ? `Sent ${relativeDays(m.sentAt)}, not filled yet` : "Not filled yet"}</div>
+                          <div className="mt-1 text-ink-3">{m.sentAt ? `Sent ${relativeDays(m.sentAt)}, not filled yet` : "No fills recorded"}</div>
                         )}
                       </td>
                       <td className="px-3 py-2">
