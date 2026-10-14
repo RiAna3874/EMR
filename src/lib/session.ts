@@ -8,9 +8,11 @@ import { can, type Permission, type SessionUser } from "@/lib/roles";
 import { twoStepRequired } from "@/lib/deployment";
 
 export const SESSION_COOKIE = "meridian_session";
-// A clinic shift. Sessions also end after IDLE_MS without a request.
+// A clinic shift. Sessions also end after IDLE_MS without a request. Well before that,
+// a screen left alone for LOCK_AFTER_MS locks (src/components/idle-lock.tsx).
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const IDLE_MS = 2 * 60 * 60 * 1000;
+export const LOCK_AFTER_MS = 15 * 60 * 1000;
 // lastSeenAt is only written when it is this stale, to avoid a write per request.
 const TOUCH_MS = 5 * 60 * 1000;
 
@@ -35,6 +37,12 @@ export async function endOtherSessions(practitionerId: string) {
   await db.session.deleteMany({ where: { practitionerId, ...(token ? { id: { not: tokenId(token) } } : {}) } });
 }
 
+// Locking keeps the session but shows nothing until the password is typed again.
+export async function setSessionLocked(locked: boolean) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (token) await db.session.updateMany({ where: { id: tokenId(token) }, data: { lockedAt: locked ? new Date() : null } });
+}
+
 export async function endSession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
@@ -55,7 +63,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   }
   if (now - session.lastSeenAt.getTime() > TOUCH_MS) await db.session.update({ where: { id }, data: { lastSeenAt: new Date(now) } });
   const p = session.practitioner;
-  return { id: p.id, name: p.name, credentials: p.credentials, role: p.role, username: p.username ?? "", isAdmin: p.isAdmin, mustChangePassword: p.mustChangePassword, twoStepEnabled: !!p.totpEnabledAt };
+  return { id: p.id, name: p.name, credentials: p.credentials, role: p.role, username: p.username ?? "", isAdmin: p.isAdmin, mustChangePassword: p.mustChangePassword, twoStepEnabled: !!p.totpEnabledAt, locked: !!session.lockedAt };
 });
 
 // Only same-site paths, so a crafted link can't bounce a fresh sign-in elsewhere.
@@ -64,7 +72,7 @@ export const safeNext = (next: string | undefined) =>
 
 // Signed in and past every sign-in step: own password chosen, two-step set up where required.
 // For API routes and anything shown outside requireUser's redirects (the top bar).
-export const signInComplete = (u: SessionUser) => !u.mustChangePassword && (!twoStepRequired || u.twoStepEnabled);
+export const signInComplete = (u: SessionUser) => !u.locked && !u.mustChangePassword && (!twoStepRequired || u.twoStepEnabled);
 
 export async function getActiveUser(): Promise<SessionUser | null> {
   const user = await getCurrentUser();
@@ -77,6 +85,7 @@ export async function getActiveUser(): Promise<SessionUser | null> {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.locked) redirect("/lock");
   if (user.mustChangePassword) redirect("/account/password");
   if (twoStepRequired && !user.twoStepEnabled) redirect("/account/two-step");
   return user;

@@ -1,11 +1,12 @@
 import type { Flag } from "@prisma/client";
+import { age } from "@/lib/format";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => {
   const s = str(f, k);
   if (!s) return null;
   const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : NaN;
 };
 
 function flagFor(value: number, low?: number, high?: number): Flag | null {
@@ -13,31 +14,97 @@ function flagFor(value: number, low?: number, high?: number): Flag | null {
   return value < low ? "L" : value > high ? "H" : "N";
 }
 
-// Observation rows for the vitals entry fields (src/components/vitals-fields.tsx);
-// blank fields are skipped and BMI is computed from weight and height.
-export function vitalObservations(form: FormData, { patientId, at, encounterId }: { patientId: string; at: Date; encounterId?: string }) {
-  const weight = num(form, "weight");
-  const height = num(form, "height");
-  const entries: { code: string; display: string; value: number | null; unit: string; low?: number; high?: number }[] = [
-    { code: "8480-6", display: "Systolic BP", value: num(form, "sbp"), unit: "mm[Hg]", low: 90, high: 129 },
-    { code: "8462-4", display: "Diastolic BP", value: num(form, "dbp"), unit: "mm[Hg]", low: 60, high: 79 },
-    { code: "8867-4", display: "Heart rate", value: num(form, "hr"), unit: "/min", low: 60, high: 100 },
-    { code: "9279-1", display: "Respiratory rate", value: num(form, "rr"), unit: "/min", low: 12, high: 20 },
-    { code: "8310-5", display: "Temperature", value: num(form, "temp"), unit: "Cel", low: 36.1, high: 37.8 },
-    { code: "59408-5", display: "SpO2", value: num(form, "spo2"), unit: "%", low: 95, high: 100 },
+// Values outside these can't be a living patient's: almost always a typo or the wrong unit.
+// The vitals fields (src/components/vitals-fields.tsx) use the same limits.
+export const VITAL_LIMITS = {
+  sbp: { label: "Systolic BP", min: 40, max: 300 },
+  dbp: { label: "Diastolic BP", min: 20, max: 200 },
+  hr: { label: "Heart rate", min: 20, max: 300 },
+  rr: { label: "Respiratory rate", min: 4, max: 100 },
+  tempC: { label: "Temperature", min: 30, max: 45 },
+  tempF: { label: "Temperature", min: 86, max: 113 },
+  spo2: { label: "SpO2", min: 40, max: 100 },
+  weight: { label: "Weight", min: 0.3, max: 350 },
+  height: { label: "Height", min: 25, max: 250 },
+  pain: { label: "Pain score", min: 0, max: 10 },
+} as const;
+
+// Normal heart and breathing rates awake, by age (paediatric life support tables).
+// Blood pressure isn't flagged under 18: children's limits depend on height centiles.
+export function normalRanges(ageYears: number | null) {
+  const a = ageYears ?? 18;
+  const [hr, rr] =
+    a < 1 ? [[100, 160], [30, 60]] : a < 3 ? [[90, 150], [24, 40]] : a < 6 ? [[80, 140], [22, 34]] : a < 12 ? [[70, 120], [18, 30]] : a < 18 ? [[60, 100], [12, 20]] : [[60, 100], [12, 20]];
+  const adult = a >= 18;
+  return { hr, rr, sbp: adult ? [90, 129] : null, dbp: adult ? [60, 79] : null, bmi: adult ? [18.5, 24.9] : null };
+}
+
+export const fahrenheitToCelsius = (f: number) => Math.round(((f - 32) * 5) / 9 * 10) / 10;
+
+type Entry = { code: string; display: string; value: number | null; unit: string; range?: number[] | null };
+
+// Observation rows for the vitals entry fields; blank fields are skipped and BMI is
+// computed from weight and height. Temperature can be typed in °F or °C and is kept in °C.
+// Returns an error instead when a value can't be right, so nothing is filed.
+export function vitalObservations(
+  form: FormData,
+  { patientId, at, encounterId, dob }: { patientId: string; at: Date; encounterId?: string; dob?: Date | null },
+): { data: ReturnType<typeof rows>; error: string | null } {
+  const fahrenheit = str(form, "tempUnit") !== "C";
+  const values = {
+    sbp: num(form, "sbp"),
+    dbp: num(form, "dbp"),
+    hr: num(form, "hr"),
+    rr: num(form, "rr"),
+    temp: num(form, "temp"),
+    spo2: num(form, "spo2"),
+    weight: num(form, "weight"),
+    height: num(form, "height"),
+    pain: num(form, "pain"),
+  };
+  const check: [number | null, (typeof VITAL_LIMITS)[keyof typeof VITAL_LIMITS], string][] = [
+    [values.sbp, VITAL_LIMITS.sbp, "mmHg"],
+    [values.dbp, VITAL_LIMITS.dbp, "mmHg"],
+    [values.hr, VITAL_LIMITS.hr, "/min"],
+    [values.rr, VITAL_LIMITS.rr, "/min"],
+    [values.temp, fahrenheit ? VITAL_LIMITS.tempF : VITAL_LIMITS.tempC, fahrenheit ? "°F" : "°C"],
+    [values.spo2, VITAL_LIMITS.spo2, "%"],
+    [values.weight, VITAL_LIMITS.weight, "kg"],
+    [values.height, VITAL_LIMITS.height, "cm"],
+    [values.pain, VITAL_LIMITS.pain, ""],
+  ];
+  for (const [v, lim, unit] of check) {
+    if (v === null) continue;
+    if (Number.isNaN(v)) return { data: [], error: `${lim.label} must be a number.` };
+    if (v < lim.min || v > lim.max) {
+      const hint = lim.label === "Temperature" ? ` Is the unit right (°F or °C)?` : "";
+      return { data: [], error: `${lim.label} ${v} ${unit} is outside ${lim.min} to ${lim.max} ${unit}.${hint} Nothing was filed.`.replace(/ +\./g, ".") };
+    }
+  }
+  if (values.sbp !== null && values.dbp !== null && values.dbp >= values.sbp) {
+    return { data: [], error: "Diastolic BP must be lower than systolic. Nothing was filed." };
+  }
+  if ((values.sbp === null) !== (values.dbp === null)) return { data: [], error: "Enter both numbers of the blood pressure. Nothing was filed." };
+
+  const r = normalRanges(dob ? age(dob, at) : null);
+  const { weight, height } = values;
+  const entries: Entry[] = [
+    { code: "8480-6", display: "Systolic BP", value: values.sbp, unit: "mm[Hg]", range: r.sbp },
+    { code: "8462-4", display: "Diastolic BP", value: values.dbp, unit: "mm[Hg]", range: r.dbp },
+    { code: "8867-4", display: "Heart rate", value: values.hr, unit: "/min", range: r.hr },
+    { code: "9279-1", display: "Respiratory rate", value: values.rr, unit: "/min", range: r.rr },
+    { code: "8310-5", display: "Temperature", value: values.temp === null ? null : fahrenheit ? fahrenheitToCelsius(values.temp) : values.temp, unit: "Cel", range: [36.1, 37.8] },
+    { code: "59408-5", display: "SpO2", value: values.spo2, unit: "%", range: [95, 100] },
     { code: "29463-7", display: "Weight", value: weight, unit: "kg" },
     { code: "8302-2", display: "Height", value: height, unit: "cm" },
-    {
-      code: "39156-5",
-      display: "BMI",
-      value: weight && height ? Math.round((weight / (height / 100) ** 2) * 10) / 10 : null,
-      unit: "kg/m2",
-      low: 18.5,
-      high: 24.9,
-    },
-    { code: "72514-3", display: "Pain score", value: num(form, "pain"), unit: "{score}" },
+    { code: "39156-5", display: "BMI", value: weight && height ? Math.round((weight / (height / 100) ** 2) * 10) / 10 : null, unit: "kg/m2", range: r.bmi },
+    { code: "72514-3", display: "Pain score", value: values.pain, unit: "{score}" },
   ];
-  const data = entries
+  return { data: rows(entries, { patientId, at, encounterId }), error: null };
+}
+
+function rows(entries: Entry[], { patientId, at, encounterId }: { patientId: string; at: Date; encounterId?: string }) {
+  return entries
     .map((e, sortOrder) => ({ ...e, sortOrder }))
     .filter((e) => e.value !== null)
     .map((e) => ({
@@ -48,11 +115,10 @@ export function vitalObservations(form: FormData, { patientId, at, encounterId }
       display: e.display,
       valueNum: e.value,
       unit: e.unit,
-      refLow: e.low ?? null,
-      refHigh: e.high ?? null,
-      flag: flagFor(e.value!, e.low, e.high),
+      refLow: e.range?.[0] ?? null,
+      refHigh: e.range?.[1] ?? null,
+      flag: flagFor(e.value!, e.range?.[0], e.range?.[1]),
       effectiveAt: at,
       sortOrder: e.sortOrder,
     }));
-  return data;
 }

@@ -36,7 +36,7 @@ export const PERMISSIONS = {
   // Registering a new patient (demographics, contacts, coverage, PCP). Usually the front
   // desk, but anyone can, so a walk-in isn't held up when the desk is busy.
   registerPatients: ["physician", "resident", "nurse", "front_desk"],
-  // Check-in (demographics, insurance, copay), no-shows and check-out.
+  // Check-in (demographics, insurance, payment), no-shows and check-out.
   checkIn: ["nurse", "front_desk"],
   // Rooming records vitals, so it needs a clinician.
   roomPatients: ["physician", "resident", "nurse"],
@@ -67,7 +67,7 @@ export const roleLabel: Record<Role, string> = {
 
 export const isProvider = (role: Role) => role === "physician" || role === "resident";
 
-export type SessionUser = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; mustChangePassword: boolean; twoStepEnabled: boolean };
+export type SessionUser = { id: string; name: string; credentials: string | null; role: Role; username: string; isAdmin: boolean; mustChangePassword: boolean; twoStepEnabled: boolean; locked: boolean };
 
 export const displayName = (u: Pick<SessionUser, "name" | "credentials">) => (u.credentials ? `${u.name}, ${u.credentials}` : u.name);
 

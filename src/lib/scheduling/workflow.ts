@@ -71,3 +71,18 @@ export function minutesLabel(ms: number) {
   const m = Math.max(0, Math.floor(ms / 60_000));
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }
+
+// How a visit fee was paid at check-in. Amounts are in taka (stored in paisa).
+export const PAYMENT_METHODS = [
+  { id: "cash", label: "Cash" },
+  { id: "bkash", label: "bKash" },
+  { id: "nagad", label: "Nagad" },
+  { id: "card", label: "Card" },
+  { id: "waived", label: "Waived" },
+] as const;
+
+export function paymentText(paisa: number | null, method: string | null) {
+  const label = PAYMENT_METHODS.find((m) => m.id === method)?.label ?? method;
+  if (paisa) return `৳${(paisa / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}${label ? ` (${label})` : ""}`;
+  return method === "waived" ? "Waived" : "None collected";
+}

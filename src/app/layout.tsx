@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { TopBar } from "@/components/top-bar";
 import { inboxCounts } from "@/lib/inbox";
-import { getCurrentUser, signInComplete } from "@/lib/session";
+import { getCurrentUser, LOCK_AFTER_MS, signInComplete } from "@/lib/session";
+import { IdleLock } from "@/components/idle-lock";
 import { signOut } from "@/app/login/actions";
 import { can } from "@/lib/roles";
 import { chatBadge } from "@/lib/chat/server";
@@ -39,6 +40,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </form>
           </header>
         )}
+        {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
         {user && signInComplete(user) && (
           <TopBar
             user={user}

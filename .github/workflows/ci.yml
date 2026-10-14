@@ -1,0 +1,51 @@
+# Checks every pull request and every push to main: typecheck, lint, unit tests,
+# database migrations against a fresh Postgres, the demo seed, and a production build.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: meridian
+          POSTGRES_PASSWORD: meridian
+          POSTGRES_DB: meridian
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U meridian"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://meridian:meridian@localhost:5432/meridian
+      TZ: Asia/Dhaka
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - name: Migrations apply to an empty database
+        run: npx prisma migrate deploy
+      - name: Demo seed runs
+        run: npm run db:seed
+      - run: npm run build

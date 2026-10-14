@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { AllergySeverity, AllergyType } from "@prisma/client";
 import { baseDb, db } from "@/lib/db";
 import { logEvent } from "@/lib/audit/server";
@@ -12,9 +13,12 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function recordVitals(patientId: string, form: FormData) {
   await requirePermission("recordVitals");
-  const data = vitalObservations(form, { patientId, at: new Date() });
+  const { dob } = await db.patient.findUniqueOrThrow({ where: { id: patientId }, select: { dob: true } });
+  const { data, error } = vitalObservations(form, { patientId, at: new Date(), dob });
+  if (error) redirect(`/patients/${patientId}/vitals?error=${encodeURIComponent(error)}`);
   if (data.length) await db.observation.createMany({ data });
   revalidatePath(`/patients/${patientId}`, "layout");
+  redirect(`/patients/${patientId}/vitals`);
 }
 
 export async function addAllergy(patientId: string, form: FormData) {

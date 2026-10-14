@@ -13,7 +13,7 @@ An outpatient electronic medical record that follows the workflows clinicians kn
 - **Patient chart**: several charts can be open at once as tabs in the top bar, and each remembers its last activity. A patient rail stays on the left (demographics, code status, allergies, top problems, last vitals, next appointment).
   - **Summary**: problems, medications, allergies, vitals with sparkline trends, recent abnormal results, recent notes, upcoming visits.
   - **Results**: trend table (tests by date, H/L/critical flags, reference ranges, sparklines), a single-report view with acknowledgement, and a **graph** view: pick any components, see them over time against the shaded reference range, with imported results drawn as diamonds. Click a test name in the table to graph it.
-  - **Vitals**: flowsheet by visit, with a quick-entry row that computes BMI and flags, and graphs (blood pressure, heart rate, weight, BMI, SpO₂, temperature).
+  - **Vitals**: flowsheet by visit, with a quick-entry row that computes BMI and flags (temperature in °F or °C, kept in °C; impossible values are refused; heart and breathing rates are flagged for the patient's age), and graphs (blood pressure, heart rate, weight, BMI, SpO₂, temperature).
   - **Medications**: see [Medications and prescribing](#medications-and-prescribing) below.
   - **Problems**: active and resolved problems with ICD-10 codes; add, resolve, reactivate.
   - **Allergies**: allergen, reaction, severity, verified status. "No known allergies" is a reviewed state, distinct from "not reviewed".
@@ -48,7 +48,7 @@ The drug knowledge (ingredients, classes, interactions, dose limits, monitoring)
 
 ## Sign-in and roles
 
-Everything except the sign-in page needs a signed-in user. Sessions are a random token in an httpOnly cookie (only its SHA-256 is stored, in the `Session` table); they last a 12-hour shift and end after 2 hours idle or on **Sign out**. Passwords are hashed with scrypt. Five failed attempts lock a username for a minute.
+Everything except the sign-in page needs a signed-in user. Sessions are a random token in an httpOnly cookie (only its SHA-256 is stored, in the `Session` table); they last a 12-hour shift and end after 2 hours idle or on **Sign out**. After 15 minutes without typing or clicking the screen locks; the same person types their password to carry on, or signs out for someone else. Passwords are hashed with scrypt. Five wrong passwords in a row (at sign-in or on the lock screen) lock the account for 5 minutes; the count is kept in the database. The access log records the full X-Forwarded-For chain; the right-hand addresses are the ones the host added.
 
 Each role sees and does what fits it. Every server action checks the role itself (`requirePermission` in `src/lib/session.ts`); hiding buttons is only a convenience. The rules live in one table, `src/lib/roles.ts`.
 
@@ -107,7 +107,7 @@ The sign-in page lists them in development. In a production build they are hidde
 - **Provider templates** (`/schedule/templates`): each provider's weekly sessions (days, hours and slot length) and blocked time such as vacation or meetings.
 - **The clinic day** follows one status path, and each step is recorded with who did it and when:
 
-  Scheduled → **Check in** (front desk: confirm identity, phone, address, language and insurance; collect the copay) → **Room** (nurse: exam room, chief complaint, vitals filed to the visit, allergies and medications reviewed) → **Start visit** (provider; opens the chart) → **Visit done** → **Check out** (front desk; offers a follow-up booking).
+  Scheduled → **Check in** (front desk: confirm identity, phone, address, language and insurance; record the visit fee in taka, paid by cash, bKash, Nagad or card, or waived) → **Room** (nurse: exam room, chief complaint, vitals filed to the visit, allergies and medications reviewed) → **Start visit** (provider; opens the chart) → **Visit done** → **Check out** (front desk; offers a follow-up booking).
 
   A provider can start a checked-in visit without waiting for rooming, and video visits skip rooming. A scheduled visit can be marked **No show**; a check-in or no-show can be undone. The rules are in `src/lib/scheduling/workflow.ts`.
 - **My Day** refreshes every 30 seconds. The status shows how long the patient has been in it, highlighted after 20 minutes of waiting to be roomed or seen.
@@ -186,6 +186,8 @@ Re-run `npm run db:seed` at any time to reset the data; it schedules the clinic 
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
 | `npm test` | Unit tests for lab import parsing, order safety checks, roles and password hashing |
+
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, lint, tests, the migrations on an empty database, the demo seed and a production build on every pull request.
 | `npm run db:migrate` | Apply migrations and regenerate the database client (restart `npm run dev` afterwards) |
 | `npm run db:seed` | Wipe and reseed synthetic data (refuses on a live database) |
 | `npm run db:reset` | Drop the database, migrate and seed (refuses on a live database) |
