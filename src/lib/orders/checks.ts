@@ -38,7 +38,7 @@ export function orderWarnings(o: Orderable, ctx: OrderContext, opts: { ignoreOpe
 
   if (!opts.ignoreOpenOrder) {
     const open = ctx.openOrders.find((x) => x.code === o.code);
-    if (open) out.push({ level: "caution", text: open.status === "pending" ? "Already in pending orders." : "Already ordered and not yet resulted." });
+    if (open) out.push({ level: "caution", text: open.status === "pending" ? "Already in the order basket." : "Already ordered and not yet resulted." });
   }
 
   if (o.repeatDays) {

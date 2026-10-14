@@ -1,6 +1,7 @@
 import type { OrderPriority, OrderStatus, OrderType } from "@prisma/client";
 import type { OrderWarning } from "@/lib/orders/checks";
 import { rxSummary, type RxDetails } from "@/lib/meds/rx";
+import { takesDueDate } from "@/lib/orders/defaults";
 
 const typeStyles: Record<OrderType, [string, string]> = {
   lab: ["LAB", "bg-accent-soft text-accent"],
@@ -63,3 +64,55 @@ export function WarningList({ warnings }: { warnings: OrderWarning[] }) {
 }
 
 export const medSig = (details: unknown) => rxSummary(details as Partial<RxDetails> | null);
+
+type BasketSource = {
+  id: string;
+  type: OrderType;
+  display: string;
+  priority: OrderPriority;
+  indication: string | null;
+  conditionId: string | null;
+  expectedAt: Date | null;
+  instructions: string | null;
+  details: unknown;
+  orderSet: string | null;
+  orderedById: string;
+  orderedBy: { name: string };
+};
+
+// A pending order as the order basket shows it.
+export function basketRow(o: BasketSource, viewerId: string, warnings: OrderWarning[] = []): BasketRow {
+  return {
+    id: o.id,
+    type: o.type,
+    display: o.display,
+    priority: o.priority,
+    indication: o.indication,
+    conditionId: o.conditionId,
+    expectedAt: o.expectedAt ? o.expectedAt.toISOString().slice(0, 10) : null,
+    takesDate: takesDueDate(o),
+    instructions: o.instructions,
+    sig: medSig(o.details),
+    orderSet: o.orderSet,
+    pendedBy: o.orderedById === viewerId ? null : o.orderedBy.name,
+    warnings,
+  };
+}
+
+export type BasketRow = {
+  id: string;
+  type: OrderType;
+  display: string;
+  priority: OrderPriority;
+  indication: string | null;
+  conditionId: string | null;
+  // YYYY-MM-DD
+  expectedAt: string | null;
+  takesDate: boolean;
+  instructions: string | null;
+  sig: string;
+  orderSet: string | null;
+  // Set when someone other than the viewer pended it.
+  pendedBy: string | null;
+  warnings: OrderWarning[];
+};

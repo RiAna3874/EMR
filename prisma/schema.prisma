@@ -226,6 +226,8 @@ model Practitioner {
   totpEnabledAt      DateTime?
   totpLastStep       Int? // the last 30-second step used, so a code can't be used twice
   recoveryCodes      String[]          @default([]) // sha256 of each unused one-time recovery code
+  // Orderable codes (or "SET:<id>" for an order set) starred on the Orders tab.
+  orderFavorites     String[]          @default([])
   // Wrong passwords in a row (sign-in or unlock); five lock sign-in until signInLockedUntil.
   failedSignIns      Int               @default(0)
   signInLockedUntil  DateTime?

@@ -50,7 +50,7 @@ test("contrast allergy stops a contrast CT but not a plain one", () => {
 });
 
 test("duplicate and too-soon lab orders", () => {
-  assert.match(texts("58410-2", ctx({ openOrders: [{ code: "58410-2", status: "pending" }] }))[0], /Already in pending/);
+  assert.match(texts("58410-2", ctx({ openOrders: [{ code: "58410-2", status: "pending" }] }))[0], /Already in the order basket/);
   assert.match(texts("4548-4", ctx({ lastResulted: { "4548-4": now - 21 * DAY } }))[0], /21 days ago/);
   assert.deepEqual(texts("4548-4", ctx({ lastResulted: { "4548-4": now - 100 * DAY } })), []);
   // A recent CMP counts against a BMP.

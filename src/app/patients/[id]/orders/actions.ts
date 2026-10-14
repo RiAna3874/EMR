@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import type { OrderPriority, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
-import { ORDER_SETS, orderableByCode, orderableFor, type Orderable } from "@/lib/orders/catalog";
+import { orderableByCode, orderableFor, orderSetById, type Orderable } from "@/lib/orders/catalog";
+import { orderDefaults } from "@/lib/orders/defaults";
+import { toLocalDate } from "@/lib/format";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { productFor } from "@/lib/meds/formulary";
 import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
@@ -61,21 +63,80 @@ export async function addOrder(patientId: string, form: FormData) {
   revalidatePath("/inbox");
 }
 
-// Adds every order in the set that isn't already pending or active.
-export async function addOrderSet(patientId: string, setId: string) {
+export type BasketResult = { added?: string; error?: string };
+
+const activeProblems = (patientId: string) =>
+  db.condition.findMany({ where: { patientId, status: "active" }, orderBy: { priority: "asc" }, select: { id: true, display: true } });
+
+// One click from search, favorites or frequent orders: into the basket with defaults
+// (routine, due today, linked to the problem it is plainly for). Prescriptions go
+// through the prescription form instead, since they need a sig.
+export async function quickAddOrder(patientId: string, code: string): Promise<BasketResult> {
   const currentUser = await requirePermission("pendOrders");
-  const set = ORDER_SETS.find((s) => s.id === setId);
-  if (!set) return;
-  const open = await db.serviceRequest.findMany({ where: { patientId, status: { in: ["pending", "signed"] } }, select: { code: true } });
+  const o = orderableByCode.get(code);
+  if (!o || o.type === "medication") return { error: "That order can't be added here." };
+  const already = await db.serviceRequest.findFirst({ where: { patientId, code, status: "pending" }, select: { id: true } });
+  if (already) return { error: `${o.display} is already in the order basket.` };
+  const problems = await activeProblems(patientId);
+  const d = orderDefaults(o, problems, toLocalDate(new Date()));
+  const problem = problems.find((p) => p.id === d.conditionId);
+  await db.serviceRequest.create({
+    data: {
+      ...baseOrder(patientId, currentUser.id, o),
+      priority: d.priority,
+      expectedAt: d.expectedAt ? new Date(d.expectedAt) : null,
+      conditionId: problem?.id ?? null,
+      indication: problem?.display ?? null,
+    },
+  });
+  revalidatePath(`/patients/${patientId}`, "layout");
+  revalidatePath("/inbox");
+  return { added: o.display };
+}
+
+// Adds every order in the set that isn't already pending or active, with the same defaults.
+export async function addOrderSet(patientId: string, setId: string): Promise<BasketResult> {
+  const currentUser = await requirePermission("pendOrders");
+  const set = orderSetById.get(setId);
+  if (!set) return { error: "Order set not found." };
+  const [open, problems] = await Promise.all([
+    db.serviceRequest.findMany({ where: { patientId, status: { in: ["pending", "signed"] } }, select: { code: true } }),
+    activeProblems(patientId),
+  ]);
   const skip = new Set(open.map((o) => o.code));
+  const today = toLocalDate(new Date());
   const data = set.codes
     .filter((c) => !skip.has(c))
     .map((c) => orderableByCode.get(c))
     .filter((o): o is Orderable => !!o)
-    .map((o) => baseOrder(patientId, currentUser.id, o, set.name));
+    .map((o) => {
+      const d = orderDefaults(o, problems, today, set);
+      const problem = problems.find((p) => p.id === d.conditionId);
+      return {
+        ...baseOrder(patientId, currentUser.id, o, set.name),
+        priority: d.priority,
+        expectedAt: d.expectedAt ? new Date(d.expectedAt) : null,
+        conditionId: problem?.id ?? null,
+        indication: problem?.display ?? null,
+      };
+    });
   if (data.length) await db.serviceRequest.createMany({ data });
   revalidatePath(`/patients/${patientId}`, "layout");
   revalidatePath("/inbox");
+  const skipped = set.codes.length - data.length;
+  if (!data.length) return { error: `Everything in ${set.name} is already ordered or in the basket.` };
+  return { added: `${set.name} (${data.length} order${data.length === 1 ? "" : "s"}${skipped ? `, ${skipped} already ordered` : ""})` };
+}
+
+// Stars or unstars an order or order set ("SET:<id>") for the signed-in clinician.
+export async function toggleOrderFavorite(code: string) {
+  const currentUser = await requirePermission("pendOrders");
+  const known = code.startsWith("SET:") ? orderSetById.has(code.slice(4)) : !!orderableFor(code);
+  if (!known) return;
+  const me = await db.practitioner.findUniqueOrThrow({ where: { id: currentUser.id }, select: { orderFavorites: true } });
+  const favorites = me.orderFavorites.includes(code) ? me.orderFavorites.filter((c) => c !== code) : [...me.orderFavorites, code];
+  await db.practitioner.update({ where: { id: currentUser.id }, data: { orderFavorites: favorites } });
+  revalidatePath("/patients/[id]/orders", "page");
 }
 
 export async function removePendingOrder(patientId: string, orderId: string) {
@@ -85,16 +146,30 @@ export async function removePendingOrder(patientId: string, orderId: string) {
   revalidatePath("/inbox");
 }
 
+// Inline edits in the order basket. Only the fields sent change.
 export async function updatePendingOrder(patientId: string, orderId: string, form: FormData) {
   await requirePermission("pendOrders");
   const priority = str(form, "priority") as OrderPriority;
+  const expected = str(form, "expectedAt");
+  const link = form.has("conditionId") ? await problemLink(patientId, str(form, "conditionId"), null) : undefined;
   await db.serviceRequest.update({
     where: { id: orderId, patientId, status: "pending" },
     data: {
       priority: PRIORITIES.includes(priority) ? priority : undefined,
-      indication: form.has("indication") ? str(form, "indication") || null : undefined,
+      expectedAt: form.has("expectedAt") ? (/^\d{4}-\d{2}-\d{2}$/.test(expected) ? new Date(expected) : null) : undefined,
+      ...(link ?? {}),
+      instructions: form.has("instructions") ? str(form, "instructions") || null : undefined,
     },
   });
+  revalidatePath(`/patients/${patientId}`, "layout");
+}
+
+// "Link all to": every order in the basket goes with one problem.
+export async function linkPendingOrders(patientId: string, conditionId: string) {
+  await requirePermission("pendOrders");
+  const link = await problemLink(patientId, conditionId, null);
+  if (!link.conditionId) return;
+  await db.serviceRequest.updateMany({ where: { patientId, status: "pending" }, data: link });
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
@@ -107,8 +182,8 @@ export async function updatePendingOrder(patientId: string, orderId: string, for
 function listChanged(pending: { id: string; display: string }[], shownIds: string[]) {
   const shown = new Set(shownIds);
   const added = pending.filter((p) => !shown.has(p.id));
-  if (added.length) return `${added.map((p) => p.display).join(", ")} ${added.length === 1 ? "was" : "were"} added to pending orders since this page opened.`;
-  if (shown.size !== pending.length) return "Some pending orders were removed or signed since this page opened.";
+  if (added.length) return `${added.map((p) => p.display).join(", ")} ${added.length === 1 ? "was" : "were"} added to the order basket since this page opened.`;
+  if (shown.size !== pending.length) return "Some orders in the basket were removed or signed since this page opened.";
   return null;
 }
 
