@@ -386,6 +386,7 @@ async function main() {
     prisma.noteVersion.deleteMany(),
     prisma.note.deleteMany(),
     prisma.smartPhrase.deleteMany(),
+    prisma.encounterDiagnosis.deleteMany(),
     prisma.encounterEvent.deleteMany(),
     prisma.encounter.deleteMany(),
     prisma.scheduleBlock.deleteMany(),
@@ -462,6 +463,26 @@ async function main() {
           start, end: new Date(start.getTime() + 25 * 60_000), providerId: pcpId,
         },
       });
+
+      // The last visit was documented on the visit screen: diagnoses from the problem
+      // list, advice and a follow-up, so its printed visit prescription has content.
+      if (vIdx === visitDaysAgo.length - 1) {
+        const top = await prisma.condition.findMany({ where: { patientId: patient.id, status: "active" }, orderBy: { priority: "asc" }, take: 2 });
+        await prisma.encounterDiagnosis.createMany({
+          data: top.map((c, r) => ({ encounterId: encounter.id, patientId: patient.id, display: c.display, code: c.code, conditionId: c.id, rank: r + 1, addedById: pcpId })),
+        });
+        const due = new Date(start);
+        due.setMonth(due.getMonth() + 3);
+        await prisma.encounter.update({
+          where: { id: encounter.id },
+          data: {
+            chiefComplaint: "Follow-up of chronic conditions",
+            advice: ["Eat less salt. Avoid extra salt at the table.", "Walk briskly for 30 minutes every day.", "Bring this prescription and your reports at the next visit."].join("\n"),
+            followUpInterval: "3m",
+            followUpDate: new Date(Date.UTC(due.getFullYear(), due.getMonth(), due.getDate())),
+          },
+        });
+      }
 
       // Trend: values ease toward the patient's current state over time.
       const progress = (vIdx + 1) / visitDaysAgo.length;

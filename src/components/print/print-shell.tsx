@@ -15,7 +15,7 @@ export function PrintShell({ children, back, tabs }: { children: React.ReactNode
         {tabs && (
           <div className="flex overflow-hidden rounded border border-line text-[12.5px]">
             {tabs.map((t) => (
-              <Link key={t.href} href={t.href} className={`border-l border-line px-3 py-1 first:border-l-0 ${t.active ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}>
+              <Link key={t.label} href={t.href} className={`border-l border-line px-3 py-1 first:border-l-0 ${t.active ? "bg-chrome text-white" : "text-ink-2 hover:bg-panel-muted"}`}>
                 {t.label}
               </Link>
             ))}

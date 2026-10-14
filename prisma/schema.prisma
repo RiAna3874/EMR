@@ -260,6 +260,7 @@ model Practitioner {
   scheduleSessions   ScheduleSession[]
   scheduleBlocks     ScheduleBlock[]      @relation("BlockProvider")
   encounterEvents    EncounterEvent[]
+  visitDiagnoses     EncounterDiagnosis[] @relation("DiagnosisAddedBy")
   // Secure chat.
   chatStatus         ChatStatus           @default(available)
   chatStatusNote     String?
@@ -372,6 +373,7 @@ model Patient {
   refillRequests RefillRequest[]
   clinicalDocs   ClinicalDocument[]
   conversations  Conversation[]
+  visitDiagnoses EncounterDiagnosis[]
 
   @@index([lastName, firstName])
   // The duplicate-patient check looks up by date of birth.
@@ -407,10 +409,17 @@ model Encounter {
   rescheduledToId     String?    @unique
   rescheduledTo       Encounter? @relation("Reschedule", fields: [rescheduledToId], references: [id])
   rescheduledFrom     Encounter? @relation("Reschedule")
+  // Filled in by the provider on the visit screen (src/app/patients/[id]/visit), printed on
+  // the visit prescription. Advice is free text, one item per line.
+  advice              String?
+  followUpInterval    String? // FOLLOW_UPS in src/lib/visits/follow-up.ts, or "date" when a date was picked
+  followUpDate        DateTime?  @db.Date
+  followUpNote        String?
 
   observations Observation[]
   notes        Note[]
   events       EncounterEvent[]
+  diagnoses    EncounterDiagnosis[]
 
   @@index([patientId, start])
   @@index([start])
@@ -418,6 +427,28 @@ model Encounter {
 }
 
 // Who did what to an appointment, and when: booked, checked in, roomed, cancelled...
+// What a visit was for (ICD-10). The first by rank is the primary diagnosis. A diagnosis
+// may also be on the problem list (conditionId), but a visit diagnosis is about this visit only.
+model EncounterDiagnosis {
+  id          String       @id @default(cuid())
+  encounterId String
+  encounter   Encounter    @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  code        String? // ICD-10; blank when typed without one
+  display     String
+  rank        Int
+  conditionId String?
+  condition   Condition?   @relation(fields: [conditionId], references: [id], onDelete: SetNull)
+  addedById   String
+  addedBy     Practitioner @relation("DiagnosisAddedBy", fields: [addedById], references: [id])
+  createdAt   DateTime     @default(now())
+
+  @@index([encounterId, rank])
+  @@index([patientId])
+  @@index([conditionId])
+}
+
 model EncounterEvent {
   id          String       @id @default(cuid())
   encounterId String
@@ -470,8 +501,9 @@ model Condition {
   comment    String?
 
   // Medications and orders linked to this problem, for problem-based charting.
-  medications MedicationRequest[]
-  orders      ServiceRequest[]
+  medications    MedicationRequest[]
+  orders         ServiceRequest[]
+  visitDiagnoses EncounterDiagnosis[]
 
   @@index([patientId])
 }
