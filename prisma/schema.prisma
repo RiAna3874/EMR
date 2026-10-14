@@ -669,33 +669,38 @@ model DiagnosticReport {
 }
 
 model Note {
-  id          String        @id @default(cuid())
-  patientId   String
-  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  encounterId String?
-  encounter   Encounter?    @relation(fields: [encounterId], references: [id])
-  type        NoteType
-  templateId  String? // src/lib/notes/library.ts
-  title       String
-  body        String
-  status      NoteStatus
-  authorId    String
-  author      Practitioner  @relation("NoteAuthor", fields: [authorId], references: [id])
-  serviceAt   DateTime      @default(now()) // date of service
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @default(now()) @updatedAt
-  signedAt    DateTime?
+  id                   String        @id @default(cuid())
+  patientId            String
+  patient              Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  encounterId          String?
+  encounter            Encounter?    @relation(fields: [encounterId], references: [id])
+  type                 NoteType
+  templateId           String? // src/lib/notes/library.ts
+  title                String
+  body                 String
+  status               NoteStatus
+  authorId             String
+  author               Practitioner  @relation("NoteAuthor", fields: [authorId], references: [id])
+  serviceAt            DateTime      @default(now()) // date of service
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @default(now()) @updatedAt
+  signedAt             DateTime?
   // Supervision: a note routed for cosignature stays pending_cosign until the
   // cosigner signs, optionally adding an attestation.
-  cosignerId  String?
-  cosigner    Practitioner? @relation("NoteCosigner", fields: [cosignerId], references: [id])
-  cosignedAt  DateTime?
-  cosignText  String?
+  cosignerId           String?
+  cosigner             Practitioner? @relation("NoteCosigner", fields: [cosignerId], references: [id])
+  cosignedAt           DateTime?
+  cosignText           String?
   // Set when a signed note's text was changed after signing. Each earlier
   // version is kept in NoteVersion.
-  editedAt    DateTime?
-  editedById  String?
-  editedBy    Practitioner? @relation("NoteEditor", fields: [editedById], references: [id])
+  editedAt             DateTime?
+  editedById           String?
+  editedBy             Practitioner? @relation("NoteEditor", fields: [editedById], references: [id])
+  // A signed note deleted from the chart: hidden from every list and check,
+  // kept for the record. See src/lib/db.ts.
+  enteredInErrorAt     DateTime?
+  enteredInErrorReason String?
+  enteredInErrorById   String?
 
   addenda  NoteAddendum[]
   versions NoteVersion[]

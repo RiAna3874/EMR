@@ -12,6 +12,9 @@ import { inputCls } from "@/components/form";
 import { NoteEditor } from "@/components/notes/note-editor";
 import { NoteDocument, NoteHistory, NoteStatusChip } from "@/components/notes/note-view";
 import { canEditSigned } from "@/lib/notes/edits";
+import { Button } from "@/components/form";
+import { ERROR_REASONS } from "@/components/entered-in-error";
+import { markNoteInError } from "../error-actions";
 import { addAddendum, cosignNote, deleteDraft, editSignedNote, saveNote } from "./actions";
 import { logChartView } from "@/lib/audit/server";
 
@@ -24,6 +27,7 @@ type SP = {
   copy?: string;
   addend?: string;
   edit?: string;
+  remove?: string;
   history?: string;
   cosign?: string;
   error?: string;
@@ -90,6 +94,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
   const editingDraft = !!selected && selected.status === "draft" && selected.authorId === currentUser.id;
   const canEdit = !!selected && canWrite && canEditSigned(selected, currentUser.id);
   const editingSigned = canEdit && sp.edit === "1";
+  const removing = canEdit && sp.remove === "1";
   const viewingHistory = !!selected && sp.history === "1" && selected.versions.length > 0;
   const addending = !!selected && canWrite && sp.addend === "1" && selected.status !== "draft";
   const canCosign = !!selected && can(currentUser.role, "cosignNotes") && selected.status === "pending_cosign" && selected.cosignerId === currentUser.id;
@@ -157,10 +162,12 @@ export default async function Notes({ params, searchParams }: { params: Promise<
           {canCosign && !cosigning && <ToolbarLink href={withFilters({ note: selected.id, cosign: "1" })} primary>Cosign</ToolbarLink>}
           {canWrite && selected.status !== "draft" && !addending && <ToolbarLink href={withFilters({ note: selected.id, addend: "1" })}>Addend</ToolbarLink>}
           {canWrite && <ToolbarLink href={`${base}?new=1&copy=${selected.id}`}>Copy to new note</ToolbarLink>}
+          {canEdit && !removing && !addending && !cosigning && <ToolbarLink href={withFilters({ note: selected.id, remove: "1" })}>Delete</ToolbarLink>}
           {selected.versions.length > 0 && !viewingHistory && <ToolbarLink href={withFilters({ note: selected.id, history: "1" })}>Version history</ToolbarLink>}
           <ToolbarLink href={`/print/note?id=${selected.id}`}>Print</ToolbarLink>
           {selected.status === "draft" && <span className="ml-auto text-[12px] text-ink-3">Pended by {selected.author.name}; only the author can edit it.</span>}
         </div>
+        {removing && <DeleteSignedNote action={markNoteInError.bind(null, id, selected.id)} cancelHref={withFilters({ note: selected.id })} />}
         <div className={`min-h-0 overflow-y-auto ${addending || cosigning ? "basis-1/2 border-b border-line" : "flex-1"}`}>
           <div className="mx-auto max-w-3xl px-6 py-5">
             {viewingHistory ? (
@@ -290,6 +297,41 @@ function NewNotePicker({ base, copyable }: { base: string; copyable?: { id: stri
         </p>
       )}
     </div>
+  );
+}
+
+// Deleting a signed note takes it off the chart with a reason; the record itself is kept.
+function DeleteSignedNote({ action, cancelHref }: { action: (form: FormData) => Promise<void>; cancelHref: string }) {
+  return (
+    <form action={action} className="shrink-0 space-y-2 border-b border-crit/30 bg-crit-soft/40 px-4 py-2.5">
+      <p className="text-[12.5px] text-ink">
+        <span className="font-semibold text-crit">Delete this signed note?</span> It leaves the chart, lists and printouts for everyone. A signed medical record is
+        never erased, so it is kept as entered in error, with your name, the time and the reason, and the access log records it.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-medium text-ink-3">Why</span>
+          <select name="reason" required defaultValue="" className={inputCls}>
+            <option value="" disabled>
+              Choose
+            </option>
+            {ERROR_REASONS.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-w-48 flex-1 flex-col gap-0.5">
+          <span className="text-[11px] font-medium text-ink-3">Note (e.g. which patient it belongs to)</span>
+          <input name="note" className={inputCls} />
+        </label>
+        <Button type="submit" variant="danger" className="border-crit/40">
+          Delete note
+        </Button>
+        <Link href={cancelHref} className="rounded px-2.5 py-1 text-[12.5px] font-medium text-ink-2 hover:bg-panel-muted">
+          Cancel
+        </Link>
+      </div>
+    </form>
   );
 }
 
