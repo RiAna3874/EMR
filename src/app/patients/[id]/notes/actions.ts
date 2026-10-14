@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/session";
 import { COSIGNER_REQUIRED, needsCosign } from "@/lib/roles";
 import { noteTypes, templateById } from "@/lib/notes/library";
 import { signBlocker } from "@/lib/notes/smarttext";
+import { canEditSigned, currentSignature } from "@/lib/notes/edits";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const notesPath = (patientId: string, query = "") => `/patients/${patientId}/notes${query ? `?${query}` : ""}`;
@@ -72,6 +73,33 @@ export async function addAddendum(patientId: string, noteId: string, form: FormD
     db.noteAddendum.create({ data: { noteId, body: body.trim(), authorId: currentUser.id } }),
     db.note.update({ where: { id: noteId }, data: { status: note.status === "signed" ? "addended" : note.status } }),
   ]);
+  revalidatePath(`/patients/${patientId}`, "layout");
+  redirect(notesPath(patientId, `note=${noteId}`));
+}
+
+// Change a signed note's text. Saving re-signs it as the editor; the version it
+// replaces is kept in NoteVersion, and the access log records both writes.
+export async function editSignedNote(patientId: string, noteId: string, form: FormData) {
+  const currentUser = await requirePermission("writeNotes");
+  const note = await db.note.findFirstOrThrow({ where: { id: noteId, patientId }, include: { _count: { select: { versions: true } } } });
+  if (!canEditSigned(note, currentUser.id)) redirect(notesPath(patientId, `note=${noteId}`));
+  const body = String(form.get("body") ?? "");
+  const blocker = signBlocker(body);
+  if (blocker) redirect(notesPath(patientId, `note=${noteId}&edit=1&error=${encodeURIComponent(blocker)}`));
+  const typeInput = str(form, "type");
+  const type = (noteTypes.some((t) => t.id === typeInput) ? typeInput : note.type) as NoteType;
+  const title = str(form, "title") || note.title;
+
+  if (body !== note.body || title !== note.title || type !== note.type) {
+    const now = new Date();
+    await db.$transaction([
+      db.noteVersion.create({
+        data: { noteId, number: note._count.versions + 1, title: note.title, type: note.type, body: note.body, ...currentSignature(note), replacedAt: now },
+      }),
+      // updatedAt guards against two people saving over each other.
+      db.note.update({ where: { id: noteId, updatedAt: note.updatedAt }, data: { title, type, body, editedAt: now, editedById: currentUser.id } }),
+    ]);
+  }
   revalidatePath(`/patients/${patientId}`, "layout");
   redirect(notesPath(patientId, `note=${noteId}`));
 }

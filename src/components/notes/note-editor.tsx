@@ -21,7 +21,8 @@ type Initial = { title: string; type: string; body: string; templateId?: string 
 
 // The note-writing screen: header fields, the smart-text editor, a side panel
 // of phrases / problems / chart data, and the pend and sign actions.
-// mode "addendum" and "cosign" reuse it for the short text written against a signed note.
+// mode "addendum" and "cosign" reuse it for the short text written against a signed note;
+// mode "edit" changes a signed note's own text, and saving re-signs it.
 export function NoteEditor({
   mode = "note",
   action,
@@ -31,7 +32,7 @@ export function NoteEditor({
   cancelHref,
   error,
 }: {
-  mode?: "note" | "addendum" | "cosign";
+  mode?: "note" | "addendum" | "cosign" | "edit";
   action: (form: FormData) => Promise<void>;
   ctx: Ctx;
   initial: Initial;
@@ -42,7 +43,7 @@ export function NoteEditor({
   const editor = useRef<SmartEditorHandle>(null);
   const [body, setBody] = useState(initial.body);
   const [flash, setFlash] = useState(error ?? "");
-  const [panel, setPanel] = useState<"phrases" | "problems" | "chart">(mode === "note" ? "problems" : "phrases");
+  const [panel, setPanel] = useState<"phrases" | "problems" | "chart">(mode === "note" || mode === "edit" ? "problems" : "phrases");
   const [cosigner, setCosigner] = useState(initial.cosignerId ?? "");
   const dirty = useRef(false);
   const submitting = useRef(false);
@@ -75,12 +76,13 @@ export function NoteEditor({
     submitting.current = true;
   }
 
-  const signLabel = mode === "addendum" ? "Sign addendum" : mode === "cosign" ? "Cosign note" : cosigner ? "Sign and route for cosign" : "Sign";
+  const signLabel =
+    mode === "addendum" ? "Sign addendum" : mode === "cosign" ? "Cosign note" : mode === "edit" ? "Save and re-sign" : cosigner ? "Sign and route for cosign" : "Sign";
 
   return (
     <form action={action} className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        {mode === "note" && (
+        {(mode === "note" || mode === "edit") && (
           <div className="flex flex-wrap items-end gap-2 border-b border-line px-4 py-2.5">
             <Field label="Title" className="min-w-48 flex-1">
               <input name="title" defaultValue={initial.title} className={inputCls} onChange={() => (dirty.current = true)} />
@@ -94,16 +96,18 @@ export function NoteEditor({
                 ))}
               </select>
             </Field>
-            <Field label="Encounter" className="max-w-72">
-              <select name="encounterId" defaultValue={initial.encounterId ?? ""} className={inputCls}>
-                <option value="">No encounter (dated today)</option>
-                {ctx.encounters.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {mode === "note" && (
+              <Field label="Encounter" className="max-w-72">
+                <select name="encounterId" defaultValue={initial.encounterId ?? ""} className={inputCls}>
+                  <option value="">No encounter (dated today)</option>
+                  {ctx.encounters.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <input type="hidden" name="templateId" value={initial.templateId ?? ""} />
           </div>
         )}
@@ -155,6 +159,7 @@ export function NoteEditor({
           <Button type="submit" name="intent" value="sign" onClick={onSign}>
             {signLabel}
           </Button>
+          {mode === "edit" && <span className="text-[12px] text-ink-3">The version you are changing stays in the note&apos;s history.</span>}
           {mode === "note" && (
             <>
               <Button type="submit" name="intent" value="pend" variant="secondary" title="Save without signing" onClick={() => (submitting.current = true)}>

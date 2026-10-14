@@ -383,6 +383,7 @@ async function main() {
     prisma.documentReference.deleteMany(),
     prisma.importJob.deleteMany(),
     prisma.noteAddendum.deleteMany(),
+    prisma.noteVersion.deleteMany(),
     prisma.note.deleteMany(),
     prisma.smartPhrase.deleteMany(),
     prisma.encounterEvent.deleteMany(),
