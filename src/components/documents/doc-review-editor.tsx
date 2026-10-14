@@ -17,6 +17,7 @@ import {
   type DocFollowUp,
   type DocMed,
   type DocSection,
+  type DocMeasurement,
   type ProblemMatch,
 } from "@/lib/documents/draft";
 import type { PatientFacts } from "@/lib/labs/draft";
@@ -26,7 +27,7 @@ import { IdentityCard } from "@/components/import/review-editor";
 import { PageViewer, type PageDoc, type PageMark } from "@/components/import/page-viewer";
 import { ChangeChip } from "./doc-view";
 
-type ListKey = "sections" | "diagnoses" | "meds" | "followUps";
+type ListKey = "sections" | "measurements" | "diagnoses" | "meds" | "followUps";
 
 const DATE_LABEL: Record<ClinicalDocType, string> = {
   imaging_report: "Exam date",
@@ -98,6 +99,7 @@ export function DocReviewEditor({
     const src = { file, box: null };
     const blank = {
       sections: { id, heading: "", text: "", ...src },
+      measurements: { id, name: "", value: "", unit: "", range: "", group: "", ...src },
       diagnoses: { id, text: "", kind: "secondary", icd10: "", addToProblems: false, ...src },
       meds: { id, text: "", drug: "", dose: "", route: "", frequency: "", change: "unknown", addToList: false, ...src },
       followUps: { id, text: "", due: "", ...src },
@@ -106,7 +108,7 @@ export function DocReviewEditor({
     setSelected(id);
   }
 
-  const all = [...draft.sections, ...draft.diagnoses, ...draft.meds, ...draft.followUps];
+  const all = [...draft.sections, ...draft.measurements, ...draft.diagnoses, ...draft.meds, ...draft.followUps];
   function select(id: string) {
     setSelected(id);
     const item = all.find((x) => x.id === id);
@@ -115,6 +117,7 @@ export function DocReviewEditor({
 
   const marks: PageMark[] = [
     ...draft.sections.map((s) => ({ id: s.id, file: s.file, box: s.box, label: s.heading || "Text", tone: "border-ink-3/40" })),
+    ...draft.measurements.map((m) => ({ id: m.id, file: m.file, box: m.box, label: m.name, tone: "border-accent/60" })),
     ...draft.diagnoses.map((d) => ({ id: d.id, file: d.file, box: d.box, label: d.text, tone: "border-high/60" })),
     ...draft.meds.map((m) => ({ id: m.id, file: m.file, box: m.box, label: m.text || m.drug, tone: "border-low/60" })),
     ...draft.followUps.map((f) => ({ id: f.id, file: f.file, box: f.box, label: f.text, tone: "border-warn/70" })),
@@ -292,6 +295,25 @@ export function DocReviewEditor({
               <AutoText value={draft.impression} disabled={readOnly} onChange={(v) => set({ impression: v })} className="font-medium" placeholder="The conclusion as printed, if the document has one." />
             </div>
           </Card>
+
+          {(draft.measurements.length > 0 || (!readOnly && draft.type === "imaging_report")) && (
+            <Card
+              title="Measurements"
+              count={draft.measurements.length}
+              hint="As printed, e.g. echo EF and chamber sizes."
+              footer={!readOnly && <AddButton onClick={() => addItem("measurements")}>Add a measurement</AddButton>}
+            >
+              {draft.measurements.length === 0 ? (
+                <p className="px-3 py-3 text-ink-3">None printed in the report.</p>
+              ) : (
+                <ul>
+                  {draft.measurements.map((m) => (
+                    <MeasurementRow key={m.id} m={m} selected={selected === m.id} onSelect={() => select(m.id)} set={(p) => setItem("measurements", m.id, p)} remove={() => removeItem("measurements", m.id)} readOnly={readOnly} />
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           <Card
             title="Diagnoses and findings"
@@ -532,6 +554,24 @@ function FollowUpRow({ f, selected, onSelect, set, remove, readOnly }: { f: DocF
       <input className={`${inputCls} w-36 py-0.5`} value={f.due} disabled={readOnly} onChange={(e) => set({ due: e.target.value })} placeholder="When" aria-label="When" />
       {!readOnly && (
         <button className="pt-1 text-ink-3 hover:text-crit" title="Remove" onClick={remove}>
+          ✕
+        </button>
+      )}
+    </li>
+  );
+}
+
+function MeasurementRow({ m, selected, onSelect, set, remove, readOnly }: { m: DocMeasurement; selected: boolean; onSelect: () => void; set: (p: Partial<DocMeasurement>) => void; remove: () => void; readOnly: boolean }) {
+  const ref = useScrollIntoView(selected);
+  return (
+    <li ref={ref} onClick={onSelect} className={`flex cursor-pointer flex-wrap items-center gap-2 border-t border-line px-3 py-1.5 first:border-t-0 ${rowBg(selected)}`}>
+      <input className={`${inputCls} min-w-32 flex-1 py-0.5`} value={m.name} disabled={readOnly} onChange={(e) => set({ name: e.target.value })} placeholder="Measurement" aria-label="Measurement" />
+      <input className={`${inputCls} w-20 py-0.5 text-right font-medium tabular-nums`} value={m.value} disabled={readOnly} onChange={(e) => set({ value: e.target.value })} placeholder="Value" aria-label="Value" />
+      <input className={`${inputCls} w-20 py-0.5`} value={m.unit} disabled={readOnly} onChange={(e) => set({ unit: e.target.value })} placeholder="Unit" aria-label="Unit" />
+      <input className={`${inputCls} w-28 py-0.5 text-ink-2`} value={m.range} disabled={readOnly} onChange={(e) => set({ range: e.target.value })} placeholder="Normal range" aria-label="Normal range" />
+      {m.group && <span className="text-[11px] text-ink-3">{m.group}</span>}
+      {!readOnly && (
+        <button className="text-ink-3 hover:text-crit" title="Remove" onClick={remove}>
           ✕
         </button>
       )}

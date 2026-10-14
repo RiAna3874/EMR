@@ -378,6 +378,7 @@ async function main() {
     prisma.conversation.deleteMany(),
     prisma.observation.deleteMany(),
     prisma.diagnosticReport.deleteMany(),
+    prisma.mediaItem.deleteMany(),
     prisma.clinicalDocument.deleteMany(),
     prisma.serviceRequest.deleteMany(),
     prisma.documentReference.deleteMany(),

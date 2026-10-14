@@ -10,9 +10,9 @@ type Picked = { key: string; file: File; preview: string | null };
 // stay well under the 5 MB image limit.
 const MAX_EDGE = 2000;
 
-export type ImportKindChoice = "lab" | "document";
+export type ImportKindChoice = "auto" | "lab" | "document";
 
-export function UploadForm({ patientId, initialKind = "lab" }: { patientId: string; initialKind?: ImportKindChoice }) {
+export function UploadForm({ patientId, initialKind = "auto" }: { patientId: string; initialKind?: ImportKindChoice }) {
   const [kind, setKind] = useState<ImportKindChoice>(initialKind);
   const [picked, setPicked] = useState<Picked[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export function UploadForm({ patientId, initialKind = "lab" }: { patientId: stri
 
   return (
     <div>
-      <div role="radiogroup" aria-label="What are you importing?" className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div role="radiogroup" aria-label="What are you importing?" className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {KINDS.map((k) => (
           <button
             key={k.id}
@@ -106,7 +106,7 @@ export function UploadForm({ patientId, initialKind = "lab" }: { patientId: stri
         }`}
       >
         <UploadIcon />
-        <div className="font-medium">Drop {kind === "lab" ? "a lab report" : "a document"} here, or click to choose</div>
+        <div className="font-medium">Drop {kind === "lab" ? "a lab report" : kind === "document" ? "a document" : "the report"} here, or click to choose</div>
         <div className="text-[12px] text-ink-3">Phone photo, scan or PDF. For more than one page, add every page in order.</div>
         <input
           ref={input}
@@ -157,7 +157,7 @@ export function UploadForm({ patientId, initialKind = "lab" }: { patientId: stri
 
       <div className="mt-3 flex items-center gap-3">
         <Button type="button" onClick={submit} disabled={!picked.length || pending} className="px-4 py-1.5 disabled:opacity-50">
-          {pending ? (stage ?? "Working…") : `Read ${kind === "lab" ? "report" : "document"}${picked.length > 1 ? ` (${picked.length} pages)` : ""}`}
+          {pending ? (stage ?? "Working…") : `Read ${kind === "document" ? "document" : "report"}${picked.length > 1 ? ` (${picked.length} pages)` : ""}`}
         </Button>
         <span className="text-[12px] text-ink-3">Claude transcribes it; nothing is filed until you verify it.</span>
       </div>
@@ -166,8 +166,9 @@ export function UploadForm({ patientId, initialKind = "lab" }: { patientId: stri
 }
 
 const KINDS: { id: ImportKindChoice; label: string; hint: string }[] = [
+  { id: "auto", label: "Any report", hint: "Claude works out whether it is lab results or a written report." },
   { id: "lab", label: "Lab results", hint: "Values go into Results with flags and trends." },
-  { id: "document", label: "Clinical document", hint: "Imaging report, discharge summary, referral or consult letter." },
+  { id: "document", label: "Written report or letter", hint: "MRI, CT, X-ray, ultrasound, echo, biopsy, discharge summary, referral or consult letter." },
 ];
 
 // Applies EXIF rotation and shrinks photos; PDFs pass through untouched.

@@ -1,0 +1,240 @@
+{
+ "document_type": "imaging_report",
+ "title": "TRANSTHORACIC ECHOCARDIOGRAPHY REPORT",
+ "organization": "Dhanmondi Heart & Diagnostic Centre",
+ "author": "Dr. Farzana Rahman, MBBS, MD (Cardiology)",
+ "service_date": "2026-10-12",
+ "admission_date": null,
+ "discharge_date": null,
+ "patient_name": "Marcus Okonkwo-Hale",
+ "patient_dob": "1959-03-21",
+ "patient_age": "67 Y",
+ "patient_sex": "M",
+ "patient_id": "DHDC-E-55821",
+ "modality": "Echocardiogram",
+ "body_part": "Heart",
+ "impression": "1. Concentric left ventricular hypertrophy with normal LV systolic function (LVEF 58%).\n2. Grade I (impaired relaxation) LV diastolic dysfunction.\n3. Mild mitral regurgitation. Mildly dilated left atrium.\n4. No pericardial effusion. No intracardiac clot seen.",
+ "diagnoses": [
+  {
+   "text": "Concentric left ventricular hypertrophy",
+   "kind": "finding",
+   "icd10": "I51.7",
+   "file": 1,
+   "box": null
+  },
+  {
+   "text": "Grade I LV diastolic dysfunction",
+   "kind": "finding",
+   "icd10": null,
+   "file": 1,
+   "box": null
+  },
+  {
+   "text": "Mild mitral regurgitation",
+   "kind": "finding",
+   "icd10": "I34.0",
+   "file": 1,
+   "box": null
+  }
+ ],
+ "follow_ups": [
+  {
+   "text": "Repeat echocardiography in 12 months or sooner if symptoms change.",
+   "due": "12 months",
+   "file": 1,
+   "box": null
+  }
+ ],
+ "notes": [
+  "Dates printed day first (12/10/2026 read as 12 October 2026)."
+ ],
+ "sections": [
+  {
+   "heading": "Indication",
+   "text": "Atrial fibrillation, follow-up of heart failure. Exertional breathlessness for 3 months.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 258,
+    "x1": 1185,
+    "y1": 326
+   }
+  },
+  {
+   "heading": "Findings",
+   "text": "Left ventricle: Normal cavity size. Concentric hypertrophy. Normal global and regional wall motion; no regional wall motion abnormality seen. LV systolic function is normal with an estimated ejection fraction of 58%. Mitral inflow shows an E/A reversal consistent with grade I diastolic dysfunction (impaired relaxation).\nLeft atrium: Mildly dilated.\nRight ventricle: Normal size and systolic function (TAPSE 2.1 cm).\nMitral valve: Structurally normal leaflets. Mild central mitral regurgitation.\nAortic valve: Trileaflet, mildly thickened, opens well. No aortic stenosis or regurgitation.\nTricuspid valve: Trace tricuspid regurgitation. Estimated PASP 29 mmHg.\nPulmonary valve: Normal.\nPericardium: No pericardial effusion.\nIVC: Normal size with more than 50% inspiratory collapse.\nNo intracardiac mass or thrombus seen; the left atrial appendage is not well seen on transthoracic imaging.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 720,
+    "x1": 1185,
+    "y1": 1152
+   }
+  },
+  {
+   "heading": "Conclusion",
+   "text": "1. Concentric left ventricular hypertrophy with normal LV systolic function (LVEF 58%).\n2. Grade I (impaired relaxation) LV diastolic dysfunction.\n3. Mild mitral regurgitation. Mildly dilated left atrium.\n4. No pericardial effusion. No intracardiac clot seen.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 1154,
+    "x1": 1185,
+    "y1": 1306
+   }
+  },
+  {
+   "heading": "Recommendation",
+   "text": "Clinical correlation. Optimise blood pressure control. Repeat echocardiography in 12 months or sooner if symptoms change.",
+   "file": 1,
+   "box": {
+    "x0": 55,
+    "y0": 1308,
+    "x1": 1185,
+    "y1": 1404
+   }
+  }
+ ],
+ "measurements": [
+  {
+   "name": "IVSd",
+   "value": "1.3",
+   "unit": "cm",
+   "normal_range": "0.6-1.0",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 362,
+    "x1": 1100,
+    "y1": 390
+   }
+  },
+  {
+   "name": "LVPWd",
+   "value": "1.2",
+   "unit": "cm",
+   "normal_range": "0.6-1.0",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 392,
+    "x1": 1100,
+    "y1": 420
+   }
+  },
+  {
+   "name": "LVIDd",
+   "value": "4.9",
+   "unit": "cm",
+   "normal_range": "4.2-5.8",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 422,
+    "x1": 1100,
+    "y1": 450
+   }
+  },
+  {
+   "name": "LVIDs",
+   "value": "3.2",
+   "unit": "cm",
+   "normal_range": "2.5-4.0",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 452,
+    "x1": 1100,
+    "y1": 480
+   }
+  },
+  {
+   "name": "Aortic root",
+   "value": "3.1",
+   "unit": "cm",
+   "normal_range": "2.0-3.7",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 482,
+    "x1": 1100,
+    "y1": 510
+   }
+  },
+  {
+   "name": "Left atrium",
+   "value": "4.4",
+   "unit": "cm",
+   "normal_range": "3.0-4.0",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 512,
+    "x1": 1100,
+    "y1": 540
+   }
+  },
+  {
+   "name": "LVEF (Simpson's biplane)",
+   "value": "58",
+   "unit": "%",
+   "normal_range": "52-72",
+   "group": "M-mode / 2D measurements",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 542,
+    "x1": 1100,
+    "y1": 570
+   }
+  },
+  {
+   "name": "Mitral E/A",
+   "value": "0.7",
+   "unit": null,
+   "normal_range": "0.8-2.0",
+   "group": "Doppler",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 618,
+    "x1": 1100,
+    "y1": 646
+   }
+  },
+  {
+   "name": "E/e' (average)",
+   "value": "11",
+   "unit": null,
+   "normal_range": "<14",
+   "group": "Doppler",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 648,
+    "x1": 1100,
+    "y1": 676
+   }
+  },
+  {
+   "name": "TR peak gradient",
+   "value": "24",
+   "unit": "mmHg",
+   "normal_range": "<31",
+   "group": "Doppler",
+   "file": 1,
+   "box": {
+    "x0": 75,
+    "y0": 678,
+    "x1": 1100,
+    "y1": 706
+   }
+  }
+ ],
+ "medications": []
+}

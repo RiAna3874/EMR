@@ -8,6 +8,7 @@ const HIDDEN_BY: Record<string, string> = {
   DiagnosticReport: "enteredInErrorAt",
   ClinicalDocument: "enteredInErrorAt",
   Note: "enteredInErrorAt",
+  MediaItem: "enteredInErrorAt",
   Patient: "mergedIntoId",
 };
 const LIST_READS = new Set(["findMany", "findFirst", "findFirstOrThrow", "count", "aggregate", "groupBy"]);

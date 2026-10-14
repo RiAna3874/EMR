@@ -20,6 +20,7 @@ const MOVED = [
   "clinicalDocument",
   "conversation",
   "encounterDiagnosis",
+  "mediaItem",
 ] as const;
 
 // Contact and coverage details the kept chart takes from the duplicate when it has none.

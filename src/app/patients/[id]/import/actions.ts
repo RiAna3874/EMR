@@ -23,7 +23,10 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
   const currentUser = await requirePermission("importReports");
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   const sizes: { width: number | null; height: number | null }[] = JSON.parse(String(form.get("sizes") ?? "[]"));
-  const kind = form.get("kind") === "document" ? "document" : "lab";
+  const choice = String(form.get("kind") ?? "auto");
+  // "Any report": Claude sorts it first (src/lib/labs/jobs.ts); stored as a document until then.
+  const autoKind = choice !== "lab" && choice !== "document";
+  const kind = choice === "lab" ? "lab" : "document";
   if (files.length === 0) return { error: "Choose a photo or PDF of the report." };
   if (files.length > MAX_FILES) return { error: `Upload at most ${MAX_FILES} pages at a time.` };
   for (const f of files) {
@@ -43,6 +46,7 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
     data: {
       patientId,
       kind,
+      autoKind,
       createdById: currentUser.id,
       documents: {
         create: files.map((f, i) => ({
@@ -99,7 +103,7 @@ export async function rereadAs(patientId: string, jobId: string, kind: "lab" | "
   await requirePermission("importReports");
   await db.importJob.update({
     where: { id: jobId, patientId, status: { in: ["needs_review", "failed"] } },
-    data: { kind, status: "extracting", error: null, draft: Prisma.DbNull, extraction: Prisma.DbNull, model: null },
+    data: { kind, autoKind: false, status: "extracting", error: null, draft: Prisma.DbNull, extraction: Prisma.DbNull, model: null },
   });
   await db.documentReference.updateMany({ where: { importJobId: jobId }, data: { kind: kind === "document" ? "clinical_document" : "lab_report" } });
   after(() => runExtraction(jobId));

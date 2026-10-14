@@ -26,10 +26,10 @@ export default async function ImportReport({ params, searchParams }: { params: P
     <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-5">
       <Panel title="Import an outside record" className="xl:col-span-3">
         <div className="p-3">
-          <UploadForm patientId={id} initialKind={kind === "document" ? "document" : "lab"} />
+          <UploadForm patientId={id} initialKind={kind === "document" || kind === "lab" ? kind : "auto"} />
           <ol className="mt-4 grid grid-cols-1 gap-2 text-[12px] text-ink-2 sm:grid-cols-3">
             <Step n={1} title="Upload">A photo, scan or PDF from an outside lab, hospital, imaging center or practice.</Step>
-            <Step n={2} title="Review">Claude transcribes it word for word. Check it against the pages, side by side, and pick what joins the problem and medication lists.</Step>
+            <Step n={2} title="Review">Claude transcribes it word for word, however long the report. Check it against the pages, side by side, and pick what joins the problem and medication lists.</Step>
             <Step n={3} title="File">Lab values join the Results table; documents go to the Documents tab and the PCP&apos;s Inbox.</Step>
           </ol>
         </div>

@@ -5,6 +5,7 @@ import type { PatientFacts } from "@/lib/labs/draft";
 import {
   assessDocDraft,
   docContent,
+  DocDraftSchema,
   docDraftFromExtraction,
   emptyDocDraft,
   matchMed,
@@ -143,4 +144,23 @@ test("stored content round-trips and drops empty rows", () => {
   assert.equal(c.followUps.length, 4);
   assert.equal(c.meds.length, 6);
   assert.equal(readContent({}).sections.length, 0);
+});
+
+test("a written echo report keeps its measurements, findings and conclusion", () => {
+  const d = docDraftFromExtraction(sample("synthetic-echo-report"), [{ width: 1240, height: 1754 }]);
+  assert.equal(d.type, "imaging_report");
+  assert.equal(d.measurements.length, 10);
+  const ef = d.measurements.find((m) => m.name.startsWith("LVEF"))!;
+  assert.deepEqual([ef.value, ef.unit, ef.range, ef.group], ["58", "%", "52-72", "M-mode / 2D measurements"]);
+  assert.equal(d.measurements.find((m) => m.name === "Mitral E/A")!.unit, "", "a missing unit is blank, not null");
+  assert.ok(d.sections.find((s) => s.heading === "Findings")!.text.split("\n").length >= 10, "every finding line is kept");
+  const filed = docContent(d);
+  assert.equal(filed.measurements.length, 10);
+});
+
+test("drafts and filed documents from before measurements read back with none", () => {
+  const old = { ...discharge() } as Partial<DocDraft>;
+  delete old.measurements;
+  assert.deepEqual(DocDraftSchema.parse(old).measurements, []);
+  assert.deepEqual(readContent({ sections: [] }).measurements, []);
 });

@@ -28,6 +28,8 @@ export const PERMISSIONS = {
   // Uploading and reviewing an outside report vs. verifying it into the chart.
   importReports: ["physician", "resident", "nurse"],
   fileImports: ["physician", "resident"],
+  // The Media tab: taking and uploading clinical photos and scans, renaming them.
+  addMedia: ["physician", "resident", "nurse"],
   // Acknowledging results in the Inbox.
   reviewResults: ["physician", "resident"],
   useInbox: ["physician", "resident", "nurse"],

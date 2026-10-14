@@ -64,9 +64,11 @@ export default async function ImportJobPage({ params }: { params: Promise<{ id: 
             <>
               <RefreshWhile active intervalMs={2500} />
               <Spinner />
-              <h2 className="mt-3 font-semibold">Reading the {noun}…</h2>
+              <h2 className="mt-3 font-semibold">{job.autoKind ? "Looking at the report…" : `Reading the ${noun}…`}</h2>
               <p className="mt-1 text-ink-2">
-                Claude is transcribing {isDoc ? "every section" : "every test"} on {docs.length === 1 ? "the page" : `all ${docs.length} pages`}. This usually takes under a minute.
+                {job.autoKind
+                  ? "Claude is working out whether this is lab results or a written report, then it will transcribe it."
+                  : `Claude is transcribing ${isDoc ? "every section" : "every test"} on ${docs.length === 1 ? "the page" : `all ${docs.length} pages`}. This usually takes a minute or two; long written reports can take a few minutes.`}
               </p>
             </>
           ) : (
