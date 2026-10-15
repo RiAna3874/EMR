@@ -60,7 +60,7 @@ export default async function PrintMeds({ searchParams }: { searchParams: Promis
                 {m.status === "on_hold" && <div className="text-[11px] font-bold">ON HOLD: don&apos;t take until your clinician says to restart</div>}
               </td>
               <td className="py-1 pr-2">
-                {sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}
+                {sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}
                 {unitsHint(m.dose, productFor(m)) && <span> ({unitsHint(m.dose, productFor(m))} each time)</span>}
                 {m.patientInstructions && <div className="text-[11px]">{m.patientInstructions}</div>}
               </td>

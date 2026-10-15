@@ -7,6 +7,7 @@ import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { fillStatus, interactionsAmong, isControlled } from "@/lib/meds/checks";
 import { rxClassLabel, type RxDetails } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
+import { StepNow } from "@/components/meds/step-now";
 import { Empty } from "@/components/panel";
 import { Button, inputCls } from "@/components/form";
 import { ActionButton } from "@/components/action-button";
@@ -21,6 +22,7 @@ import { RefillButton } from "@/components/meds/refill-button";
 import { refillBlocker, refillProduct } from "@/lib/meds/refill";
 import { MedRowActions } from "@/components/meds/med-row-actions";
 import { DrugInfo } from "@/components/meds/drug-info";
+import { parseSteps } from "@/lib/meds/steps";
 import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +89,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         dose: target.dose,
         route: target.route,
         frequency: target.frequency,
+        steps: parseSteps(target.steps),
         prn: target.prn,
         prnReason: target.prnReason,
         quantity: target.quantity ?? undefined,
@@ -267,7 +270,8 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                           {awaitingCosign && <Chip tone="accent">AWAITING COSIGN</Chip>}
                           {pendingRx && <Chip tone="warn">{(pendingRx.details as Partial<RxDetails> | null)?.refill ? "REFILL IN BASKET" : "CHANGE IN BASKET"}</Chip>}
                         </div>
-                        <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
+                        <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</div>
+                        <StepNow steps={m.steps} written={m.authoredAt} />
                         {m.indication && <div className="text-[12px] text-ink-3">For {m.indication}</div>}
                         {m.continuedAt && (
                           <div className="text-[12px] text-ok">
@@ -387,7 +391,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                   <tr key={m.id} className="border-t border-line text-ink-3 first:border-t-0">
                     <td className="px-3 py-1.5">
                       <span className="font-medium line-through">{m.drug}</span>
-                      <span className="ml-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</span>
+                      <span className="ml-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</span>
                     </td>
                     <td className="tabular whitespace-nowrap px-3 py-1.5">
                       {fmtDateOnly(m.start)} – {fmtDateOnly(m.end)}

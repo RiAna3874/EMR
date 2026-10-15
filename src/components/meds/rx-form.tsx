@@ -10,7 +10,9 @@ import { Button, Field, inputCls } from "@/components/form";
 import { OrderTypeIcon, WarningList } from "@/components/orders/order-bits";
 import { doseSuggestions } from "@/lib/meds/dosing";
 import { ProblemPicker, type ProblemOption } from "@/components/problem-picker";
+import { parseSteps, stepsDaysSupply, stepsProblem, stepsQuantity, type DoseStep } from "@/lib/meds/steps";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
+import { StepsEditor } from "./steps-editor";
 import { DrugInfo } from "./drug-info";
 
 export type PharmacyOption = { id: string; name: string; address: string; mailOrder: boolean };
@@ -59,29 +61,47 @@ export function RxForm({
   const [refills, setRefills] = useState(Math.min(initial?.refills ?? product.refills, maxRefills(product.display)));
   const [rxClass, setRxClass] = useState(rxClassFor(initial?.rxClass));
   const [pharmacyId, setPharmacyId] = useState(initial?.pharmacyId ?? preferredPharmacyId ?? "");
+  // A taper or "followed by" sig: the dose changes in steps. A new prescription starts from
+  // the product's own steps (azithromycin's loading dose), a change from the one it changes.
+  const [steps, setSteps] = useState<DoseStep[] | null>(() => parseSteps(initial ? initial.steps : product.steps));
+  const toSteps = () => setSteps([{ dose, frequency, days: Number(duration) || 5 }, { dose: "", frequency, days: null }]);
+  const toSingle = () => {
+    if (steps) {
+      setDose(steps[0].dose);
+      setFrequency(steps[0].frequency);
+      setDuration(String(steps[0].days ?? ""));
+    }
+    setSteps(null);
+  };
 
   const doseOptions = useMemo(() => doseSuggestions(product.display, product), [product]);
   const days = Number(duration) || 0;
   // Keep the quantity in step with the sig until the prescriber types their own.
-  const autoQty = useMemo(() => suggestQuantity(product, { dose, frequency }, days || product.days), [product, dose, frequency, days]);
+  const autoQty = useMemo(
+    () => (steps ? stepsQuantity(product, steps, product.days || 30) : suggestQuantity(product, { dose, frequency }, days || product.days)),
+    [product, steps, dose, frequency, days],
+  );
   const shownQty = qtyTouched ? quantity : (autoQty ?? quantity);
-  const daysSupply = daysSupplyFor(product, { dose, frequency }, shownQty) ?? (days || product.days);
+  const daysSupply = steps ? stepsDaysSupply(steps, product.days || 30) : (daysSupplyFor(product, { dose, frequency }, shownQty) ?? (days || product.days));
   const limit = maxRefills(product.display);
 
   const warnings = useMemo(() => {
     const meds = [...ctx.activeMeds];
     if (replaces && meds.includes(replaces.drug)) meds.splice(meds.indexOf(replaces.drug), 1);
-    const out = medWarnings(product.display, { dose, frequency, refills }, { ...ctx, activeMeds: meds });
+    const out = medWarnings(product.display, { dose, frequency, refills, steps }, { ...ctx, activeMeds: meds });
     if (!replaces && ctx.openOrders.some((o) => o.code === `RX:${product.rxnorm}` && o.status === "pending")) {
       out.unshift({ level: "caution", kind: "duplicate", text: "Already in the order basket." });
     }
     return out;
-  }, [ctx, product, dose, frequency, refills, replaces]);
+  }, [ctx, product, dose, frequency, refills, steps, replaces]);
 
-  const summary = rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
+  const stepsIssue = steps && stepsProblem(steps);
+  const summary = steps
+    ? (stepsIssue ?? rxSummary({ dose: steps[0].dose, route, frequency: steps[0].frequency, steps, prn, prnReason, quantity: shownQty, daysSupply, refills }))
+    : rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
   const pharmacy = pharmacies.find((p) => p.id === pharmacyId);
   // An off-list, DGDA-registry or generic-list medication has no defaults, so the prescriber writes the whole sig.
-  const incomplete = writesOwnSig(product) && (!dose.trim() || !frequency.trim() || !shownQty.trim());
+  const incomplete = !!stepsIssue || (writesOwnSig(product) && (!(steps?.[0].dose ?? dose).trim() || !(steps?.[0].frequency ?? frequency).trim() || !shownQty.trim()));
 
   return (
     <form action={onSubmit} className="space-y-3 bg-accent-soft/30 p-3" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
@@ -89,6 +109,7 @@ export function RxForm({
       <input type="hidden" name="quantity" value={shownQty} />
       <input type="hidden" name="daysSupply" value={daysSupply || ""} />
       <input type="hidden" name="rxClass" value={rxClass} />
+      {steps && <input type="hidden" name="steps" value={JSON.stringify(steps)} />}
       {replaces && <input type="hidden" name="replacesId" value={replaces.id} />}
       {refillRequestId && <input type="hidden" name="refillRequestId" value={refillRequestId} />}
       {editsOrderId && <input type="hidden" name="editsOrderId" value={editsOrderId} />}
@@ -118,16 +139,43 @@ export function RxForm({
       <WarningList warnings={warnings} />
       <DrugInfo drug={product.display} />
 
+      <div className="flex flex-wrap items-center gap-2 text-[12px]" role="radiogroup" aria-label="Dosing">
+        <span className="text-[11px] font-medium text-ink-3">Dosing</span>
+        <div className="flex overflow-hidden rounded border border-line">
+          {[
+            { on: !steps, label: "One dose", click: toSingle },
+            { on: !!steps, label: "Taper / then (steps)", click: () => !steps && toSteps() },
+          ].map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              role="radio"
+              aria-checked={o.on}
+              onClick={o.click}
+              className={`border-l border-line px-2.5 py-1 first:border-l-0 ${o.on ? "bg-chrome text-white" : "bg-panel text-ink-2 hover:bg-panel-muted"}`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {steps && <span className="text-ink-3">Each step follows the one before it, like a steroid taper or a loading dose then a daily dose.</span>}
+      </div>
+      {steps && <StepsEditor steps={steps} onChange={setSteps} suggestions={doseOptions} />}
+
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Dose">
-          <DoseInput value={dose} onChange={setDose} suggestions={doseOptions} autoFocus={replaces?.mode === "modify"} />
-        </Field>
+        {!steps && (
+          <Field label="Dose">
+            <DoseInput value={dose} onChange={setDose} suggestions={doseOptions} autoFocus={replaces?.mode === "modify"} />
+          </Field>
+        )}
         <Field label="Route">
           <RouteInput value={route} onChange={setRoute} />
         </Field>
-        <Field label="Frequency">
-          <FrequencyInput value={frequency} onChange={setFrequency} className="w-64" />
-        </Field>
+        {!steps && (
+          <Field label="Frequency">
+            <FrequencyInput value={frequency} onChange={setFrequency} className="w-64" />
+          </Field>
+        )}
         <label className="flex items-center gap-1.5 pb-1 text-[12.5px]">
           <input type="checkbox" name="prn" checked={prn} onChange={(e) => setPrn(e.target.checked)} />
           As needed
@@ -140,9 +188,11 @@ export function RxForm({
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Duration (days)">
-          <input name="durationDays" type="number" min={1} max={365} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="ongoing" className={`${inputCls} w-28`} />
-        </Field>
+        {!steps && (
+          <Field label="Duration (days)">
+            <input name="durationDays" type="number" min={1} max={365} value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="ongoing" className={`${inputCls} w-28`} />
+          </Field>
+        )}
         <Field label="Dispense">
           <input
             value={shownQty}
@@ -227,7 +277,7 @@ export function RxForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        {incomplete && <span className="text-[12px] text-ink-3">Fill in the dose, frequency and amount to dispense.</span>}
+        {incomplete && <span className="text-[12px] text-ink-3">{stepsIssue || "Fill in the dose, frequency and amount to dispense."}</span>}
       </div>
     </form>
   );

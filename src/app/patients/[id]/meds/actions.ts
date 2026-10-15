@@ -11,6 +11,7 @@ import { productFor } from "@/lib/meds/formulary";
 import { daysSupplyFor } from "@/lib/meds/sig";
 import { refillReview, writePrescription } from "@/lib/meds/server";
 import { textRefillApproved } from "@/lib/sms/server";
+import { parseSteps } from "@/lib/meds/steps";
 import { refillBlocker, refillDetails, refillProduct } from "@/lib/meds/refill";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { problemLink } from "@/lib/problems/server";
@@ -126,7 +127,7 @@ export async function approveRefill(requestId: string, next: string, form: FormD
   const refills = Math.max(0, Math.min(maxRefills(med.drug), Math.round(Number(str(form, "refills")) || 0)));
   const quantity = str(form, "quantity") || med.quantity || product?.quantity || "";
 
-  const stops = medWarnings(med.drug, { dose: med.dose, frequency: med.frequency, refills }, ctx).filter((w) => w.level === "stop");
+  const stops = medWarnings(med.drug, { dose: med.dose, frequency: med.frequency, refills, steps: med.steps }, ctx).filter((w) => w.level === "stop");
   const override = str(form, "overrideReason");
   if (stops.length && !override) return { error: "Give an override reason to approve with a hard-stop alert." };
   let cosignerId: string | null = null;
@@ -138,7 +139,8 @@ export async function approveRefill(requestId: string, next: string, form: FormD
 
   const note = str(form, "note");
   await db.$transaction(async (tx) => {
-    const frequency = med.frequency.replace(/\s+for \d+ days?$/, "");
+    const steps = parseSteps(med.steps);
+    const frequency = steps ? steps[0].frequency : med.frequency.replace(/\s+for \d+ days?$/, "");
     const created = await writePrescription(tx, {
       patientId: med.patientId,
       drug: med.drug,
@@ -146,10 +148,11 @@ export async function approveRefill(requestId: string, next: string, form: FormD
       dose: med.dose,
       route: med.route,
       frequency,
+      steps,
       prn: med.prn,
       prnReason: med.prnReason,
       quantity,
-      daysSupply: daysSupplyFor(product, { dose: med.dose, frequency }, quantity) ?? med.daysSupply,
+      daysSupply: steps ? med.daysSupply : (daysSupplyFor(product, { dose: med.dose, frequency }, quantity) ?? med.daysSupply),
       refills,
       rxClass: "print",
       pharmacyId: req.pharmacyId ?? med.pharmacyId,
@@ -174,7 +177,7 @@ export async function approveRefill(requestId: string, next: string, form: FormD
         indication: med.indication,
         conditionId: med.conditionId,
         instructions: ["Refill request approved", override && `Alert overridden: ${override}`].filter(Boolean).join("\n"),
-        details: { dose: med.dose, route: med.route, frequency, quantity, refills, rxClass: "print" },
+        details: { dose: med.dose, route: med.route, frequency, steps: steps ?? undefined, quantity, refills, rxClass: "print" },
         orderedById: currentUser.id,
         signedAt: new Date(),
         completedAt: new Date(),

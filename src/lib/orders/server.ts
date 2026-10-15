@@ -80,7 +80,7 @@ export async function pendingOrderWarnings(pending: PendingLike[], ctx: OrderCon
     const meds = [...ctx.activeMeds];
     if (drop && meds.includes(drop)) meds.splice(meds.indexOf(drop), 1);
     const alsoPending = pending.filter((x) => x.id !== p.id && x.type === "medication").map((x) => x.display);
-    out.set(p.id, orderWarnings(def, { ...others, activeMeds: [...meds, ...alsoPending] }, { ignoreOpenOrder: true, rx: { dose: d.dose, frequency: d.frequency, refills: d.refills } }));
+    out.set(p.id, orderWarnings(def, { ...others, activeMeds: [...meds, ...alsoPending] }, { ignoreOpenOrder: true, rx: { dose: d.dose, frequency: d.frequency, refills: d.refills, steps: d.steps } }));
   }
   return out;
 }

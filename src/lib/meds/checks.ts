@@ -4,6 +4,7 @@
 import { classesForAllergy, classesOf, DUPLICATE_CLASSES, ingredientsOf, interactionsBetween } from "./drugs";
 import { productFor } from "./formulary";
 import { doseMg, timesPerDay } from "./sig";
+import { parseSteps } from "./steps";
 
 export type MedWarning = { level: "stop" | "caution"; text: string; kind?: "allergy" | "interaction" | "duplicate" | "dose" | "kidney" | "older adult" | "controlled" | "not checked" };
 
@@ -15,7 +16,8 @@ export type MedCheckContext = {
   ageYears?: number | null;
 };
 
-export type RxInput = { dose?: string; frequency?: string; refills?: number };
+// steps: a taper or "followed by" sig, where every step's dose is checked.
+export type RxInput = { dose?: string; frequency?: string; refills?: number; steps?: unknown };
 
 export const isControlled = (drug: string) => ingredientsOf(drug).some((i) => i.controlled);
 
@@ -59,10 +61,13 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
     }
   }
 
-  // Dose range, for products whose dose and frequency can be read.
-  if (rx?.dose && rx.frequency) {
-    const mg = doseMg(rx.dose, productFor({ drug }));
-    const perDay = timesPerDay(rx.frequency);
+  // Dose range, for products whose dose and frequency can be read: every step of a taper.
+  const doses = parseSteps(rx?.steps) ?? (rx?.dose && rx.frequency ? [{ dose: rx.dose, frequency: rx.frequency }] : []);
+  const doseWarnings: MedWarning[] = [];
+  for (const step of doses) {
+    const out = doseWarnings;
+    const mg = doseMg(step.dose, productFor({ drug }));
+    const perDay = timesPerDay(step.frequency);
     const older = (ctx.ageYears ?? 0) >= 65;
     for (const i of ingredients) {
       const max = older && i.maxDailyMgOlder ? i.maxDailyMgOlder : i.maxDailyMg;
@@ -74,7 +79,7 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
       if (i.weekly && mg !== null && perDay !== null && ingredients.length === 1) {
         const isWeekly = perDay <= 1 / 7 + 1e-9;
         if (i.weekly.only && !isWeekly) {
-          out.push({ kind: "dose", level: "stop", text: `Frequency: ${i.name} is given once a week, not ${rx.frequency}.` });
+          out.push({ kind: "dose", level: "stop", text: `Frequency: ${i.name} is given once a week, not ${step.frequency}.` });
         } else if (isWeekly || i.weekly.only) {
           const weekly = Math.round(mg * perDay * 7 * 100) / 100;
           if (weekly > i.weekly.maxMg) out.push({ kind: "dose", level: "stop", text: `Dose: ${weekly} mg a week exceeds the ${i.weekly.maxMg} mg weekly maximum.` });
@@ -82,6 +87,8 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
       }
     }
   }
+  // Steps at the same too-high dose warn once.
+  out.push(...doseWarnings.filter((w, i) => doseWarnings.findIndex((x) => x.text === w.text) === i));
 
   if (ctx.egfr !== null) {
     for (const i of ingredients) {

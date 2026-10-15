@@ -55,7 +55,7 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
           </div>
           <div>
             <span className="font-semibold">Sig: </span>
-            {sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason })}
+            {sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason, steps: med.steps })}
           </div>
           {med.patientInstructions && <div>{med.patientInstructions}</div>}
           <div>

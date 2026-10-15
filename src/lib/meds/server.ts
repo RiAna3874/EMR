@@ -4,6 +4,7 @@ import { orderContext } from "@/lib/orders/server";
 import type { OrderContext } from "@/lib/orders/checks";
 import { fillStatus, refillProtocol } from "./checks";
 import { rxClassFor, type RxDetails } from "./rx";
+import { parseSteps, stepsFrequency, totalDays } from "./steps";
 
 // The order-check context without one medication: a reorder or dose change
 // shouldn't warn that the patient already takes the drug it replaces.
@@ -50,6 +51,11 @@ export async function writePrescription(
     ? await tx.medicationRequest.findFirst({ where: { id: rx.replacesId, patientId: rx.patientId, status: { in: ["active", "on_hold"] } } })
     : null;
   const pharmacyId = rxClass === "print" ? null : (rx.pharmacyId ?? null);
+  // A taper or "followed by" sig stores its first dose, and the whole course in words as the frequency.
+  const steps = parseSteps(rx.steps);
+  const dose = steps ? steps[0].dose : rx.dose;
+  const frequency = steps ? stepsFrequency(steps) : rx.durationDays ? `${rx.frequency} for ${rx.durationDays} days` : rx.frequency;
+  const courseDays = steps ? totalDays(steps) : rx.durationDays;
   if (prior) {
     await tx.medicationRequest.update({
       where: { id: prior.id },
@@ -59,9 +65,11 @@ export async function writePrescription(
             ? "Refilled"
             : prior.drug !== rx.drug
             ? `Changed to ${rx.drug}`
-            : prior.dose !== rx.dose || prior.frequency.replace(/\s+for \d+ days?$/, "") !== rx.frequency
-              ? `Changed to ${rx.dose} ${rx.frequency}`
-              : "Reordered",
+            : steps && JSON.stringify(parseSteps(prior.steps)) !== JSON.stringify(steps)
+              ? `Changed to ${dose} ${frequency}`
+              : !steps && (prior.steps || prior.dose !== rx.dose || prior.frequency.replace(/\s+for \d+ days?$/, "") !== rx.frequency)
+                ? `Changed to ${rx.dose} ${rx.frequency}`
+                : "Reordered",
       },
     });
   }
@@ -70,9 +78,10 @@ export async function writePrescription(
       patientId: rx.patientId,
       drug: rx.drug,
       rxnorm: rx.rxnorm,
-      dose: rx.dose,
+      dose,
       route: rx.route,
-      frequency: rx.durationDays ? `${rx.frequency} for ${rx.durationDays} days` : rx.frequency,
+      frequency,
+      steps: steps ?? undefined,
       prn: rx.prn ?? false,
       prnReason: rx.prnReason ?? null,
       indication: rx.indication ?? prior?.indication ?? null,
@@ -80,7 +89,7 @@ export async function writePrescription(
       conditionId: rx.conditionId ?? (rx.indication ? null : prior?.conditionId) ?? null,
       status: "active",
       start: prior?.start ?? now,
-      end: rx.durationDays ? new Date(now.getTime() + rx.durationDays * 86_400_000) : null,
+      end: courseDays ? new Date(now.getTime() + courseDays * 86_400_000) : null,
       prescriberId: rx.prescriberId,
       rxClass,
       authoredAt: now,

@@ -232,6 +232,7 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
           dose: d.dose ?? "",
           route: d.route ?? "oral",
           frequency: d.frequency ?? "",
+          steps: d.steps,
           prn: d.prn,
           prnReason: d.prnReason,
           durationDays: d.durationDays,

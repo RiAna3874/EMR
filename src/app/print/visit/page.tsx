@@ -8,7 +8,7 @@ import { vitalsSummary } from "@/lib/visits/vitals-line";
 import { adviceLines } from "@/lib/visits/advice";
 import { followUpOption, fromDbDate } from "@/lib/visits/follow-up";
 import { bnDate } from "@/lib/visits/bangla";
-import { doseSchedule, type Lang } from "@/lib/meds/schedule";
+import { doseSchedules, stepWords, type Lang } from "@/lib/meds/schedule";
 import { productFor } from "@/lib/meds/formulary";
 import { Letterhead, PrintFooter, PrintShell } from "@/components/print/print-shell";
 
@@ -138,7 +138,9 @@ export default async function PrintVisit({ searchParams }: { searchParams: Promi
             ) : (
               <ol className="mt-2 space-y-2.5">
                 {meds.map((m, i) => {
-                  const s = doseSchedule({ ...m, start: m.authoredAt }, lang, productFor(m));
+                  const { steps, stop } = doseSchedules({ ...m, start: m.authoredAt }, lang, productFor(m));
+                  const s = steps[0];
+                  const words = stepWords(lang);
                   const outside = m.rxClass === "historical";
                   return (
                     <li key={m.id} className="flex gap-2 break-inside-avoid">
@@ -149,16 +151,21 @@ export default async function PrintVisit({ searchParams }: { searchParams: Promi
                           {m.drug}
                           {outside && <span className="ml-1 text-[10.5px] font-normal">({lang === "bn" ? "আগে থেকে চলছে" : "already taking"})</span>}
                         </div>
-                        <div className="text-[13px]">
-                          {[s.pattern && <b key="p" className="tabular tracking-wide">{s.pattern}</b>, s.amount, s.how, s.food, s.duration]
-                            .filter(Boolean)
-                            .map((x, j) => (
-                              <span key={j}>
-                                {j > 0 && <span className="px-1.5">—</span>}
-                                {x}
-                              </span>
-                            ))}
-                        </div>
+                        {/* A taper or "followed by" prescription: one line per step, "then" between them. */}
+                        {steps.map((step, k) => (
+                          <div key={k} className="text-[13px]">
+                            {k > 0 && <span className="pr-1.5 italic">{words.then}</span>}
+                            {[step.pattern && <b key="p" className="tabular tracking-wide">{step.pattern}</b>, step.amount, step.how, step.food, step.duration]
+                              .filter(Boolean)
+                              .map((x, j) => (
+                                <span key={j}>
+                                  {j > 0 && <span className="px-1.5">—</span>}
+                                  {x}
+                                </span>
+                              ))}
+                          </div>
+                        ))}
+                        {stop && <div className="text-[13px] italic">{words.stop}</div>}
                         {m.patientInstructions && <div className="text-[11.5px]">{m.patientInstructions}</div>}
                       </div>
                     </li>

@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import type { ServiceRequest, SmsKind } from "@prisma/client";
 import { baseDb, db } from "@/lib/db";
+import { parseSteps, stepsFrequency } from "@/lib/meds/steps";
 import { brand } from "@/lib/brand";
 import { orderableByCode } from "@/lib/orders/catalog";
 import type { RxDetails } from "@/lib/meds/rx";
@@ -83,7 +84,8 @@ export async function textSignedOrders(patientId: string, prescriber: string, si
   for (const o of signed) {
     if (o.type === "medication") {
       const d = (o.details ?? {}) as Partial<RxDetails>;
-      items.meds.push({ drug: o.display, dose: d.dose, frequency: d.frequency });
+      const steps = parseSteps(d.steps);
+      items.meds.push({ drug: o.display, dose: d.dose, frequency: steps ? stepsFrequency(steps) : d.frequency });
     } else if (o.type === "lab") items.labs.push({ display: o.display, fasting: fasting(o.code) });
     else if (o.type === "imaging") items.imaging.push(o.display);
     else if (o.type === "referral") items.referrals.push(o.display);
