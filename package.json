@@ -11,6 +11,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "tsx scripts/db-empty.ts --guard && prisma migrate reset --force",
     "db:empty": "tsx scripts/db-empty.ts",
+    "drugs:dgda": "tsx scripts/dgda-import.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "test": "tsx --test 'src/**/*.test.ts'"

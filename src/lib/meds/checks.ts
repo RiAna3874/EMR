@@ -31,7 +31,7 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
   const ingredients = ingredientsOf(drug);
   const classes = classesOf(drug);
   if (!ingredients.length) {
-    out.push({ kind: "not checked", level: "caution", text: `${drug} isn't in the clinic's drug list, so allergies, interactions and dose weren't checked. Check them yourself.` });
+    out.push({ kind: "not checked", level: "caution", text: `The clinic's safety checks don't know ${drug} yet, so allergies, interactions and dose weren't checked. Check them yourself.` });
   }
 
   for (const a of ctx.allergies) {
