@@ -3,6 +3,7 @@
 // run on it. Pure functions only: the same code runs in the browser while the
 // clinician reviews and on the server when they file.
 import { z } from "zod";
+import { ICD10_SHAPE, normalizeIcd10 } from "@/lib/icd10/format";
 import type { ClinicalDocType } from "@prisma/client";
 import { BoxSchema, checkIdentity, toFractionBox, type IdentityCheck, type PageSize, type PatientFacts } from "@/lib/labs/draft";
 import { toLocalDate } from "@/lib/format";
@@ -216,7 +217,6 @@ export function matchMed(m: Pick<DocMed, "drug" | "text">, meds: ChartFacts["med
   return meds.find((x) => drugKey(x.drug) === key)?.drug ?? null;
 }
 
-export const ICD10 = /^[A-Z][0-9][0-9A-Z](\.[0-9A-Z]{1,4})?$/;
 
 // ---------- whole-draft checks ----------
 
@@ -251,7 +251,7 @@ export function assessDocDraft(d: DocDraft, patient: PatientFacts, chart: ChartF
   const adding = d.diagnoses.filter((x) => x.addToProblems);
   for (const x of adding) {
     if (!x.text.trim()) blockers.push("A diagnosis to add to the problem list has no name.");
-    else if (x.icd10.trim() && !ICD10.test(x.icd10.trim().toUpperCase())) blockers.push(`"${x.icd10}" isn't an ICD-10 code (${x.text}).`);
+    else if (x.icd10.trim() && !ICD10_SHAPE.test(normalizeIcd10(x.icd10))) blockers.push(`"${x.icd10}" isn't an ICD-10 code (${x.text}).`);
     else if (problems.get(x.id)?.kind === "same") blockers.push(`${x.text} is already on the problem list.`);
   }
   for (const m of d.meds.filter((x) => x.addToList)) {
@@ -328,7 +328,7 @@ export function docDraftFromExtraction(x: ExtractedDocument, pages: PageSize[]):
       group: m.group ?? "",
       ...src(m),
     })),
-    diagnoses: x.diagnoses.map((d, i) => ({ id: `d${i + 1}`, text: d.text, kind: d.kind, icd10: (d.icd10 ?? "").toUpperCase(), addToProblems: false, ...src(d) })),
+    diagnoses: x.diagnoses.map((d, i) => ({ id: `d${i + 1}`, text: d.text, kind: d.kind, icd10: normalizeIcd10(d.icd10 ?? ""), addToProblems: false, ...src(d) })),
     meds: x.medications.map((m, i) => ({
       id: `m${i + 1}`,
       text: m.text,

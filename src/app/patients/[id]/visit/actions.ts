@@ -7,7 +7,8 @@ import { requirePermission } from "@/lib/session";
 import { advance, startOfDay } from "@/lib/scheduling/server";
 import { closeBlockers, OPEN_STATUSES } from "@/lib/visits/close";
 import { visitDetails } from "@/lib/visits/server";
-import { diagnosisByDisplay, ICD10 } from "@/lib/visits/diagnoses";
+import { diagnosisByDisplay } from "@/lib/visits/diagnoses";
+import { checkIcd10, codeForTitle } from "@/lib/icd10/codes";
 import { followUpDateFor, followUpOption, toDbDate } from "@/lib/visits/follow-up";
 import { parseLocalDate } from "@/lib/format";
 
@@ -39,9 +40,17 @@ export async function addDiagnosis(patientId: string, encounterId: string, form:
   const listed = diagnosisByDisplay.get(typed.toLowerCase());
   const display = problem?.display ?? listed?.value ?? typed;
   if (!display) return;
-  const typedCode = str(form, "code").toUpperCase();
-  const code = problem?.code ?? listed?.code ?? (ICD10.test(typedCode) ? typedCode : null);
-  if (!problem && typedCode && !code) redirect(visitUrl(patientId, encounterId, "&error=code"));
+  // Only complete ICD-10-CM codes are saved; a name that is exactly a code's description gets that code.
+  // A name that is a code's official description must go with that code.
+  let code = problem?.code ?? null;
+  if (!problem) {
+    const typedCode = str(form, "code");
+    const check = typedCode ? checkIcd10(typedCode) : null;
+    if (check && check.status !== "ok") redirect(visitUrl(patientId, encounterId, "&error=code"));
+    const named = listed?.code ?? codeForTitle(display);
+    if (check && named && named !== check.code) redirect(visitUrl(patientId, encounterId, "&error=mismatch"));
+    code = check?.code ?? named;
+  }
 
   await db.$transaction(async (tx) => {
     const existing = await tx.encounterDiagnosis.findMany({ where: { encounterId }, select: { display: true, rank: true } });

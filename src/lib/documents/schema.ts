@@ -54,7 +54,12 @@ export const DocExtractionSchema = z.object({
       z.object({
         text: z.string().describe("Diagnosis, finding or reason for referral exactly as printed"),
         kind: z.enum(Object.keys(DIAGNOSIS_KINDS) as [keyof typeof DIAGNOSIS_KINDS]).describe("principal/secondary for discharge diagnoses, reason for a referral's reason, finding for an imaging finding, history for past history"),
-        icd10: z.string().nullable().describe("ICD-10-CM code if printed, or if you are confident of it; else null"),
+        icd10: z
+          .string()
+          .nullable()
+          .describe(
+            "ICD-10-CM code exactly as printed next to this diagnosis. If none is printed, the single most specific complete (billable) ICD-10-CM code that matches the diagnosis text exactly, including laterality, type, stage and any required 7th character, only if you are certain of it; else null. Never a code for a different or broader condition.",
+          ),
         file,
         box,
       }),

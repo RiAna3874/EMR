@@ -26,6 +26,8 @@ import { Button, inputCls } from "@/components/form";
 import { IdentityCard } from "@/components/import/review-editor";
 import { PageViewer, type PageDoc, type PageMark } from "@/components/import/page-viewer";
 import { ChangeChip } from "./doc-view";
+import { Icd10Status, useIcd10Checks } from "@/components/icd10";
+import { ICD10_SHAPE, icd10Problem, normalizeIcd10, type Icd10Check } from "@/lib/icd10/format";
 
 type ListKey = "sections" | "measurements" | "diagnoses" | "meds" | "followUps";
 
@@ -68,6 +70,17 @@ export function DocReviewEditor({
   const first = useRef(true);
 
   const a = useMemo(() => assessDocDraft(draft, patient, chart), [draft, patient, chart]);
+  // Every code (read from the document or typed) checked against ICD-10-CM; one going on the
+  // problem list must be a complete code.
+  const codes = useMemo(() => draft.diagnoses.map((d) => d.icd10), [draft.diagnoses]);
+  const checks = useIcd10Checks(codes);
+  const checkOf = (code: string) => (code.trim() ? checks[normalizeIcd10(code)] : undefined);
+  const codeBlockers = draft.diagnoses.flatMap((d) => {
+    // A code that isn't even shaped like one is already a blocker (assessDocDraft).
+    const c = d.addToProblems && ICD10_SHAPE.test(normalizeIcd10(d.icd10)) ? checkOf(d.icd10) : undefined;
+    const problem = c && icd10Problem(c);
+    return problem ? [`${problem} (${d.text})`] : [];
+  });
   const orders = orderChoices(draft.type, chart.orders);
 
   // Autosave the working copy so a reload or a colleague sees the same edits.
@@ -149,7 +162,7 @@ export function DocReviewEditor({
     });
   }
 
-  const blockers = [...a.blockers, ...errors];
+  const blockers = [...a.blockers, ...codeBlockers, ...errors];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -177,7 +190,7 @@ export function DocReviewEditor({
                 Discard
               </Button>
               {canFile ? (
-                <Button onClick={file_} disabled={pending || a.blockers.length > 0} className="px-4 disabled:cursor-not-allowed disabled:opacity-50">
+                <Button onClick={file_} disabled={pending || a.blockers.length + codeBlockers.length > 0} className="px-4 disabled:cursor-not-allowed disabled:opacity-50">
                   {pending ? "Filing…" : "Verify & file"}
                 </Button>
               ) : (
@@ -330,6 +343,7 @@ export function DocReviewEditor({
                     key={d.id}
                     d={d}
                     match={a.problems.get(d.id) ?? null}
+                    check={checkOf(d.icd10)}
                     selected={selected === d.id}
                     onSelect={() => select(d.id)}
                     set={(p) => setItem("diagnoses", d.id, p)}
@@ -408,6 +422,7 @@ const rowBg = (selected: boolean) => (selected ? "bg-accent-soft/70" : "");
 function DiagnosisRow({
   d,
   match,
+  check,
   selected,
   onSelect,
   set,
@@ -416,6 +431,7 @@ function DiagnosisRow({
 }: {
   d: DocDiagnosis;
   match: ProblemMatch;
+  check: Icd10Check | undefined;
   selected: boolean;
   onSelect: () => void;
   set: (p: Partial<DocDiagnosis>) => void;
@@ -466,6 +482,7 @@ function DiagnosisRow({
         )}
         {d.addToProblems && <span className="ml-2 font-semibold text-accent">Will be added{d.icd10 ? "" : " with no code (R69)"}</span>}
       </div>
+      <Icd10Status code={d.icd10} check={check} onPick={readOnly ? undefined : (o) => set({ icd10: o.code })} className="mt-0.5 pl-6" />
     </li>
   );
 }
