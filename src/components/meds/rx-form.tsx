@@ -25,6 +25,7 @@ export function RxForm({
   initial,
   replaces,
   refillRequestId,
+  editsOrderId,
   pending,
   submitLabel = "Add to order basket",
   onSubmit,
@@ -38,6 +39,7 @@ export function RxForm({
   initial?: Partial<RxDetails> & { indication?: string | null; conditionId?: string | null; pharmacyNote?: string | null };
   replaces?: { id: string; drug: string; mode: "reorder" | "modify" };
   refillRequestId?: string;
+  editsOrderId?: string;
   pending: boolean;
   submitLabel?: string;
   onSubmit: (form: FormData) => void;
@@ -88,6 +90,7 @@ export function RxForm({
       <input type="hidden" name="rxClass" value={rxClass} />
       {replaces && <input type="hidden" name="replacesId" value={replaces.id} />}
       {refillRequestId && <input type="hidden" name="refillRequestId" value={refillRequestId} />}
+      {editsOrderId && <input type="hidden" name="editsOrderId" value={editsOrderId} />}
 
       <div className="flex flex-wrap items-center gap-2">
         <OrderTypeIcon type="medication" />

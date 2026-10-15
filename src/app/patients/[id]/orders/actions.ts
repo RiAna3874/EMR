@@ -41,6 +41,9 @@ export async function addOrder(patientId: string, form: FormData) {
   // Off-list medications have no defaults to fall back on.
   if (product?.offList && (!details?.dose || !details.frequency || !details.quantity)) return;
   if (details) {
+    // Changing a prescription already in the basket swaps it out.
+    const edits = str(form, "editsOrderId");
+    if (edits) await db.serviceRequest.deleteMany({ where: { id: edits, patientId, status: "pending", type: "medication" } });
     // One pending prescription per medication being replaced.
     if (details.replacesId) await db.serviceRequest.deleteMany({ where: { patientId, status: "pending", details: { path: ["replacesId"], equals: details.replacesId } } });
     if (details.rxClass !== "print" && !details.pharmacyId) {

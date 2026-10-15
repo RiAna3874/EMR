@@ -253,6 +253,7 @@ model Practitioner {
   orders             ServiceRequest[]
   cosignMeds         MedicationRequest[]  @relation("MedCosigner")
   endedMeds          MedicationRequest[]  @relation("MedEndedBy")
+  continuedMeds      MedicationRequest[]  @relation("MedContinuedBy")
   medsReviewed       Patient[]            @relation("MedsReviewer")
   registeredPatients Patient[]            @relation("RegisteredBy")
   refillsPended      RefillRequest[]      @relation("RefillPendedBy")
@@ -574,6 +575,10 @@ model MedicationRequest {
   cosignerId          String?
   cosigner            Practitioner?      @relation("MedCosigner", fields: [cosignerId], references: [id])
   cosignedAt          DateTime?
+  // Medication reconciliation: a clinician said to keep taking it as it is, without a new prescription.
+  continuedAt         DateTime?
+  continuedById       String?
+  continuedBy         Practitioner?      @relation("MedContinuedBy", fields: [continuedById], references: [id])
 
   dispenses      MedicationDispense[]
   refillRequests RefillRequest[]      @relation("RefillFor")

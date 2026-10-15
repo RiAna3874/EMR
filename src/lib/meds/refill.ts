@@ -1,41 +1,49 @@
-// One-click refill: the same prescription again, exactly as it was written.
+// One-click refill: the same prescription again, exactly as it was written. Works for
+// any medication on the list, outside or over-the-counter ones included: refilling one
+// of those writes it as a prescription from this clinic.
 import type { MedicationRequest } from "@prisma/client";
 import { maxRefills } from "./checks";
-import type { Product } from "./formulary";
-import { daysSupplyFor } from "./sig";
+import { offListProduct, productFor, type Product } from "./formulary";
+import { daysSupplyFor, suggestQuantity } from "./sig";
 import { rxClassFor, type RxDetails } from "./rx";
 
 type RefillSource = Pick<
   MedicationRequest,
-  "id" | "drug" | "status" | "rxClass" | "dose" | "route" | "frequency" | "prn" | "prnReason" | "quantity" | "refills" | "daw" | "patientInstructions" | "pharmacyId"
+  "id" | "drug" | "rxnorm" | "dose" | "route" | "frequency" | "prn" | "prnReason" | "quantity" | "refills" | "daw" | "patientInstructions" | "pharmacyId" | "rxClass"
 >;
 
+// The product to prescribe: the one on the list, else the medication by name, unchecked.
+export const refillProduct = (m: Pick<RefillSource, "drug" | "rxnorm">): Product | undefined => productFor(m) ?? offListProduct(m.drug);
+
 // Why a medication can't be refilled in one click, or null if it can. Anything
-// refused here can still be changed and reordered with Modify.
-export function refillBlocker(m: RefillSource, product: Product | undefined): string | null {
-  if (m.status !== "active" && m.status !== "on_hold") return `${m.drug} isn't a current medication.`;
-  if (m.rxClass === "historical") return `${m.drug} was prescribed elsewhere. Use Prescribe to write it here.`;
-  if (!product) return `${m.drug} can't be found to refill. Use Modify.`;
-  if (!m.dose || !m.frequency || !(m.quantity || product.quantity)) return `${m.drug} is missing a dose, frequency or quantity. Use Modify.`;
+// refused here can still be refilled with changes through Modify.
+export function refillBlocker(m: Pick<RefillSource, "drug" | "rxnorm" | "dose" | "frequency">): string | null {
+  if (!refillProduct(m)) return `${m.drug} can't be found to refill. Use Modify.`;
+  if (!m.dose.trim() || !m.frequency.trim()) return `${m.drug} has no dose or frequency. Use Modify to write them.`;
   return null;
 }
 
+const MONTH = 30;
+
 // The pending prescription a refill puts in the order basket. A course ("for 7 days")
-// is written again as the same course.
+// is written again as the same course. With no quantity on record (often the case for
+// outside medicines), it is worked out for a month at the same sig.
 export function refillDetails(m: RefillSource, product: Product, refillRequestId?: string | null): RxDetails {
   const course = m.frequency.match(/^(.*?)\s+for (\d+) days?$/);
   const frequency = course ? course[1] : m.frequency;
-  const quantity = m.quantity || product.quantity;
+  const durationDays = course ? Number(course[2]) : null;
+  const sig = { dose: m.dose, frequency };
+  const quantity = m.quantity || product.quantity || suggestQuantity(product, sig, durationDays ?? MONTH) || `${durationDays ?? MONTH} days' supply`;
   return {
     dose: m.dose,
     route: m.route || product.route,
     frequency,
     prn: m.prn,
     prnReason: m.prn ? m.prnReason : null,
-    durationDays: course ? Number(course[2]) : null,
+    durationDays,
     quantity,
-    daysSupply: daysSupplyFor(product, { dose: m.dose, frequency }, quantity),
-    refills: Math.max(0, Math.min(maxRefills(product.display), m.refills)),
+    daysSupply: daysSupplyFor(product, sig, quantity) ?? (/days' supply$/.test(quantity) ? (durationDays ?? MONTH) : null),
+    refills: Math.max(0, Math.min(maxRefills(product.display), m.rxClass === "historical" ? 0 : m.refills)),
     rxClass: rxClassFor(m.rxClass),
     pharmacyId: m.pharmacyId,
     daw: m.daw,

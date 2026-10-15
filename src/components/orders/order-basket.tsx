@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import type { OrderPriority } from "@prisma/client";
 import { Button, inputCls } from "@/components/form";
 import type { ProblemOption } from "@/components/problem-picker";
@@ -180,6 +181,11 @@ function BasketItem({ r, problems, disabled, save, onRemove }: { r: BasketRow; p
             <div className="text-[11.5px] text-ink-3">{[r.orderSet && `From ${r.orderSet}`, r.pendedBy && `Pended by ${r.pendedBy}`].filter(Boolean).join(" · ")}</div>
           )}
         </div>
+        {r.editHref && (
+          <Link href={r.editHref} className="rounded border border-line px-2 py-0.5 text-[11.5px] font-medium hover:bg-panel-muted" title={`Change the dose or instructions for ${r.display}`}>
+            Modify
+          </Link>
+        )}
         <button aria-label={`Remove ${r.display}`} title="Remove from basket" disabled={disabled} onClick={onRemove} className="rounded px-1.5 text-[15px] leading-5 text-ink-3 hover:bg-crit-soft hover:text-crit">
           ×
         </button>

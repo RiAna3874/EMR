@@ -22,13 +22,13 @@ import { MedRowActions } from "@/components/meds/med-row-actions";
 import { RefillButton } from "@/components/meds/refill-button";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { refillBlocker } from "@/lib/meds/refill";
-import { productFor } from "@/lib/meds/formulary";
 import { refillMeds } from "../meds/actions";
 import { addDiagnosis, closeVisit, makePrimary, removeDiagnosis, saveFollowUp, saveVisitText } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 const NOTE_STATUS: Record<string, string> = { draft: "Pended, not signed", signed: "Signed", pending_cosign: "Signed, awaiting cosign", addended: "Signed, addended" };
+const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 const linkBtn = "rounded border px-2.5 py-1 text-[12.5px] font-medium";
 
 // One screen for the provider's part of a visit, top to bottom: why they came, vitals,
@@ -64,10 +64,14 @@ export default async function Visit({ params, searchParams }: { params: Promise<
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
     pendingReplacements(id),
   ]);
-  // Refilled or changed today: already on today's prescription above.
-  const prescribedToday = new Set(details.meds.map((m) => m.id));
-  const carryOver = currentMeds.filter((m) => !prescribedToday.has(m.id));
-  const refillable = carryOver.filter((m) => !inBasket.has(m.id) && !refillBlocker(m, productFor(m)));
+  // Written today: already on today's prescription above. Everything else is reconciled
+  // here: refilled, continued or changed.
+  const writtenToday = (m: { authoredAt: Date; rxClass: string }) => m.rxClass !== "historical" && sameDay(m.authoredAt, visit.start);
+  const carryOver = currentMeds.filter((m) => !writtenToday(m));
+  const writtenMeds = details.meds.filter(writtenToday);
+  const reconciled = carryOver.filter((m) => inBasket.has(m.id) || (m.continuedAt && sameDay(m.continuedAt, visit.start))).length;
+  const refillable = carryOver.filter((m) => !inBasket.has(m.id) && !refillBlocker(m));
+  const canReview = can(user.role, "reviewMeds");
   const vt = visitType(visit.visitType);
   const canEdit = can(user.role, "seePatients") && visit.status !== "cancelled" && visit.status !== "no_show";
   const check = { diagnoses: details.diagnoses.length, notes: details.notes, pendingOrders: details.pendingOrders, status: visit.status };
@@ -223,11 +227,11 @@ export default async function Visit({ params, searchParams }: { params: Promise<
             </span>
           }
         >
-          {details.meds.length + details.orders.length === 0 ? (
+          {writtenMeds.length + details.orders.length === 0 ? (
             <Empty>Nothing ordered or prescribed on this day.</Empty>
           ) : (
             <ul>
-              {details.meds.map((m) => (
+              {writtenMeds.map((m) => (
                 <li key={m.id} className="flex gap-3 border-t border-line px-3 py-1.5 first:border-t-0">
                   <span className="w-20 shrink-0 text-[11.5px] text-ink-3">Medicine</span>
                   <span>
@@ -247,7 +251,12 @@ export default async function Visit({ params, searchParams }: { params: Promise<
           {carryOver.length > 0 && (
             <div className="border-t border-line">
               <div className="flex items-center justify-between gap-2 bg-panel-muted/60 px-3 py-1.5">
-                <span className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Current medicines to continue or change</span>
+                <span className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">
+                  Medication reconciliation{" "}
+                  <span className={`font-normal normal-case tracking-normal ${reconciled === carryOver.length ? "text-ok" : ""}`}>
+                    {reconciled} of {carryOver.length} refilled, continued or changed
+                  </span>
+                </span>
                 {canEdit && canPend && refillable.length > 1 && (
                   <RefillButton action={refillMeds.bind(null, id, refillable.map((m) => m.id))} signHref={`/patients/${id}/meds#order-basket`} title="The same prescriptions again, into the order basket">
                     Refill all ({refillable.length})
@@ -262,7 +271,7 @@ export default async function Visit({ params, searchParams }: { params: Promise<
                       {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
                       {m.rxClass === "historical" && <span className="ml-1.5 text-[11px] text-ink-3">outside / OTC</span>}
                     </span>
-                    {canEdit && canPend && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} />}
+                    {canEdit && (canPend || canReview) && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} canPend={canPend} canReview={canReview} />}
                   </li>
                 ))}
               </ul>
