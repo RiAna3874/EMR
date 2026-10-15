@@ -11,9 +11,11 @@ import type { ProblemOption } from "@/components/problem-picker";
 
 export type RxStart = {
   code: string;
-  initial?: Partial<RxDetails> & { indication?: string | null; conditionId?: string | null };
+  initial?: Partial<RxDetails> & { indication?: string | null; conditionId?: string | null; pharmacyNote?: string | null };
   replaces?: { id: string; drug: string; mode: "reorder" | "modify" };
   refillRequestId?: string;
+  // A prescription already in the order basket, being changed: saving swaps it out.
+  editsOrderId?: string;
 };
 
 function search(q: string) {
@@ -143,7 +145,7 @@ export function RxComposer({
       </header>
       {product && start ? (
         <RxForm
-          key={`${start.code}:${start.replaces?.id ?? ""}`}
+          key={`${start.code}:${start.replaces?.id ?? ""}:${start.editsOrderId ?? ""}`}
           product={product}
           ctx={ctx}
           problems={problems}
@@ -152,6 +154,7 @@ export function RxComposer({
           initial={start.initial}
           replaces={start.replaces}
           refillRequestId={start.refillRequestId}
+          editsOrderId={start.editsOrderId}
           pending={pending}
           onCancel={clear}
           onSubmit={(form) =>

@@ -54,3 +54,21 @@ export function RefillButton({
     </span>
   );
 }
+
+// Continue toggles: pressed today it reads "Continued", and pressing it again undoes it.
+export function ContinueButton({ done, action, title }: { done: boolean; action: (on: boolean) => Promise<void>; title?: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      type="button"
+      variant={done ? "primary" : "secondary"}
+      disabled={pending}
+      aria-pressed={done}
+      title={done ? "Continued today. Click to undo." : title}
+      className="py-0.5"
+      onClick={() => start(() => action(!done))}
+    >
+      {done ? "✓ Continued" : "Continue"}
+    </Button>
+  );
+}

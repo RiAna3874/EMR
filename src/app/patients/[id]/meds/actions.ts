@@ -10,7 +10,7 @@ import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { daysSupplyFor } from "@/lib/meds/sig";
 import { refillReview, writePrescription } from "@/lib/meds/server";
-import { refillBlocker, refillDetails } from "@/lib/meds/refill";
+import { refillBlocker, refillDetails, refillProduct } from "@/lib/meds/refill";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { problemLink } from "@/lib/problems/server";
 
@@ -199,6 +199,7 @@ export type RefillResult = { added?: string; error?: string };
 
 // One-click Refill, from any medication list: the same prescription again goes into
 // the order basket for a prescriber to sign, replacing the current one when signed.
+// Outside medicines become this clinic's prescription; a stopped one starts again.
 // An open pharmacy refill request for the medication is answered by it.
 export async function refillMeds(patientId: string, medIds: string[]): Promise<RefillResult> {
   const currentUser = await requirePermission("pendOrders");
@@ -214,8 +215,8 @@ export async function refillMeds(patientId: string, medIds: string[]): Promise<R
       skipped.push(`${m.drug} is already in the order basket.`);
       continue;
     }
-    const product = productFor(m);
-    const blocker = refillBlocker(m, product);
+    const product = refillProduct(m);
+    const blocker = refillBlocker(m);
     if (blocker || !product) {
       skipped.push(blocker ?? "");
       continue;
@@ -232,7 +233,8 @@ export async function refillMeds(patientId: string, medIds: string[]): Promise<R
         orderedById: currentUser.id,
         indication: m.indication,
         conditionId: m.conditionId,
-        instructions: m.pharmacyNote,
+        // An outside medicine's note says where it came from, not anything for the pharmacy.
+        instructions: m.rxClass === "historical" ? null : m.pharmacyNote,
         details: details as Prisma.InputJsonValue,
       },
     });
@@ -241,4 +243,16 @@ export async function refillMeds(patientId: string, medIds: string[]): Promise<R
   refresh(patientId);
   if (!added.length) return { error: skipped.join(" ") || "Nothing to refill." };
   return { added: `${added.join(", ")}${skipped.length ? `. ${skipped.join(" ")}` : ""}` };
+}
+
+// Medication reconciliation: "Continue" keeps a medication going as it is, with no new
+// prescription. It is recorded with who and when, and a medication continued on a
+// visit's day prints on that visit's prescription. Calling it again undoes it.
+export async function continueMed(patientId: string, medId: string, on: boolean) {
+  const currentUser = await requirePermission("reviewMeds");
+  await db.medicationRequest.update({
+    where: { id: medId, patientId, status: { in: ["active", "on_hold"] } },
+    data: on ? { continuedAt: new Date(), continuedById: currentUser.id } : { continuedAt: null, continuedById: null },
+  });
+  refresh(patientId);
 }

@@ -5,7 +5,6 @@ import { can, displayName, needsCosign } from "@/lib/roles";
 import { fmtDate, fmtDateOnly, fmtDateTime, relativeDays } from "@/lib/format";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { fillStatus, interactionsAmong, isControlled } from "@/lib/meds/checks";
-import { productFor } from "@/lib/meds/formulary";
 import { rxClassLabel, type RxDetails } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
 import { Empty } from "@/components/panel";
@@ -19,14 +18,15 @@ import { OutsideMedForm } from "@/components/meds/outside-med-form";
 import { addOrder, removePendingOrder, signOrders, updatePendingOrder } from "../orders/actions";
 import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMedsReviewed, refillMeds, setPreferredPharmacy, setTaking } from "./actions";
 import { RefillButton } from "@/components/meds/refill-button";
-import { refillBlocker } from "@/lib/meds/refill";
+import { refillBlocker, refillProduct } from "@/lib/meds/refill";
+import { MedRowActions } from "@/components/meds/med-row-actions";
 import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
 
 const DAY = 86_400_000;
 
-export default async function Meds({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ rx?: string; modify?: string; refill?: string; history?: string }> }) {
+export default async function Meds({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ rx?: string; modify?: string; refill?: string; edit?: string; history?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
   const currentUser = await requirePermission("viewClinical");
@@ -41,7 +41,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
     db.medicationRequest.findMany({
       where: { patientId: id },
       orderBy: [{ drug: "asc" }],
-      include: { prescriber: true, pharmacy: true, cosigner: true, endedBy: true, dispenses: { orderBy: { filledAt: "desc" }, include: { pharmacy: true } } },
+      include: { prescriber: true, pharmacy: true, cosigner: true, endedBy: true, continuedBy: true, dispenses: { orderBy: { filledAt: "desc" }, include: { pharmacy: true } } },
     }),
     db.refillRequest.findMany({ where: { patientId: id, status: { in: ["requested", "pended"] } }, include: { medication: true, pharmacy: true, pendedBy: true }, orderBy: { requestedAt: "asc" } }),
     db.serviceRequest.findMany({ where: { patientId: id, status: "pending" }, orderBy: { createdAt: "asc" }, include: { orderedBy: true } }),
@@ -72,11 +72,14 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
     }),
   );
 
-  // ?rx=<med> reorders (or with &modify=1 changes) a current medication; &refill= answers a pharmacy request with it.
+  // ?rx=<med>&modify=1 changes a medication (a stopped one starts again); &refill= answers
+  // a pharmacy request with it. ?edit=<order> reopens a prescription waiting in the basket.
   let start: RxStart | undefined;
-  const target = sp.rx ? current.find((m) => m.id === sp.rx) : undefined;
-  const targetProduct = target ? productFor(target) : undefined;
+  const target = sp.rx ? meds.find((m) => m.id === sp.rx) : undefined;
+  const targetProduct = target ? refillProduct(target) : undefined;
+  const editing = sp.edit ? pendingOrders.find((o) => o.id === sp.edit && o.type === "medication") : undefined;
   if (target && targetProduct) {
+    const isCurrent = current.includes(target);
     start = {
       code: `RX:${targetProduct.rxnorm}`,
       initial: {
@@ -86,7 +89,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         prn: target.prn,
         prnReason: target.prnReason,
         quantity: target.quantity ?? undefined,
-        refills: target.refills,
+        refills: target.rxClass === "historical" ? undefined : target.refills,
         daw: target.daw,
         patientInstructions: target.patientInstructions,
         pharmacyId: target.pharmacyId,
@@ -94,13 +97,23 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
         indication: target.indication,
         conditionId: target.conditionId,
       },
-      replaces: { id: target.id, drug: target.drug, mode: sp.modify ? "modify" : "reorder" },
+      replaces: isCurrent ? { id: target.id, drug: target.drug, mode: sp.modify ? "modify" : "reorder" } : undefined,
       refillRequestId: sp.refill,
+    };
+  } else if (editing) {
+    const d = (editing.details ?? {}) as Partial<RxDetails>;
+    const replaced = d.replacesId ? current.find((m) => m.id === d.replacesId) : undefined;
+    start = {
+      code: editing.code,
+      initial: { ...d, indication: editing.indication, conditionId: editing.conditionId, pharmacyNote: editing.instructions },
+      replaces: replaced ? { id: replaced.id, drug: replaced.drug, mode: "modify" } : undefined,
+      refillRequestId: d.refillRequestId ?? undefined,
+      editsOrderId: editing.id,
     };
   }
 
-  // Clinic prescriptions with nothing already in the basket for them.
-  const refillable = current.filter((m) => !pendingFor.has(m.id) && !refillBlocker(m, productFor(m)));
+  // Medications with nothing already in the basket for them.
+  const refillable = current.filter((m) => !pendingFor.has(m.id) && !refillBlocker(m));
 
   const warnings = await pendingOrderWarnings(pendingOrders, ctx);
   const rows = pendingOrders.map((o) => basketRow(o, currentUser.id, warnings.get(o.id)));
@@ -200,7 +213,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
 
         {canPend && (
           <RxComposer
-            key={`${sp.rx ?? ""}:${sp.modify ?? ""}:${sp.refill ?? ""}`}
+            key={`${sp.rx ?? ""}:${sp.modify ?? ""}:${sp.refill ?? ""}:${sp.edit ?? ""}`}
             ctx={ctx}
             problems={problems}
             pharmacies={pharmacies}
@@ -236,7 +249,6 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
               </thead>
               <tbody>
                 {current.map((m) => {
-                  const product = productFor(m);
                   const fs = fillStatus(m.dispenses, m.refills, now);
                   const history = chain(m);
                   const awaitingCosign = m.cosignerId && !m.cosignedAt;
@@ -256,6 +268,12 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                         </div>
                         <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
                         {m.indication && <div className="text-[12px] text-ink-3">For {m.indication}</div>}
+                        {m.continuedAt && (
+                          <div className="text-[12px] text-ok">
+                            Continued {relativeDays(m.continuedAt)}
+                            {m.continuedBy && ` by ${displayName(m.continuedBy)}`}
+                          </div>
+                        )}
                         {m.patientInstructions && <div className="text-[12px] text-ink-3">“{m.patientInstructions}”</div>}
                         {history.length + m.dispenses.length > 0 && (
                           <details className="mt-1 text-[12px]">
@@ -325,31 +343,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                               Cosign
                             </ActionButton>
                           )}
-                          {canPend && product && !pendingRx && (
-                            <>
-                              {outside ? (
-                                <Link href={`?rx=${m.id}#prescribe`} className="rounded border border-line px-2.5 py-0.5 text-[12.5px] font-medium hover:bg-panel-muted">
-                                  Prescribe
-                                </Link>
-                              ) : (
-                                <RefillButton action={refillMeds.bind(null, id, [m.id])} title={`Same prescription of ${m.drug} again`} />
-                              )}
-                              {!outside && (
-                                <Link
-                                  href={`?rx=${m.id}&modify=1#prescribe`}
-                                  title={`Change the dose or instructions for ${m.drug}`}
-                                  className="rounded border border-line px-2.5 py-0.5 text-[12.5px] font-medium hover:bg-panel-muted"
-                                >
-                                  Modify
-                                </Link>
-                              )}
-                            </>
-                          )}
-                          {canPend && pendingRx && (
-                            <Link href={`?rx=${m.id}&modify=1#prescribe`} className="rounded px-2.5 py-0.5 text-[12.5px] font-medium text-accent hover:underline">
-                              Change
-                            </Link>
-                          )}
+                          <MedRowActions patientId={id} med={m} inBasket={!!pendingRx} canPend={canPend} canReview={canReview} onMedsTab />
                           {m.rxClass === "print" && (
                             <Link href={`/print/rx?med=${m.id}`} className="rounded px-2.5 py-1 text-[12.5px] font-medium text-accent hover:underline">
                               Print Rx
@@ -399,6 +393,9 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                     <td className="px-3 py-1.5">
                       {m.endReason ?? (m.status === "completed" ? "Completed" : "Discontinued")}
                       {m.endedBy && ` · ${m.endedBy.name}`}
+                    </td>
+                    <td className="px-3 py-1 text-right">
+                      <MedRowActions patientId={id} med={m} inBasket={pendingFor.has(m.id)} canPend={canPend} canReview={false} onMedsTab />
                     </td>
                   </tr>
                 ))}

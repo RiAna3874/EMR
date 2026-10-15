@@ -67,6 +67,7 @@ export const medSig = (details: unknown) => rxSummary(details as Partial<RxDetai
 
 type BasketSource = {
   id: string;
+  patientId: string;
   type: OrderType;
   display: string;
   priority: OrderPriority;
@@ -96,6 +97,8 @@ export function basketRow(o: BasketSource, viewerId: string, warnings: OrderWarn
     orderSet: o.orderSet,
     pendedBy: o.orderedById === viewerId ? null : o.orderedBy.name,
     warnings,
+    // Prescriptions reopen in the prescription form on the Meds tab.
+    editHref: o.type === "medication" ? `/patients/${o.patientId}/meds?edit=${o.id}#prescribe` : null,
   };
 }
 
@@ -111,6 +114,7 @@ export type BasketRow = {
   takesDate: boolean;
   instructions: string | null;
   sig: string;
+  editHref: string | null;
   orderSet: string | null;
   // Set when someone other than the viewer pended it.
   pendedBy: string | null;

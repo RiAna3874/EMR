@@ -31,6 +31,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
       </>
     );
   const canPend = can(currentUser.role, "pendOrders");
+  const canReview = can(currentUser.role, "reviewMeds");
   const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside, inBasket] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
@@ -91,7 +92,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
                   </div>
                   <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
                 </div>
-                {canPend && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} />}
+                {(canPend || canReview) && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} canPend={canPend} canReview={canReview} />}
               </li>
             ))}
           </ul>

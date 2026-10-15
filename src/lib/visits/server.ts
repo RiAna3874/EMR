@@ -39,7 +39,12 @@ export async function visitDetails(visit: Pick<Encounter, "id" | "patientId" | "
       orderBy: { signedAt: "asc" },
     }),
     db.medicationRequest.findMany({
-      where: { patientId: visit.patientId, rxClass: { not: "historical" }, authoredAt: { gte: from, lt: to }, status: { in: ["active", "on_hold", "completed"] } },
+      // Prescribed that day, or continued as it is that day (medication reconciliation).
+      where: {
+        patientId: visit.patientId,
+        status: { in: ["active", "on_hold", "completed"] },
+        OR: [{ rxClass: { not: "historical" }, authoredAt: { gte: from, lt: to } }, { continuedAt: { gte: from, lt: to } }],
+      },
       orderBy: { authoredAt: "asc" },
     }),
     db.serviceRequest.count({ where: { patientId: visit.patientId, status: "pending" } }),
