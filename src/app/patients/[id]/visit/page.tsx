@@ -18,6 +18,12 @@ import { VisitStatusChip } from "@/components/schedule/status-chip";
 import { DiagnosisForm } from "@/components/visit/diagnosis-form";
 import { AdviceEditor } from "@/components/visit/advice-editor";
 import { FollowUpForm } from "@/components/visit/follow-up-form";
+import { MedRowActions } from "@/components/meds/med-row-actions";
+import { RefillButton } from "@/components/meds/refill-button";
+import { pendingReplacements } from "@/lib/meds/pending";
+import { refillBlocker } from "@/lib/meds/refill";
+import { productFor } from "@/lib/meds/formulary";
+import { refillMeds } from "../meds/actions";
 import { addDiagnosis, closeVisit, makePrimary, removeDiagnosis, saveFollowUp, saveVisitText } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -50,11 +56,18 @@ export default async function Visit({ params, searchParams }: { params: Promise<
     );
   }
 
-  const [details, provider, problems] = await Promise.all([
+  const canPend = can(user.role, "pendOrders");
+  const [details, provider, problems, currentMeds, inBasket] = await Promise.all([
     visitDetails(visit),
     visit.providerId ? db.practitioner.findUnique({ where: { id: visit.providerId } }) : null,
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
+    db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
+    pendingReplacements(id),
   ]);
+  // Refilled or changed today: already on today's prescription above.
+  const prescribedToday = new Set(details.meds.map((m) => m.id));
+  const carryOver = currentMeds.filter((m) => !prescribedToday.has(m.id));
+  const refillable = carryOver.filter((m) => !inBasket.has(m.id) && !refillBlocker(m, productFor(m)));
   const vt = visitType(visit.visitType);
   const canEdit = can(user.role, "seePatients") && visit.status !== "cancelled" && visit.status !== "no_show";
   const check = { diagnoses: details.diagnoses.length, notes: details.notes, pendingOrders: details.pendingOrders, status: visit.status };
@@ -231,11 +244,35 @@ export default async function Visit({ params, searchParams }: { params: Promise<
               ))}
             </ul>
           )}
+          {carryOver.length > 0 && (
+            <div className="border-t border-line">
+              <div className="flex items-center justify-between gap-2 bg-panel-muted/60 px-3 py-1.5">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Current medicines to continue or change</span>
+                {canEdit && canPend && refillable.length > 1 && (
+                  <RefillButton action={refillMeds.bind(null, id, refillable.map((m) => m.id))} signHref={`/patients/${id}/meds#order-basket`} title="The same prescriptions again, into the order basket">
+                    Refill all ({refillable.length})
+                  </RefillButton>
+                )}
+              </div>
+              <ul>
+                {carryOver.map((m) => (
+                  <li key={m.id} className="flex items-start gap-3 border-t border-line px-3 py-1.5 first:border-t-0">
+                    <span className="min-w-0 flex-1">
+                      <span className="font-medium">{m.drug}</span> <span className="text-ink-2">{sigText(m)}</span>
+                      {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
+                      {m.rxClass === "historical" && <span className="ml-1.5 text-[11px] text-ink-3">outside / OTC</span>}
+                    </span>
+                    {canEdit && canPend && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} />}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {details.pendingOrders > 0 && (
             <p className="border-t border-line px-3 py-1.5 text-[12.5px] text-warn">
               {details.pendingOrders} pending {details.pendingOrders === 1 ? "order is" : "orders are"} waiting to be signed.{" "}
-              <Link href={`/patients/${id}/orders`} className="underline">
-                Open orders
+              <Link href={`/patients/${id}/meds#order-basket`} className="underline">
+                Review and sign
               </Link>
             </p>
           )}
