@@ -3,9 +3,11 @@
 // same codes the Orders catalog and the medication list use. Products added for
 // Bangladesh have local codes ("BD-...") and list common local brands as keywords;
 // the clinic can add its own here. Any brand registered with the DGDA can be
-// prescribed from the registry (dgda.ts); anything else is prescribed off-list (below).
+// prescribed from the registry (dgda.ts), and any generic in the world from the generic
+// names list (generics.ts); anything else is prescribed off-list (below).
 
 import { registeredFromCode } from "./dgda";
+import { genericFromCode } from "./generics";
 
 export type Product = {
   rxnorm: string;
@@ -28,7 +30,12 @@ export type Product = {
   offList?: boolean;
   // A brand from Bangladesh's DGDA registry (dgda.ts), by DAR number: no clinic defaults.
   dar?: string;
+  // A generic name from the worldwide list (generics.ts), by its id: no strength or defaults.
+  generic?: string;
 };
+
+// Products with no clinic defaults: the prescriber writes the whole sig.
+export const writesOwnSig = (p: Product | undefined) => !!(p && (p.offList || p.dar || p.generic));
 
 const tab = (p: Omit<Product, "unit" | "countable"> & { unit?: string }): Product => ({ unit: "tablets", countable: true, ...p });
 const cap = (p: Omit<Product, "unit" | "countable">): Product => ({ ...p, unit: "capsules", countable: true });
@@ -131,7 +138,7 @@ const offListFromCode = (code: string | null | undefined) => {
   return raw?.startsWith(OFF_LIST) ? offListProduct(raw.slice(OFF_LIST.length)) : undefined;
 };
 
-const fromCode = (code: string | null | undefined) => offListFromCode(code) ?? registeredFromCode(code);
+const fromCode = (code: string | null | undefined) => offListFromCode(code) ?? registeredFromCode(code) ?? genericFromCode(code);
 
 export const productByCode = new Map(FORMULARY.map((p) => [`RX:${p.rxnorm}`, p]));
 export const productByName = new Map(FORMULARY.map((p) => [p.display.toLowerCase(), p]));

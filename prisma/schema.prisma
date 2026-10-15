@@ -1097,9 +1097,33 @@ model RegisteredDrug {
   @@index([tradeName])
 }
 
-// Each refresh of the DGDA drug list: progress while it runs, then the result.
+// Generic (ingredient) names for the whole world, from RxNorm and Wikidata
+// (src/lib/meds/generics.ts). Replaced whole on each refresh from Admin > Drug list.
+model GenericDrug {
+  // "rx<RxCUI>", or "wd<Wikidata id>" for a medicine RxNorm doesn't have.
+  id         String   @id
+  // The international name where Wikidata has it ("Paracetamol"), else RxNorm's.
+  name       String
+  // US, British and other names, "; "-separated ("acetaminophen; APAP").
+  otherNames String   @default("")
+  bangla     String   @default("")
+  // WHO ATC codes and their class names, "; "-separated.
+  atc        String   @default("")
+  classes    String   @default("")
+  rxcui      String?
+  wikidata   String?
+  // Lowercased names, classes and ATC codes, for search.
+  search     String
+  importedAt DateTime @default(now())
+
+  @@index([name])
+}
+
+// Each refresh of the DGDA drug list or the generic names: progress while it runs, then the result.
 model DrugListImport {
   id         String    @id @default(cuid())
+  // dgda or generics
+  source     String    @default("dgda")
   status     String // running, done, failed
   pages      Int       @default(0)
   count      Int       @default(0)

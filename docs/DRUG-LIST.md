@@ -1,4 +1,4 @@
-# Bangladesh drug list (DGDA registry)
+# Drug lists: Bangladesh brands and worldwide generic names
 
 SAFIX can search every drug product registered with the Directorate General of Drug
 Administration (DGDA): about 39,000 brands, each with its generic and strength, dosage
@@ -35,3 +35,34 @@ npm run drugs:dgda -- --file dgda.json      # load a saved copy instead of downl
 A prescription or medication-list entry for a registered brand stores the brand in its own
 code, `DGDA:<DAR number>:<name>`, so it prints and refills the same way even if the brand
 later leaves the registry or the list is refreshed.
+
+## Worldwide generic names (RxNorm and Wikidata)
+
+The second list on **Admin > Drug list** holds a generic name for every medicine in the
+world, so a generic can be prescribed or recorded even when no Bangladeshi brand of it is
+registered. It joins three free sources:
+
+- **RxNorm ingredients** from the US National Library of Medicine (`rxnav.nlm.nih.gov`,
+  public, no account needed).
+- **Wikidata medicines** (`query.wikidata.org`, CC0 public domain): the international
+  name (paracetamol, salbutamol) shown as the main name, other names (acetaminophen,
+  albuterol), Bangla names, and WHO ATC codes. Medicines RxNorm lacks, such as
+  domperidone, come from Wikidata alone.
+- **ATC class names** from RxNorm's copy of the WHO ATC classification, so a search for a
+  class ("macrolide", "ACE inhibitor", "proton pump") finds the generics in it.
+
+Click **Download from RxNorm and Wikidata** once, then refresh now and then. If the live
+server can't reach those sites, run `npm run drugs:generics` with `DATABASE_URL` pointing
+at the live database. `MERIDIAN_RXNORM_URL`, `MERIDIAN_ATC_URL` and `MERIDIAN_WIKIDATA_URL`
+point the download elsewhere.
+
+A generic picked from this list is stored as `GENERIC:<id>:<name>` and has no strength or
+form: the prescriber writes the dose, frequency and amount.
+
+## What the safety checks know
+
+Neither list has doses or interactions. Those come from the clinic's own reviewed table in
+`src/lib/meds/drugs.ts`, which covers about 220 generics common in Bangladesh: daily
+maximums where one adult limit holds, kidney and older-adult cautions, interactions and
+duplicate therapy. A generic it doesn't know shows "The clinic's safety checks don't know
+… yet".

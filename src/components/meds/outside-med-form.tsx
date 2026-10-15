@@ -7,7 +7,7 @@ import { PickInput } from "@/components/pick-input";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 import { MED_CHOICES, doseSuggestions, medChoiceByName, type PickOption } from "@/lib/meds/dosing";
 import { productFor } from "@/lib/meds/formulary";
-import { useRegisteredDrugs } from "./use-registered-drugs";
+import { useDrugSearch } from "./use-drug-search";
 
 const MED_OPTIONS: PickOption[] = MED_CHOICES.map((m) => ({
   value: m.display,
@@ -18,20 +18,22 @@ const MED_OPTIONS: PickOption[] = MED_CHOICES.map((m) => ({
 // Documents a medication the patient takes that this clinic didn't prescribe.
 // Picking a known medication fills in its usual dose, route and frequency; all
 // of them stay editable, and anything can be typed. Brands registered with the
-// DGDA are offered after the clinic's list, with their company.
+// DGDA and generic names from anywhere are offered after the clinic's list.
 export function OutsideMedForm({ action, problems }: { action: (form: FormData) => void | Promise<void>; problems: ProblemOption[] }) {
   const [drug, setDrug] = useState("");
   const [dose, setDose] = useState("");
   const [route, setRoute] = useState("oral");
   const [frequency, setFrequency] = useState("");
-  // The DGDA code of the registered brand picked, while its name is unchanged.
+  // The code of the DGDA brand or generic picked, while its name is unchanged.
   const [code, setCode] = useState("");
-  const registered = useRegisteredDrugs(drug);
+  const found = useDrugSearch(drug);
   const options = useMemo(() => {
     const known = new Set(MED_OPTIONS.map((o) => o.value.toLowerCase()));
-    const extra = registered.filter((h) => !known.has(h.display.toLowerCase())).map((h) => ({ value: h.display, hint: `${h.company} · DGDA`, keywords: [h.code] }));
+    const extra = found
+      .filter((h) => !known.has(h.display.toLowerCase()) && (known.add(h.display.toLowerCase()), true))
+      .map((h) => ({ value: h.display, hint: [h.detail, h.kind === "dgda" ? "DGDA" : "generic"].filter(Boolean).join(" · "), keywords: [h.code] }));
     return extra.length ? [...MED_OPTIONS, ...extra] : MED_OPTIONS;
-  }, [registered]);
+  }, [found]);
   const product = code ? productFor({ code }) : undefined;
   const suggestions = useMemo(() => doseSuggestions(drug, product), [drug, product]);
 
@@ -61,9 +63,9 @@ export function OutsideMedForm({ action, problems }: { action: (form: FormData) 
             placeholder="Search or type, e.g. fish oil, paracetamol, cetirizine"
             onChange={(v, picked) => {
               setDrug(v);
-              const fromRegistry = picked?.keywords?.find((k) => k.startsWith("RX:DGDA:"));
-              const p = fromRegistry ? productFor({ code: fromRegistry }) : undefined;
-              setCode(p?.display === v ? fromRegistry! : "");
+              const fromList = picked?.keywords?.find((k) => k.startsWith("RX:DGDA:") || k.startsWith("RX:GENERIC:"));
+              const p = fromList ? productFor({ code: fromList }) : undefined;
+              setCode(p?.display === v ? fromList! : "");
               const m = picked && medChoiceByName.get(v.toLowerCase());
               if (p && p.display === v) {
                 setDose(p.dose);
