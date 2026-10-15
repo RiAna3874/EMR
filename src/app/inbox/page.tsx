@@ -25,6 +25,7 @@ import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { rxClassLabel, rxSummary } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
+import { parseSteps } from "@/lib/meds/steps";
 import { refillReview, withoutMed } from "@/lib/meds/server";
 import { ResultForm } from "@/components/meds/med-controls";
 import { approveRefill, cosignPrescription, denyRefill, pendRefill } from "@/app/patients/[id]/meds/actions";
@@ -297,7 +298,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
     if (current) {
       const next = meds[meds.indexOf(current) + 1];
       const ctx = withoutMed(await orderContext(current.patientId), current.drug);
-      const warnings = medWarnings(current.drug, { dose: current.dose, frequency: current.frequency, refills: current.refills }, ctx);
+      const warnings = medWarnings(current.drug, { dose: current.dose, frequency: current.frequency, refills: current.refills, steps: current.steps }, ctx);
       detail = (
         <div>
           <DetailHeader
@@ -308,7 +309,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
           <div className="space-y-2 px-4 py-3">
             <p>
               <span className="font-semibold">Sig: </span>
-              {rxSummary({ dose: current.dose, route: current.route, frequency: current.frequency, prn: current.prn, prnReason: current.prnReason, quantity: current.quantity ?? undefined, daysSupply: current.daysSupply, refills: current.refills, daw: current.daw })}
+              {rxSummary({ dose: current.dose, route: current.route, frequency: current.frequency, prn: current.prn, prnReason: current.prnReason, steps: parseSteps(current.steps), quantity: current.quantity ?? undefined, daysSupply: current.daysSupply, refills: current.refills, daw: current.daw })}
             </p>
             {current.indication && <p className="text-ink-2">For {current.indication}</p>}
             {current.prior && (
@@ -611,7 +612,7 @@ async function RefillDetail({ requestId, next, user }: { requestId: string; next
   const req = await db.refillRequest.findUniqueOrThrow({ where: { id: requestId }, include: { patient: true, pharmacy: true, pendedBy: true } });
   const { med, ctx, protocol, fills } = await refillReview(req.medicationId);
   const product = productFor(med);
-  const warnings = medWarnings(med.drug, { dose: med.dose, frequency: med.frequency, refills: med.refills }, ctx);
+  const warnings = medWarnings(med.drug, { dose: med.dose, frequency: med.frequency, refills: med.refills, steps: med.steps }, ctx);
   const stops = warnings.filter((w) => w.level === "stop");
   const met = protocol.every((p) => p.met);
   const canApprove = can(user.role, "approveRefills");
@@ -634,7 +635,7 @@ async function RefillDetail({ requestId, next, user }: { requestId: string; next
       <div className="grid gap-4 px-4 py-3 lg:grid-cols-2">
         <section className="space-y-1">
           <h3 className="text-[11.5px] font-semibold uppercase tracking-wide text-ink-3">Current prescription</h3>
-          <p className="font-medium">{sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason })}</p>
+          <p className="font-medium">{sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason, steps: med.steps })}</p>
           {med.indication && <p className="text-ink-2">For {med.indication}</p>}
           <p className="text-ink-2">
             {med.quantity} with {med.refills} refill{med.refills === 1 ? "" : "s"}, {fills.refillsLeft} left · prescribed {fmtDate(med.authoredAt)} by {med.prescriber?.name}

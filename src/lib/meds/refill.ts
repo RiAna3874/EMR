@@ -6,11 +6,12 @@ import { maxRefills } from "./checks";
 import { offListProduct, productFor, type Product } from "./formulary";
 import { daysSupplyFor, suggestQuantity } from "./sig";
 import { rxClassFor, type RxDetails } from "./rx";
+import { parseSteps, stepsDaysSupply, stepsQuantity } from "./steps";
 
 type RefillSource = Pick<
   MedicationRequest,
   "id" | "drug" | "rxnorm" | "dose" | "route" | "frequency" | "prn" | "prnReason" | "quantity" | "refills" | "daw" | "patientInstructions" | "pharmacyId" | "rxClass"
->;
+> & { steps?: unknown };
 
 // The product to prescribe: the one on the list, else the medication by name, unchecked.
 export const refillProduct = (m: Pick<RefillSource, "drug" | "rxnorm">): Product | undefined => productFor(m) ?? offListProduct(m.drug);
@@ -29,6 +30,19 @@ const MONTH = 30;
 // is written again as the same course. With no quantity on record (often the case for
 // outside medicines), it is worked out for a month at the same sig.
 export function refillDetails(m: RefillSource, product: Product, refillRequestId?: string | null): RxDetails {
+  // A taper or "followed by" prescription is written again with the same steps.
+  const steps = parseSteps(m.steps);
+  if (steps) {
+    const open = product.days || MONTH;
+    const quantity = m.quantity || stepsQuantity(product, steps, open) || product.quantity;
+    return {
+      ...refillDetails({ ...m, steps: null, frequency: steps[0].frequency, quantity }, product, refillRequestId),
+      dose: steps[0].dose,
+      steps,
+      durationDays: null,
+      daysSupply: stepsDaysSupply(steps, open),
+    };
+  }
   const course = m.frequency.match(/^(.*?)\s+for (\d+) days?$/);
   const frequency = course ? course[1] : m.frequency;
   const durationDays = course ? Number(course[2]) : null;

@@ -5,7 +5,7 @@ import { fmtDate } from "@/lib/format";
 import { visitDetails } from "@/lib/visits/server";
 import { followUpOption, fromDbDate } from "@/lib/visits/follow-up";
 import { bnDate } from "@/lib/visits/bangla";
-import { doseSchedule } from "@/lib/meds/schedule";
+import { doseSchedules, stepWords, type Schedule } from "@/lib/meds/schedule";
 import { productFor } from "@/lib/meds/formulary";
 import { cantText, fasting } from "./server";
 import { prescriptionText, smsLang, smsNumber, type SmsLang } from "./sms";
@@ -23,11 +23,16 @@ export async function visitPrescriptionText(patientId: string, encounterId: stri
   const meds = details.meds
     .filter((m) => m.status !== "completed")
     .map((m) => {
-      const s = doseSchedule({ ...m, start: m.authoredAt }, lang, productFor(m));
+      const { steps, stop } = doseSchedules({ ...m, start: m.authoredAt }, lang, productFor(m));
+      const s = steps[0];
       // "Tab. Napa 500 mg", not "Tab. Napa 500 mg tablet": every character costs in a text.
       const name = s.form ? `${s.form} ${m.drug.replace(/\s+(tablets?|capsules?)$/i, "")}` : m.drug;
       // A dash would make an English text Unicode, which fits less than half as much per SMS.
-      return [name, s.pattern, s.amount, s.how, s.food, s.duration].filter(Boolean).join(lang === "bn" ? " — " : ", ");
+      const sep = lang === "bn" ? " — " : ", ";
+      const sig = (x: Schedule) => [x.pattern, x.amount, x.how, x.food, x.duration].filter(Boolean).join(sep);
+      // A taper or "followed by" prescription: "4+0+0, 5 days; then 3+0+0, 5 days; then stop".
+      const words = stepWords(lang);
+      return [name, steps.map(sig).join(`; ${words.then} `) + (stop ? `; ${words.stop}` : "")].join(sep);
     });
   const tests = details.orders.map((o) => ({ display: o.display, fasting: fasting(o.code) }));
 

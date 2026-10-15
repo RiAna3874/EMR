@@ -1,6 +1,7 @@
 // Sig arithmetic: how often a frequency means per day, how many units a dose
 // is, and from those the quantity to dispense and the days a fill lasts.
 import type { Product } from "./formulary";
+import { parseSteps, stepsFrequency, type DoseStep } from "./steps";
 
 export type Sig = {
   dose: string;
@@ -9,6 +10,8 @@ export type Sig = {
   prn?: boolean;
   prnReason?: string | null;
   durationDays?: number | null;
+  // A taper or "followed by" sig: the dose changes step by step (steps.ts).
+  steps?: DoseStep[] | unknown;
 };
 
 // Doses per day for a frequency phrase; for "as needed" sigs this is the most a
@@ -76,6 +79,11 @@ export function daysSupplyFor(product: Product | undefined, sig: Pick<Sig, "dose
 }
 
 export function sigText(sig: Sig) {
+  const steps = parseSteps(sig.steps);
+  if (steps) {
+    const text = `${steps[0].dose} ${sig.route}, ${stepsFrequency(steps)}`.replace(/\s+,/, ",");
+    return sig.prn && sig.prnReason ? `${text} (as needed for ${sig.prnReason})` : text;
+  }
   // A stored frequency may carry its course ("twice daily for 7 days").
   const course = sig.frequency.match(/^(.*?)\s+for (\d+) days?$/);
   const s = course && !sig.durationDays ? { ...sig, frequency: course[1], durationDays: Number(course[2]) } : sig;

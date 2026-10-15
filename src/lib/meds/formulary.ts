@@ -9,6 +9,7 @@
 import { registeredFromCode } from "./dgda";
 import { genericFromCode } from "./generics";
 import { usualFrequency, usualRoute } from "./drugs";
+import type { DoseStep } from "./steps";
 
 export type Product = {
   rxnorm: string;
@@ -33,6 +34,8 @@ export type Product = {
   dar?: string;
   // A generic name from the worldwide list (generics.ts), by its id: no strength or defaults.
   generic?: string;
+  // A default taper or "followed by" sig (steps.ts), e.g. a loading dose then a daily dose.
+  steps?: DoseStep[];
 };
 
 // Products with no clinic defaults: the prescriber writes the whole sig.
@@ -47,7 +50,7 @@ export const FORMULARY: Product[] = [
   cap({ rxnorm: "723", display: "Amoxicillin 500 mg capsule", keywords: ["antibiotic", "moxacil", "fimoxyl"], unitMg: 500, dose: "500 mg", route: "oral", frequency: "three times daily", days: 10, quantity: "30 capsules", refills: 0 }),
   tab({ rxnorm: "562251", display: "Amoxicillin-clavulanate 875-125 mg tablet", keywords: ["augmentin", "antibiotic"], dose: "1 tablet", route: "oral", frequency: "twice daily", days: 7, quantity: "14 tablets", refills: 0 }),
   cap({ rxnorm: "309114", display: "Cephalexin 500 mg capsule", keywords: ["keflex", "antibiotic"], unitMg: 500, dose: "500 mg", route: "oral", frequency: "four times daily", days: 7, quantity: "28 capsules", refills: 0 }),
-  tab({ rxnorm: "248656", display: "Azithromycin 250 mg tablet", keywords: ["z-pak", "zithromax", "zimax", "azithrocin", "antibiotic"], unitMg: 250, dose: "500 mg day 1, then 250 mg", route: "oral", frequency: "once daily", days: 5, quantity: "6 tablets", refills: 0 }),
+  tab({ rxnorm: "248656", display: "Azithromycin 250 mg tablet", keywords: ["z-pak", "zithromax", "zimax", "azithrocin", "antibiotic"], unitMg: 250, dose: "500 mg day 1, then 250 mg", route: "oral", frequency: "once daily", days: 5, quantity: "6 tablets", refills: 0, steps: [{ dose: "500 mg", frequency: "once daily", days: 1 }, { dose: "250 mg", frequency: "once daily", days: 4 }] }),
   tab({ rxnorm: "197517", display: "Clarithromycin 500 mg tablet", keywords: ["biaxin", "antibiotic"], unitMg: 500, dose: "500 mg", route: "oral", frequency: "twice daily", days: 10, quantity: "20 tablets", refills: 0 }),
   cap({ rxnorm: "1648755", display: "Nitrofurantoin monohydrate 100 mg capsule", keywords: ["macrobid", "uti", "antibiotic"], unitMg: 100, dose: "100 mg", route: "oral", frequency: "twice daily", days: 5, quantity: "10 capsules", refills: 0 }),
   tab({ rxnorm: "198335", display: "Sulfamethoxazole-trimethoprim DS 800-160 mg tablet", keywords: ["bactrim", "smx-tmp", "antibiotic"], dose: "1 tablet", route: "oral", frequency: "twice daily", days: 3, quantity: "6 tablets", refills: 0 }),
@@ -110,6 +113,7 @@ export const FORMULARY: Product[] = [
   cap({ rxnorm: "BD-esomeprazole-20", display: "Esomeprazole 20 mg capsule", keywords: ["ppi", "gastric", "reflux", "maxpro", "sergel", "nexum"], unitMg: 20, dose: "20 mg", route: "oral", frequency: "once daily before breakfast", days: 30, quantity: "30 capsules", refills: 2 }),
   tab({ rxnorm: "BD-pantoprazole-20", display: "Pantoprazole 20 mg tablet", keywords: ["ppi", "gastric", "reflux", "pantonix"], unitMg: 20, dose: "20 mg", route: "oral", frequency: "once daily before breakfast", days: 30, quantity: "30 tablets", refills: 2 }),
   tab({ rxnorm: "BD-fexofenadine-120", display: "Fexofenadine 120 mg tablet", keywords: ["fexo", "telfast", "allergy", "antihistamine", "itch"], unitMg: 120, dose: "120 mg", route: "oral", frequency: "once daily", days: 14, quantity: "14 tablets", refills: 0 }),
+  tab({ rxnorm: "BD-prednisolone-5", display: "Prednisolone 5 mg tablet", keywords: ["cortan", "precodil", "steroid", "taper", "asthma", "copd"], unitMg: 5, dose: "40 mg", route: "oral", frequency: "once daily after breakfast", days: 5, quantity: "40 tablets", refills: 0 }),
   tab({ rxnorm: "BD-cetirizine-10", display: "Cetirizine 10 mg tablet", keywords: ["alatrol", "allergy", "antihistamine", "itch"], unitMg: 10, dose: "10 mg", route: "oral", frequency: "nightly", days: 14, quantity: "14 tablets", refills: 0 }),
   tab({ rxnorm: "BD-montelukast-10", display: "Montelukast 10 mg tablet", keywords: ["monas", "asthma", "allergy"], unitMg: 10, dose: "10 mg", route: "oral", frequency: "nightly", days: 30, quantity: "30 tablets", refills: 2 }),
   tab({ rxnorm: "BD-domperidone-10", display: "Domperidone 10 mg tablet", keywords: ["omidon", "nausea", "vomiting"], unitMg: 10, dose: "10 mg", route: "oral", frequency: "three times daily before meals", days: 5, quantity: "15 tablets", refills: 0 }),

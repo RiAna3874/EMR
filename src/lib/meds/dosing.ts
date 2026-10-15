@@ -204,7 +204,6 @@ export const OUTSIDE_MEDS: OutsideMed[] = [
   { display: "Senna 8.6 mg tablet", dose: "17.2 mg", route: "oral", frequency: "nightly as needed", keywords: ["constipation", "laxative"] },
   { display: "Polyethylene glycol 3350 powder", dose: "17 g", route: "oral", frequency: "once daily as needed", keywords: ["constipation", "laxative", "miralax"] },
   { display: "Ibuprofen 200 mg tablet", dose: "400 mg", route: "oral", frequency: "every 8 hours as needed", keywords: ["nsaid", "pain", "advil"] },
-  { display: "Prednisolone 5 mg tablet", dose: "5 mg", route: "oral", frequency: "once daily in the morning", keywords: ["steroid"] },
   { display: "Salbutamol 100 mcg inhaler", dose: "2 puffs", route: "inhaled", frequency: "every 4 hours as needed", keywords: ["albuterol", "asthma", "ventolin"] },
   { display: "Fluticasone 50 mcg nasal spray", dose: "2 sprays", route: "nasal", frequency: "once daily", keywords: ["allergy", "flonase", "rhinitis"] },
   { display: "Artificial tears eye drops", dose: "1 drop", route: "ophthalmic", frequency: "four times daily as needed", keywords: ["dry eye", "lubricant"] },

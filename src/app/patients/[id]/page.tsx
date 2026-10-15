@@ -11,6 +11,7 @@ import { Empty, Panel } from "@/components/panel";
 import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
 import { sigText } from "@/lib/meds/sig";
+import { StepNow } from "@/components/meds/step-now";
 import { logChartView } from "@/lib/audit/server";
 import { MedRowActions } from "@/components/meds/med-row-actions";
 import { pendingReplacements } from "@/lib/meds/pending";
@@ -91,7 +92,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
                     {m.drug}
                     {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
                   </div>
-                  <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
+                  <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</div>
+                  <StepNow steps={m.steps} written={m.authoredAt} />
                 </div>
                 {(canPend || canReview) && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} canPend={canPend} canReview={canReview} />}
               </li>

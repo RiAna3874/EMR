@@ -4,6 +4,7 @@
 import { bnDigits } from "@/lib/visits/bangla";
 import type { Product } from "./formulary";
 import { unitsPerDose } from "./sig";
+import { parseSteps, totalDays } from "./steps";
 
 export type Lang = "en" | "bn";
 
@@ -16,6 +17,7 @@ export type ScheduleInput = {
   patientInstructions?: string | null;
   start?: Date | null; // when this prescription was written
   end?: Date | null;
+  steps?: unknown; // a taper or "followed by" sig (steps.ts)
 };
 
 export type Schedule = {
@@ -39,7 +41,12 @@ const T = {
   monthly: { en: "once a month", bn: "মাসে ১ বার" },
   alternate: { en: "every other day", bn: "একদিন পর পর" },
   once: { en: "one dose only", bn: "একবার" },
+  then: { en: "then", bn: "তারপর" },
+  stop: { en: "then stop", bn: "তারপর বন্ধ" },
 } as const;
+
+// Between the steps of a taper, and after its last one: "then" / "তারপর", "then stop" / "তারপর বন্ধ".
+export const stepWords = (lang: Lang) => ({ then: T.then[lang], stop: T.stop[lang] });
 
 // Tab./Cap./Syp. as written before the medicine's name.
 export function dosageForm(drug: string, product?: Pick<Product, "unit">): string | null {
@@ -133,5 +140,19 @@ export function doseSchedule(m: ScheduleInput, lang: Lang, product?: Product): S
     how: howText,
     food: food(`${frequency} ${m.patientInstructions ?? ""}`, lang),
     duration,
+  };
+}
+
+// One schedule per step for a taper or "followed by" prescription, else just the one.
+// Each step says how long it lasts; an open-ended last step is "continue". stop is set
+// when the whole course ends, so the prescription can say "then stop".
+export function doseSchedules(m: ScheduleInput, lang: Lang, product?: Product): { steps: Schedule[]; stop: boolean } {
+  const steps = parseSteps(m.steps);
+  if (!steps) return { steps: [doseSchedule(m, lang, product)], stop: false };
+  return {
+    steps: steps.map((s) =>
+      doseSchedule({ ...m, steps: undefined, start: null, end: null, dose: s.dose, frequency: s.days ? `${s.frequency} for ${s.days} days` : s.frequency }, lang, product),
+    ),
+    stop: totalDays(steps) !== null,
   };
 }

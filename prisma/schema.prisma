@@ -543,6 +543,9 @@ model MedicationRequest {
   dose                String
   route               String
   frequency           String
+  // A taper or "followed by" sig: [{ dose, frequency, days }], one after another (src/lib/meds/steps.ts).
+  // dose holds the first step and frequency the whole course in words, for anything that reads only those.
+  steps               Json?
   prn                 Boolean            @default(false)
   prnReason           String?
   indication          String?
