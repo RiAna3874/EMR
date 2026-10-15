@@ -66,7 +66,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<{ 
       id: r.id,
       href: href(r.id),
       patient: r.patient,
-      title: r.display,
+      title: r.correctedAt ? `${r.display} (corrected)` : r.display,
       at: r.issuedAt,
       critical: r.critical,
       sub: withPool(r.unassigned, r.abnormal ? (
@@ -503,6 +503,7 @@ async function ResultDetail({ reportId, next }: { reportId: string; next: string
           <>
             {r.display}
             {r.source === "imported" && <span className="ml-1.5 rounded bg-low-soft px-1 text-[10.5px] font-semibold text-low">IMPORTED</span>}
+            {r.correctedAt && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">CORRECTED</span>}
           </>
         }
         meta={
@@ -562,6 +563,11 @@ async function ResultDetail({ reportId, next }: { reportId: string; next: string
                 <td className={`tabular whitespace-nowrap px-3 py-1.5 text-right font-medium ${flagText(o.flag)}`}>
                   {fmtValue(o)} <span className="font-normal text-ink-3">{unitLabel(o.unit)}</span>
                   <FlagBadge flag={o.flag} />
+                  {o.correctedAt && (
+                    <span title="Corrected after filing. The chart's report shows the earlier value." className="ml-1 inline-block rounded bg-warn-soft px-1 text-[10px] font-bold leading-4 text-warn">
+                      C
+                    </span>
+                  )}
                 </td>
                 <td className="tabular px-3 py-1.5 text-ink-2">{fmtRange(o)}</td>
                 <td className="tabular whitespace-nowrap px-3 py-1.5 text-right text-ink-2">

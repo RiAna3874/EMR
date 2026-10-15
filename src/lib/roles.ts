@@ -28,6 +28,9 @@ export const PERMISSIONS = {
   // Uploading and reviewing an outside report vs. verifying it into the chart.
   importReports: ["physician", "resident", "nurse"],
   fileImports: ["physician", "resident"],
+  // Correcting a filed lab value that was typed or read wrong. Nurses can also correct
+  // values on reports they imported themselves (src/lib/labs/correction.ts).
+  correctResults: ["physician", "resident"],
   // The Media tab: taking and uploading clinical photos and scans, renaming them.
   addMedia: ["physician", "resident", "nurse"],
   // Acknowledging results in the Inbox.
