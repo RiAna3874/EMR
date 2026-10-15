@@ -104,8 +104,8 @@ const patients: PatientDef[] = [
     codeStatus: "DNR/DNI",
     nka: true,
     conditions: [
-      { code: "I48.91", display: "Atrial fibrillation, unspecified", onsetYearsAgo: 4 },
-      { code: "N18.3", display: "Chronic kidney disease, stage 3", onsetYearsAgo: 3 },
+      { code: "I48.91", display: "Unspecified atrial fibrillation", onsetYearsAgo: 4 },
+      { code: "N18.30", display: "Chronic kidney disease, stage 3 unspecified", onsetYearsAgo: 3 },
       { code: "I50.9", display: "Heart failure, unspecified", onsetYearsAgo: 2 },
     ],
     meds: [
@@ -168,10 +168,10 @@ const patients: PatientDef[] = [
     language: "Portuguese",
     allergies: [{ substance: "Codeine", type: "drug", reaction: "Nausea and vomiting", severity: "moderate", verified: false }],
     conditions: [
-      { code: "M81.0", display: "Age-related osteoporosis without current fracture", onsetYearsAgo: 6 },
+      { code: "M81.0", display: "Age-related osteoporosis without current pathological fracture", onsetYearsAgo: 6 },
       { code: "I10", display: "Essential (primary) hypertension", onsetYearsAgo: 20 },
-      { code: "F03.90", display: "Unspecified dementia without behavioral disturbance", onsetYearsAgo: 2 },
-      { code: "S72.001A", display: "Fracture of right femoral neck", onsetYearsAgo: 8, status: "resolved" },
+      { code: "F03.90", display: "Unspecified dementia, unspecified severity, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety", onsetYearsAgo: 2 },
+      { code: "S72.001A", display: "Fracture of unspecified part of neck of right femur, initial encounter for closed fracture", onsetYearsAgo: 8, status: "resolved" },
     ],
     meds: [
       { drug: "Alendronate 70 mg tablet", rxnorm: "904420", dose: "70 mg", route: "oral", frequency: "once weekly", indication: "Osteoporosis" },
@@ -182,7 +182,7 @@ const patients: PatientDef[] = [
     vitals: { sbp: 136, dbp: 74, hr: 68, weightKg: 54, heightCm: 155 },
     labBias: { sodium: 0.97, vitd: 0.6 },
     reasonToday: "Annual wellness visit", visitHour: 10,
-    orders: [{ code: "CPT:77080", status: "signed", daysAgo: 30, indication: "Age-related osteoporosis without current fracture", dueInDays: 14 }],
+    orders: [{ code: "CPT:77080", status: "signed", daysAgo: 30, indication: "Age-related osteoporosis without current pathological fracture", dueInDays: 14 }],
   },
   {
     firstName: "Jonah", lastName: "Kessler", sex: "male", age: 29,
@@ -213,7 +213,7 @@ const patients: PatientDef[] = [
     allergies: [{ substance: "Iodinated contrast media", type: "drug", reaction: "Hives, flushing", severity: "moderate", verified: true }],
     conditions: [
       { code: "J44.9", display: "Chronic obstructive pulmonary disease, unspecified", onsetYearsAgo: 5 },
-      { code: "Z87.891", display: "History of nicotine dependence", onsetYearsAgo: 5 },
+      { code: "Z87.891", display: "Personal history of nicotine dependence", onsetYearsAgo: 5 },
     ],
     meds: [
       { drug: "Tiotropium 18 mcg inhalation capsule", rxnorm: "485032", dose: "18 mcg", route: "inhaled", frequency: "once daily", indication: "COPD" },
@@ -229,7 +229,7 @@ const patients: PatientDef[] = [
     phone: "(555) 266-7720", address: "11 Willow Bend, Lakeview, OR 97630",
     conditions: [
       { code: "M54.50", display: "Low back pain, unspecified", onsetYearsAgo: 1 },
-      { code: "G43.909", display: "Migraine, unspecified, not intractable", onsetYearsAgo: 15 },
+      { code: "G43.909", display: "Migraine, unspecified, not intractable, without status migrainosus", onsetYearsAgo: 15 },
     ],
     meds: [
       { drug: "Sumatriptan 50 mg tablet", rxnorm: "313461", dose: "50 mg", route: "oral", frequency: "at migraine onset, may repeat in 2 h", indication: "Migraine" },
@@ -243,9 +243,9 @@ const patients: PatientDef[] = [
     phone: "(555) 893-4402", address: "1200 Lakeshore Dr, Lakeview, OR 97630",
     nka: true,
     conditions: [
-      { code: "I25.10", display: "Atherosclerotic heart disease of native coronary artery", onsetYearsAgo: 7 },
+      { code: "I25.10", display: "Atherosclerotic heart disease of native coronary artery without angina pectoris", onsetYearsAgo: 7 },
       { code: "E11.65", display: "Type 2 diabetes mellitus with hyperglycemia", onsetYearsAgo: 15 },
-      { code: "N40.0", display: "Benign prostatic hyperplasia", onsetYearsAgo: 6 },
+      { code: "N40.1", display: "Benign prostatic hyperplasia with lower urinary tract symptoms", onsetYearsAgo: 6 },
     ],
     meds: [
       { drug: "Aspirin 81 mg tablet", rxnorm: "243670", dose: "81 mg", route: "oral", frequency: "once daily", indication: "CAD", historical: true },
