@@ -11,6 +11,7 @@ import { OrderTypeIcon, WarningList } from "@/components/orders/order-bits";
 import { doseSuggestions } from "@/lib/meds/dosing";
 import { ProblemPicker, type ProblemOption } from "@/components/problem-picker";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
+import { DrugInfo } from "./drug-info";
 
 export type PharmacyOption = { id: string; name: string; address: string; mailOrder: boolean };
 
@@ -115,6 +116,7 @@ export function RxForm({
         )}
       </div>
       <WarningList warnings={warnings} />
+      <DrugInfo drug={product.display} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Dose">

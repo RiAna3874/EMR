@@ -59,6 +59,26 @@ point the download elsewhere.
 A generic picked from this list is stored as `GENERIC:<id>:<name>` and has no strength or
 form: the prescriber writes the dose, frequency and amount.
 
+## Drug info: indications and doses (openFDA)
+
+Every medication in Prescribe, the outside-medication form and the Meds tab has a
+**Drug info** link. It opens the medicine's official US prescribing label from
+[openFDA](https://open.fda.gov/apis/drug/label/) (public domain; the same labels as
+DailyMed): indications, dose, kidney dosing (pulled together at the top),
+contraindications, warnings, interactions, pregnancy and side effects, with a link
+to the full label on DailyMed.
+
+- The medication name is turned into its generic names in the US labels' terms
+  (paracetamol → acetaminophen, Napa → acetaminophen, co-amoxiclav → amoxicillin and
+  clavulanate); if nothing is found, other names from the worldwide generic list are tried.
+- The best label is a single-ingredient prescription label, the newest one.
+- Labels are kept in the database for 30 days (not found: 7 days), so a medicine is
+  looked up once a month at most. Without a key openFDA allows about 1,000 lookups a
+  day; set `OPENFDA_API_KEY` (free at open.fda.gov) for 120,000.
+- It is reference text, not what the checks run on: label dosing is prose, and the
+  labels are for US products. Medicines not sold in the US (domperidone, for example)
+  have no label; the panel says so.
+
 ## What the safety checks know
 
 Neither list has doses or interactions. Those come from the clinic's own reviewed table in

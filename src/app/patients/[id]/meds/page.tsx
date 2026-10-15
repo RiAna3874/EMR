@@ -20,6 +20,7 @@ import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMe
 import { RefillButton } from "@/components/meds/refill-button";
 import { refillBlocker, refillProduct } from "@/lib/meds/refill";
 import { MedRowActions } from "@/components/meds/med-row-actions";
+import { DrugInfo } from "@/components/meds/drug-info";
 import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
@@ -275,6 +276,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                           </div>
                         )}
                         {m.patientInstructions && <div className="text-[12px] text-ink-3">“{m.patientInstructions}”</div>}
+                        <DrugInfo drug={m.drug} className="mt-0.5" float />
                         {history.length + m.dispenses.length > 0 && (
                           <details className="mt-1 text-[12px]">
                             <summary className="cursor-pointer text-accent">History</summary>

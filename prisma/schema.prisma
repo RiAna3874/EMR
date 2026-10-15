@@ -1132,3 +1132,13 @@ model DrugListImport {
   finishedAt DateTime?
   startedBy  String?
 }
+
+// openFDA prescribing labels already looked up, so Drug info opens instantly the
+// second time and the clinic stays within openFDA's daily limit. Kept 30 days.
+model DrugLabelCache {
+  // The generic names searched, lowercased and "+"-joined ("amoxicillin+clavulanate").
+  key       String   @id
+  found     Boolean
+  label     Json?
+  fetchedAt DateTime @default(now())
+}
