@@ -7,6 +7,7 @@ import { PickInput } from "@/components/pick-input";
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 import { MED_CHOICES, doseSuggestions, medChoiceByName, type PickOption } from "@/lib/meds/dosing";
 import { productFor } from "@/lib/meds/formulary";
+import { usualFrequency, usualRoute } from "@/lib/meds/drugs";
 import { useDrugSearch } from "./use-drug-search";
 import { DrugInfo } from "./drug-info";
 
@@ -76,6 +77,11 @@ export function OutsideMedForm({ action, problems }: { action: (form: FormData) 
                 setDose(m.dose);
                 setRoute(m.route);
                 setFrequency(m.frequency);
+              } else {
+                // Typed by name: injections such as insulin or tirzepatide aren't oral.
+                const r = usualRoute(v);
+                if (r && route === "oral") setRoute(r);
+                if (!frequency) setFrequency(usualFrequency(v));
               }
             }}
           />
