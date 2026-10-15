@@ -3,8 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { searchOrderables } from "@/lib/orders/catalog";
+import { kindLabel, type SearchResult } from "@/lib/search/types";
 
-type Command = { id: string; label: string; hint?: string; group: string; href: string };
+type Command = { id: string; label: string; hint?: string; detail?: string; group: string; href: string };
 
 const GLOBAL: Command[] = [
   { id: "home", label: "My Day", group: "Go to", href: "/", hint: "g h" },
@@ -56,6 +57,7 @@ export function CommandPalette({ clinical, canRegister }: { clinical: boolean; c
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const [patients, setPatients] = useState<Command[]>([]);
+  const [found, setFound] = useState<Command[]>([]);
   const chartId = pathname.match(/^\/patients\/([^/]+)/)?.[1];
 
   useEffect(() => {
@@ -104,6 +106,39 @@ export function CommandPalette({ clinical, canRegister }: { clinical: boolean; c
     };
   }, [q, open]);
 
+  // Inside a chart: the best matches from chart search (labs, notes, imaging, documents...).
+  useEffect(() => {
+    const query = q.trim();
+    if (!open || !chartId || query.length < 2) {
+      setFound([]);
+      return;
+    }
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/patients/${chartId}/search?${new URLSearchParams({ q: query, limit: "6" })}`, { signal: ctl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((r: SearchResult | null) => {
+          if (!r) return;
+          const all: Command = {
+            id: "search-all",
+            label: `Search this chart for “${query}”`,
+            hint: r.total ? `${r.total} found` : "nothing found",
+            group: "In this chart",
+            href: `/patients/${chartId}/search?q=${encodeURIComponent(query)}`,
+          };
+          setFound([
+            ...r.hits.map((h) => ({ id: `f:${h.key}`, label: h.title, hint: kindLabel[h.kind], detail: h.snippet?.text ?? h.subtitle, group: "In this chart", href: h.href })),
+            all,
+          ]);
+        })
+        .catch(() => {});
+    }, 140);
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
+  }, [q, open, chartId]);
+
   const commands = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const match = (c: Command) => !needle || c.label.toLowerCase().includes(needle);
@@ -122,8 +157,8 @@ export function CommandPalette({ clinical, canRegister }: { clinical: boolean; c
         ? searchOrderables(orderQuery, 5).map((o) => ({ id: `o:${o.code}`, label: `Order ${o.display}`, group: "Order", href: `/patients/${chartId}/orders?add=${encodeURIComponent(o.code)}` }))
         : [];
     const global = GLOBAL.filter((c) => (clinical || (c.id !== "inbox" && c.id !== "phrases")) && (canRegister || c.id !== "register"));
-    return [...chart.filter(match), ...patients, ...orders, ...global.filter(match)];
-  }, [q, chartId, patients, clinical, canRegister]);
+    return [...chart.filter(match), ...found, ...patients, ...orders, ...global.filter(match)];
+  }, [q, chartId, patients, found, clinical, canRegister]);
 
   function go(c: Command | undefined) {
     if (!c) return;
@@ -153,7 +188,7 @@ export function CommandPalette({ clinical, canRegister }: { clinical: boolean; c
               setActive((i) => Math.max(i - 1, 0));
             } else if (e.key === "Enter") go(commands[active]);
           }}
-          placeholder={chartId ? "Find a patient, open part of this chart, or type “order cbc”…" : "Find a patient by name, MRN or DOB…"}
+          placeholder={chartId ? "Search this chart, find a patient, or type “order cbc”…" : "Find a patient by name, MRN or DOB…"}
           className="w-full border-b border-line px-4 py-3 text-[15px] outline-none"
           aria-label="Command"
         />
@@ -170,7 +205,10 @@ export function CommandPalette({ clinical, canRegister }: { clinical: boolean; c
                   onClick={() => go(c)}
                   className={`flex w-full items-center justify-between gap-3 px-4 py-1.5 text-left ${i === active ? "bg-accent-soft" : ""}`}
                 >
-                  <span className="truncate">{c.label}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{c.label}</span>
+                    {c.detail && <span className="block truncate text-[11.5px] text-ink-3">{c.detail}</span>}
+                  </span>
                   {c.hint && <span className="shrink-0 font-mono text-[11px] text-ink-3">{c.hint}</span>}
                 </button>
               </li>

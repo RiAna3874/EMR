@@ -69,3 +69,13 @@ body {
     background: white;
   }
 }
+
+/* Words a chart search found, highlighted at the source (src/components/search/search-highlighter.tsx). */
+::highlight(search-hit) {
+  background-color: #fde68a;
+  color: inherit;
+}
+::highlight(search-hit-current) {
+  background-color: #f59e0b;
+  color: #17212b;
+}
