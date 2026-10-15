@@ -6,11 +6,12 @@ import { can } from "@/lib/roles";
 import { brand } from "@/lib/brand";
 import { fmtDateTime } from "@/lib/format";
 import { gatewayProblem } from "@/lib/sms/gateway";
-import { cantText } from "@/lib/sms/server";
+import { cantText, sendStuckTexts } from "@/lib/sms/server";
 import { localNumber, smsLang, smsNumber } from "@/lib/sms/sms";
 import { Empty, Panel } from "@/components/panel";
 import { ActionButton } from "@/components/action-button";
 import { TextComposer } from "@/components/sms/text-composer";
+import { RefreshWhileSending } from "@/components/sms/refresh-while-sending";
 import { SmsStatusChip, SMS_KIND_LABEL } from "@/components/sms/sms-bits";
 import { logChartView } from "@/lib/audit/server";
 import { resendText, setTextsOff } from "./actions";
@@ -23,6 +24,7 @@ export default async function Texts({ params }: { params: Promise<{ id: string }
   const { id } = await params;
   const user = await requirePermission("textPatients");
   await logChartView(id, "Texts");
+  await sendStuckTexts({ patientId: id });
   const [patient, messages] = await Promise.all([
     db.patient.findUnique({ where: { id }, select: { phone: true, preferredLanguage: true, smsOptOutAt: true, smsOptOutById: true } }),
     db.smsMessage.findMany({ where: { patientId: id }, orderBy: { createdAt: "desc" }, take: 200, include: { sentBy: { select: { name: true } } } }),
@@ -38,6 +40,7 @@ export default async function Texts({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="space-y-3 p-4">
+      <RefreshWhileSending sending={messages.some((m) => m.status === "queued")} />
       {problem && <p className="rounded-md border border-warn/40 bg-warn-soft px-3 py-2 text-[12.5px] text-ink">{problem}</p>}
 
       <Panel

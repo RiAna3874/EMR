@@ -70,7 +70,7 @@ export function TextComposer({ patientId, sender, lang, to }: { patientId: strin
             {state.error}
           </span>
         )}
-        {state?.sent && !body && <span className="text-ok">Sent.</span>}
+        {state?.sent && !body && (state.logged ? <span className="text-warn">Saved below. Not sent: no SMS gateway yet.</span> : <span className="text-ok">Sending.</span>)}
         <Button type="submit" disabled={pending || !body.trim()} className="ml-auto">
           {pending ? "Sending…" : "Send text"}
         </Button>

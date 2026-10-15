@@ -7,7 +7,7 @@ import { brand } from "@/lib/brand";
 import { cantText, queueText } from "@/lib/sms/server";
 import { MANUAL_MAX, manualText } from "@/lib/sms/sms";
 
-export type TextState = { sent?: boolean; error?: string } | undefined;
+export type TextState = { sent?: boolean; logged?: boolean; error?: string } | undefined;
 
 const refresh = (patientId: string) => {
   revalidatePath(`/patients/${patientId}/texts`);
@@ -23,9 +23,9 @@ export async function sendPatientText(patientId: string, _prev: TextState, form:
   const p = await db.patient.findUnique({ where: { id: patientId }, select: { phone: true, smsOptOutAt: true } });
   const why = p ? cantText(p) : "Patient not found.";
   if (why) return { error: `Not sent. ${why}` };
-  await queueText(patientId, "manual", manualText(typed, brand.shortName), user.id);
+  const msg = await queueText(patientId, "manual", manualText(typed, brand.shortName), user.id);
   refresh(patientId);
-  return { sent: true };
+  return { sent: true, logged: msg?.status === "logged" };
 }
 
 // Sends a text that failed again, as a new message, to the number now on file.
