@@ -8,6 +8,7 @@ import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 import { MED_CHOICES, doseSuggestions, medChoiceByName, type PickOption } from "@/lib/meds/dosing";
 import { productFor } from "@/lib/meds/formulary";
 import { useDrugSearch } from "./use-drug-search";
+import { DrugInfo } from "./drug-info";
 
 const MED_OPTIONS: PickOption[] = MED_CHOICES.map((m) => ({
   value: m.display,
@@ -96,6 +97,7 @@ export function OutsideMedForm({ action, problems }: { action: (form: FormData) 
           Add
         </Button>
       </div>
+      {drug.trim().length >= 3 && <DrugInfo drug={drug.trim()} className="mt-2" />}
     </form>
   );
 }
