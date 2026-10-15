@@ -52,6 +52,9 @@ export const PERMISSIONS = {
   // Secure chat between staff. Everyone uses it, front desk included (scheduling
   // questions, a patient at the window); a conversation can carry a patient context.
   useChat: ["physician", "resident", "nurse", "front_desk"],
+  // Text messages to the patient's phone (the Texts tab): reading what was sent, typing a
+  // text, and turning texts off when the patient asks. Signing sends its own text.
+  textPatients: ["physician", "resident", "nurse", "front_desk"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

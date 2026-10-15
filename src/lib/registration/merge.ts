@@ -21,6 +21,7 @@ const MOVED = [
   "conversation",
   "encounterDiagnosis",
   "mediaItem",
+  "smsMessage",
 ] as const;
 
 // Contact and coverage details the kept chart takes from the duplicate when it has none.
@@ -44,7 +45,9 @@ export async function mergeCharts(tx: Tx, from: Patient, into: Patient, userId: 
   const allergies = await tx.allergyIntolerance.count({ where: { patientId: into.id } });
   const allergyStatus =
     allergies > 0 ? "has_allergies" : into.allergyStatus === "no_known_allergies" || from.allergyStatus === "no_known_allergies" ? "no_known_allergies" : "not_reviewed";
-  await tx.patient.update({ where: { id: into.id }, data: { ...fill, allergyStatus } });
+  // A patient who asked for no texts on either chart still gets none.
+  const smsOptOut = !into.smsOptOutAt && from.smsOptOutAt ? { smsOptOutAt: from.smsOptOutAt, smsOptOutById: from.smsOptOutById } : {};
+  await tx.patient.update({ where: { id: into.id }, data: { ...fill, ...smsOptOut, allergyStatus } });
   await tx.patient.update({ where: { id: from.id, mergedIntoId: null }, data: { mergedIntoId: into.id, mergedAt: new Date(), mergedById: userId } });
   return counts;
 }
