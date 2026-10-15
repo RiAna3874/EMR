@@ -19,6 +19,11 @@ export type Ingredient = {
   renal?: { stopBelow?: number; cautionBelow?: number; stop?: string; caution?: string };
   olderAdult?: string; // a Beers-style caution at 65 and over
   monitor?: Monitor[];
+  // How it is usually given, when that isn't by mouth: fills the route of a medication
+  // typed by name. A name saying tablet or capsule still means oral (oral semaglutide).
+  route?: string;
+  // Once-weekly injections: the weekly maximum, and whether it is only ever weekly.
+  weekly?: { maxMg: number; only?: boolean };
 };
 
 const BMP: Monitor = { label: "Potassium and creatinine", codes: ["51990-0", "24323-8", "2823-3", "2160-0"], months: 12 };
@@ -44,8 +49,17 @@ export const INGREDIENTS: Ingredient[] = [
     ],
   },
   { id: "glipizide", name: "glipizide", match: /glipizide/i, classes: ["sulfonylurea", "glucose-lowering"], maxDailyMg: 40, olderAdult: "sulfonylureas cause prolonged hypoglycemia." },
-  { id: "insulin", name: "insulin", match: /insulin/i, classes: ["insulin", "glucose-lowering"], monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
-  { id: "semaglutide", name: "semaglutide", match: /semaglutide/i, classes: ["glp1", "glucose-lowering"] },
+  { id: "insulin", name: "insulin", match: /insulin/i, classes: ["insulin", "glucose-lowering"], route: "subcutaneous", monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
+  // GLP-1 (and GIP) drugs: injections under the skin, mostly once a week.
+  { id: "semaglutide", name: "semaglutide", match: /semaglutide|ozempic|wegovy|rybelsus/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous", weekly: { maxMg: 2.4 }, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
+  { id: "tirzepatide", name: "tirzepatide", match: /tirzepatide|mounjaro|zepbound/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous", weekly: { maxMg: 15, only: true }, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
+  { id: "dulaglutide", name: "dulaglutide", match: /dulaglutide|trulicity/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous", weekly: { maxMg: 4.5, only: true }, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
+  { id: "liraglutide", name: "liraglutide", match: /liraglutide|victoza|saxenda/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous", maxDailyMg: 3, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
+  {
+    id: "exenatide", name: "exenatide", match: /exenatide|byetta|bydureon/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous",
+    renal: { stopBelow: 30, cautionBelow: 50, stop: "Exenatide is not recommended", caution: "start exenatide cautiously; watch for kidney injury with vomiting." }, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }],
+  },
+  { id: "lixisenatide", name: "lixisenatide", match: /lixisenatide/i, classes: ["glp1", "glucose-lowering"], route: "subcutaneous", renal: { stopBelow: 15, stop: "Lixisenatide is not recommended" }, monitor: [{ label: "Hemoglobin A1c", codes: ["4548-4"], months: 6 }] },
   { id: "lisinopril", name: "lisinopril", match: /lisinopril/i, classes: ["ace-inhibitor", "potassium-raising"], maxDailyMg: 80, monitor: [BMP] },
   { id: "losartan", name: "losartan", match: /losartan|osartil|angilock/i, classes: ["arb", "potassium-raising"], maxDailyMg: 100, monitor: [BMP] },
   { id: "amlodipine", name: "amlodipine", match: /amlodipine|camlodin|amdocal/i, classes: ["calcium-channel-blocker"], maxDailyMg: 10 },
@@ -124,7 +138,7 @@ export const INGREDIENTS: Ingredient[] = [
   { id: "cloxacillin", name: "cloxacillin", match: /(?<!flu)cloxacillin/i, classes: ["penicillin", "beta-lactam"] },
   { id: "penicillin-v", name: "phenoxymethylpenicillin", match: /phenoxymethylpenicillin|penicillin v\b/i, classes: ["penicillin", "beta-lactam"] },
   { id: "cefuroxime", name: "cefuroxime", match: /cefuroxime/i, classes: ["cephalosporin", "beta-lactam"] },
-  { id: "ceftriaxone", name: "ceftriaxone", match: /ceftriaxone/i, classes: ["cephalosporin", "beta-lactam"] },
+  { id: "ceftriaxone", name: "ceftriaxone", match: /ceftriaxone/i, classes: ["cephalosporin", "beta-lactam"], route: "intravenous or intramuscular" },
   { id: "cefradine", name: "cefradine", match: /cefradine|cephradine/i, classes: ["cephalosporin", "beta-lactam"] },
   { id: "cefpodoxime", name: "cefpodoxime", match: /cefpodoxime/i, classes: ["cephalosporin", "beta-lactam"], maxDailyMg: 800 },
   { id: "erythromycin", name: "erythromycin", match: /erythromycin/i, classes: ["macrolide", "qt-prolonging", "cyp3a4-inhibitor"], maxDailyMg: 4000 },
@@ -141,11 +155,11 @@ export const INGREDIENTS: Ingredient[] = [
   { id: "clindamycin", name: "clindamycin", match: /clindamycin/i, classes: ["lincosamide"] },
   { id: "linezolid", name: "linezolid", match: /linezolid/i, classes: ["oxazolidinone", "serotonergic"], maxDailyMg: 1200, monitor: [{ label: "CBC", codes: ["58410-2", "718-7"], months: 1 }] },
   {
-    id: "gentamicin", name: "gentamicin", match: /gentamicin/i, classes: ["aminoglycoside"],
+    id: "gentamicin", name: "gentamicin", match: /gentamicin/i, classes: ["aminoglycoside"], route: "intravenous or intramuscular",
     renal: { cautionBelow: 60, caution: "aminoglycosides are nephrotoxic; dose by weight and levels." },
   },
   {
-    id: "amikacin", name: "amikacin", match: /amikacin/i, classes: ["aminoglycoside"],
+    id: "amikacin", name: "amikacin", match: /amikacin/i, classes: ["aminoglycoside"], route: "intravenous or intramuscular",
     renal: { cautionBelow: 60, caution: "aminoglycosides are nephrotoxic; dose by weight and levels." },
   },
   { id: "tinidazole", name: "tinidazole", match: /tinidazole/i, classes: ["nitroimidazole"], maxDailyMg: 2000 },
@@ -233,7 +247,7 @@ export const INGREDIENTS: Ingredient[] = [
     id: "edoxaban", name: "edoxaban", match: /edoxaban/i, classes: ["anticoagulant"], maxDailyMg: 60,
     renal: { stopBelow: 15, cautionBelow: 50, stop: "Edoxaban is not recommended", caution: "use 30 mg once daily." },
   },
-  { id: "enoxaparin", name: "enoxaparin", match: /enoxaparin/i, classes: ["anticoagulant"], renal: { cautionBelow: 30, caution: "give enoxaparin once daily at a reduced dose and watch for bleeding." } },
+  { id: "enoxaparin", name: "enoxaparin", match: /enoxaparin/i, classes: ["anticoagulant"], route: "subcutaneous", renal: { cautionBelow: 30, caution: "give enoxaparin once daily at a reduced dose and watch for bleeding." } },
   { id: "heparin", name: "heparin", match: /(?<!low molecular weight )\bheparin\b/i, classes: ["anticoagulant"] },
   { id: "simvastatin", name: "simvastatin", match: /simvastatin/i, classes: ["statin"], maxDailyMg: 80, monitor: [LIPIDS] },
   { id: "fenofibrate", name: "fenofibrate", match: /fenofibrate/i, classes: ["fibrate"], renal: { cautionBelow: 30, caution: "avoid fenofibrate below eGFR 30." } },
@@ -382,6 +396,18 @@ export function ingredientsOf(drug: string): Ingredient[] {
   return INGREDIENTS.filter((i) => i.match.test(drug));
 }
 
+// The route a medication typed by name usually takes: what its name says (tablet,
+// injection), else how its ingredient is given. Undefined: by mouth.
+export function usualRoute(drug: string): string | undefined {
+  if (/\b(tablets?|tabs?|caplets?|capsules?|caps?|syrup|suspension|oral|sachet|rybelsus)\b/i.test(drug)) return "oral";
+  const known = ingredientsOf(drug).find((i) => i.route)?.route;
+  if (/\b(pen|prefilled|injections?|inj|vials?|ampoules?|amps?)\b/i.test(drug)) return known ?? "injection";
+  return known;
+}
+
+// "once weekly" for medications that are only ever given weekly (tirzepatide).
+export const usualFrequency = (drug: string) => (ingredientsOf(drug).some((i) => i.weekly?.only) ? "once weekly" : "");
+
 export const classesOf = (drug: string) => [...new Set(ingredientsOf(drug).flatMap((i) => i.classes))];
 
 // Allergy entries are free text; map common ones to the drug classes they cover.
@@ -428,6 +454,8 @@ export const INTERACTIONS: Interaction[] = [
   { a: "levothyroxine", b: "class:iron", level: "caution", text: "Iron reduces levothyroxine absorption. Take them at least 4 hours apart." },
   { a: "levothyroxine", b: "class:calcium", level: "caution", text: "Calcium reduces levothyroxine absorption. Take them at least 4 hours apart." },
   { a: "class:sulfonylurea", b: "class:insulin", level: "caution", text: "Higher risk of hypoglycemia together." },
+  { a: "class:glp1", b: "class:sulfonylurea", level: "caution", text: "Higher risk of hypoglycemia; consider a lower sulfonylurea dose." },
+  { a: "class:glp1", b: "class:insulin", level: "caution", text: "Higher risk of hypoglycemia; consider a lower insulin dose." },
   { a: "metronidazole", b: "warfarin", level: "stop", text: "Metronidazole sharply raises the INR on warfarin. Avoid, or reduce the warfarin dose and check the INR within a few days." },
   { a: "class:fluoroquinolone", b: "warfarin", level: "caution", text: "Fluoroquinolones can raise the INR on warfarin; check it during the course." },
   { a: "class:fluoroquinolone", b: "class:iron", level: "caution", text: "Iron blocks fluoroquinolone absorption. Take the antibiotic 2 hours before or 6 hours after." },
@@ -495,6 +523,7 @@ export const DUPLICATE_CLASSES: Record<string, string> = {
   thiazide: "thiazide diuretics",
   "loop-diuretic": "loop diuretics",
   "pde5-inhibitor": "PDE5 inhibitors",
+  glp1: "GLP-1 drugs",
 };
 
 const matchesKey = (ing: Ingredient, key: string) => (key.startsWith("class:") ? ing.classes.includes(key.slice(6)) : ing.id === key);

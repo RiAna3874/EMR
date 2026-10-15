@@ -11,6 +11,7 @@
 // without the table. Safety checks find the ingredient by name.
 
 import type { Product } from "./formulary";
+import { usualFrequency, usualRoute } from "./drugs";
 
 export const RXNORM_INGREDIENTS_URL = "https://rxnav.nlm.nih.gov/REST/allconcepts.json?tty=IN";
 export const ATC_CLASSES_URL = "https://rxnav.nlm.nih.gov/REST/rxclass/allClasses.json?classTypes=ATC1-4";
@@ -140,7 +141,7 @@ export function genericFromCode(code: string | null | undefined): Product | unde
   const display = rest.slice(i + 1).replace(/\s+/g, " ").trim();
   if (!id || display.length < 2) return undefined;
   // No strength or form: the prescriber writes the dose, frequency and amount.
-  return { rxnorm: `${PREFIX}${id}:${display}`, display, unit: "", countable: false, dose: "", route: "oral", frequency: "", days: 0, quantity: "", refills: 0, generic: id };
+  return { rxnorm: `${PREFIX}${id}:${display}`, display, unit: "", countable: false, dose: "", route: usualRoute(display) ?? "oral", frequency: usualFrequency(display), days: 0, quantity: "", refills: 0, generic: id };
 }
 
 // Every typed word must appear. Medicines (with an ATC class) come before chemicals,

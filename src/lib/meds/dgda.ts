@@ -8,6 +8,7 @@
 // anywhere without the table. Safety checks find the generic in the display name.
 
 import type { Product } from "./formulary";
+import { usualRoute } from "./drugs";
 
 export const DGDA_URL =
   "https://tr.ocl.dghs.gov.bd/api/orgs/MoHFW/collections/dgda-registered-drugs-valueset/concepts/";
@@ -118,6 +119,8 @@ export function registeredProduct(dar: string, displayName: string): Product | u
   const display = displayName.replace(/\s+/g, " ").trim();
   if (!dar || display.length < 2) return undefined;
   const facts = formFacts(display);
+  // "Injection" alone: the ingredient says how (insulin and GLP-1 drugs under the skin).
+  if (facts.route === "injection") facts.route = usualRoute(display) ?? "injection";
   const unitMg = facts.countable ? singleStrengthMg(display) : undefined;
   const mg = unitMg === undefined ? "" : unitMg < 1 ? `${+(unitMg * 1000).toFixed(3)} mcg` : `${+unitMg.toFixed(3)} mg`;
   return {

@@ -70,6 +70,16 @@ export function medWarnings(drug: string, rx: RxInput | null, ctx: MedCheckConte
         const daily = Math.round(mg * perDay * 100) / 100;
         if (daily > max) out.push({ kind: "dose", level: "stop", text: `Dose: up to ${daily} mg a day exceeds the ${max} mg daily maximum${older && i.maxDailyMgOlder ? " for patients 65 and over" : ""}.` });
       }
+      // Once-weekly injections: a weekly maximum, and a daily frequency is a mistake.
+      if (i.weekly && mg !== null && perDay !== null && ingredients.length === 1) {
+        const isWeekly = perDay <= 1 / 7 + 1e-9;
+        if (i.weekly.only && !isWeekly) {
+          out.push({ kind: "dose", level: "stop", text: `Frequency: ${i.name} is given once a week, not ${rx.frequency}.` });
+        } else if (isWeekly || i.weekly.only) {
+          const weekly = Math.round(mg * perDay * 7 * 100) / 100;
+          if (weekly > i.weekly.maxMg) out.push({ kind: "dose", level: "stop", text: `Dose: ${weekly} mg a week exceeds the ${i.weekly.maxMg} mg weekly maximum.` });
+        }
+      }
     }
   }
 

@@ -8,6 +8,7 @@
 
 import { registeredFromCode } from "./dgda";
 import { genericFromCode } from "./generics";
+import { usualFrequency, usualRoute } from "./drugs";
 
 export type Product = {
   rxnorm: string;
@@ -131,7 +132,7 @@ export const offListName = (name: string) => name.replace(/\s+/g, " ").trim().sl
 export function offListProduct(name: string): Product | undefined {
   const display = offListName(name);
   if (display.length < 2) return undefined;
-  return { rxnorm: `${OFF_LIST}${display}`, display, unit: "", countable: false, dose: "", route: "oral", frequency: "", days: 0, quantity: "", refills: 0, offList: true };
+  return { rxnorm: `${OFF_LIST}${display}`, display, unit: "", countable: false, dose: "", route: usualRoute(display) ?? "oral", frequency: usualFrequency(display), days: 0, quantity: "", refills: 0, offList: true };
 }
 const offListFromCode = (code: string | null | undefined) => {
   const raw = code?.replace(/^RX:/, "");
