@@ -71,8 +71,11 @@ test("registered brands are checked as their generic", () => {
   const w2 = medWarnings(cef3, null, { allergies: [{ substance: "Ceftriaxone", severity: "moderate" }], activeMeds: [], egfr: null });
   assert.ok(w2.some((x) => x.level === "stop" && x.kind === "allergy"));
   // A generic the clinic's check list doesn't know yet says so.
-  const axetW = medWarnings(registeredDisplay(registryRow(axet)!), null, { allergies: [], activeMeds: [], egfr: null });
-  assert.deepEqual(axetW.map((x) => x.kind), ["not checked"]);
+  const tericin = registeredDisplay(registryRow(concept("341-0160-020--tericin", "Tericin", "Injection", "Amphotericin B 50 mg/vial"))!);
+  assert.deepEqual(medWarnings(tericin, null, { allergies: [], activeMeds: [], egfr: null }).map((x) => x.kind), ["not checked"]);
+  // Cefuroxime (Axet) is checked: a penicillin allergy gets the cross-reactivity note.
+  const axetW = medWarnings(registeredDisplay(registryRow(axet)!), null, { allergies: [{ substance: "Penicillin", severity: "rash" }], activeMeds: [], egfr: null });
+  assert.deepEqual(axetW.map((x) => x.kind), ["allergy"]);
 });
 
 test("search puts brands starting with the typed word first", () => {

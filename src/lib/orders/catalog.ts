@@ -2,7 +2,7 @@
 // match the DiagnosticReport codes results file under (seeded and imported), so
 // a result arriving for an ordered panel completes that order.
 import type { OrderType } from "@prisma/client";
-import { FORMULARY, productFor, type Product } from "@/lib/meds/formulary";
+import { FORMULARY, productFor, writesOwnSig, type Product } from "@/lib/meds/formulary";
 import { classesOf } from "@/lib/meds/drugs";
 
 export type MedDefaults = { dose: string; route: string; frequency: string; quantity: string; refills: number };
@@ -81,12 +81,13 @@ function medOrderable(p: Product): Orderable {
 
 export const orderableByCode = new Map(ORDERABLES.map((o) => [o.code, o]));
 
-// As orderableByCode, plus medications prescribed off-list by name or from the DGDA registry.
+// As orderableByCode, plus medications prescribed off-list by name, from the DGDA registry
+// or from the generic names list.
 export function orderableFor(code: string): Orderable | undefined {
   const known = orderableByCode.get(code);
   if (known) return known;
   const p = code.startsWith("RX:") ? productFor({ code }) : undefined;
-  return p && (p.offList || p.dar) ? medOrderable(p) : undefined;
+  return writesOwnSig(p) ? medOrderable(p!) : undefined;
 }
 
 // `problem`: a word in the name of the problem the set is usually for, to link its orders by default.

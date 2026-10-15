@@ -85,10 +85,10 @@ export async function runImport(prisma: PrismaClient, importId: string, fetcher:
 
 // Starts a refresh unless one is already running. Returns the running refresh's id.
 export async function startImport(prisma: PrismaClient, startedBy: string) {
-  const running = await prisma.drugListImport.findFirst({ where: { status: "running" }, orderBy: { startedAt: "desc" } });
+  const running = await prisma.drugListImport.findFirst({ where: { status: "running", source: "dgda" }, orderBy: { startedAt: "desc" } });
   if (running && Date.now() - running.startedAt.getTime() < STALE_MS) return running.id;
   if (running) await prisma.drugListImport.update({ where: { id: running.id }, data: { status: "failed", error: "Stopped before it finished (the server restarted).", finishedAt: new Date() } });
-  const { id } = await prisma.drugListImport.create({ data: { status: "running", startedBy } });
+  const { id } = await prisma.drugListImport.create({ data: { source: "dgda", status: "running", startedBy } });
   // Runs on after the admin page answers; the page shows its progress.
   void runImport(prisma, id);
   return id;

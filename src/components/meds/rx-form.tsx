@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OrderContext } from "@/lib/orders/checks";
-import type { Product } from "@/lib/meds/formulary";
+import { writesOwnSig, type Product } from "@/lib/meds/formulary";
 import { isControlled, maxRefills, medWarnings } from "@/lib/meds/checks";
 import { daysSupplyFor, suggestQuantity } from "@/lib/meds/sig";
 import { RX_CLASSES, rxClassFor, rxSummary, type RxDetails } from "@/lib/meds/rx";
@@ -79,8 +79,8 @@ export function RxForm({
 
   const summary = rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
   const pharmacy = pharmacies.find((p) => p.id === pharmacyId);
-  // An off-list or DGDA-registry medication has no defaults, so the prescriber writes the whole sig.
-  const incomplete = !!(product.offList || product.dar) && (!dose.trim() || !frequency.trim() || !shownQty.trim());
+  // An off-list, DGDA-registry or generic-list medication has no defaults, so the prescriber writes the whole sig.
+  const incomplete = writesOwnSig(product) && (!dose.trim() || !frequency.trim() || !shownQty.trim());
 
   return (
     <form action={onSubmit} className="space-y-3 bg-accent-soft/30 p-3" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
@@ -100,6 +100,11 @@ export function RxForm({
         {product.dar && (
           <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2" title="Registered with the Directorate General of Drug Administration">
             DGDA {product.dar}
+          </span>
+        )}
+        {product.generic && (
+          <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2" title="From the worldwide generic names list (RxNorm and Wikidata)">
+            Generic
           </span>
         )}
         {product.otc && <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2">OTC</span>}

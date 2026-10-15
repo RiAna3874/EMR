@@ -8,7 +8,7 @@ import { orderableByCode, orderableFor, orderSetById, type Orderable } from "@/l
 import { orderDefaults } from "@/lib/orders/defaults";
 import { toLocalDate } from "@/lib/format";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
-import { productFor } from "@/lib/meds/formulary";
+import { productFor, writesOwnSig } from "@/lib/meds/formulary";
 import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
 import { writePrescription } from "@/lib/meds/server";
 import { needsCosign, RX_COSIGNER_REQUIRED } from "@/lib/roles";
@@ -39,8 +39,8 @@ export async function addOrder(patientId: string, form: FormData) {
   const expected = str(form, "expectedAt");
   const product = o.type === "medication" ? productFor({ code: o.code }) : undefined;
   const details = product ? rxFromForm(form, product) : undefined;
-  // Off-list and DGDA-registry medications have no defaults to fall back on.
-  if ((product?.offList || product?.dar) && (!details?.dose || !details.frequency || !details.quantity)) return;
+  // Off-list, DGDA-registry and generic-list medications have no defaults to fall back on.
+  if (writesOwnSig(product) && (!details?.dose || !details.frequency || !details.quantity)) return;
   if (details) {
     // Changing a prescription already in the basket swaps it out.
     const edits = str(form, "editsOrderId");

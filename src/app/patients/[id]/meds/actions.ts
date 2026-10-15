@@ -45,7 +45,7 @@ export async function documentOutsideMed(patientId: string, form: FormData) {
   await requirePermission("reviewMeds");
   const drug = str(form, "drug");
   if (!drug) return;
-  // A brand picked from the DGDA list carries its code; a typed name is looked up.
+  // A DGDA brand or generic picked from the list carries its code; a typed name is looked up.
   const picked = productFor({ code: str(form, "code") });
   const product = picked?.display === drug ? picked : productFor({ drug });
   const link = await problemLink(patientId, str(form, "conditionId"), str(form, "indication"));
