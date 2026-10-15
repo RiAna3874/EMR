@@ -12,6 +12,8 @@ import { FlagBadge, flagText } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
 import { sigText } from "@/lib/meds/sig";
 import { logChartView } from "@/lib/audit/server";
+import { MedRowActions } from "@/components/meds/med-row-actions";
+import { pendingReplacements } from "@/lib/meds/pending";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5"];
 
@@ -28,7 +30,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
         <FrontDeskSummary patientId={id} />
       </>
     );
-  const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside] = await Promise.all([
+  const canPend = can(currentUser.role, "pendOrders");
+  const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside, inBasket] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
     db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
     db.allergyIntolerance.findMany({ where: { patientId: id } }),
@@ -42,6 +45,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
       include: { provider: true },
     }),
     db.clinicalDocument.findMany({ where: { patientId: id }, orderBy: { serviceDate: "desc" }, take: 4 }),
+    pendingReplacements(id),
   ]);
   const vitalRows = pivot(vitals).rows;
   vitalRows.sort((a, b) => vitalCodes.indexOf(a.code) - vitalCodes.indexOf(b.code));
@@ -79,12 +83,15 @@ export default async function Summary({ params, searchParams }: { params: Promis
         ) : (
           <ul>
             {meds.map((m) => (
-              <li key={m.id} className="border-t border-line px-3 py-1.5 first:border-t-0">
-                <div className="font-medium">
-                  {m.drug}
-                  {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
+              <li key={m.id} className="flex flex-wrap items-start gap-2 border-t border-line px-3 py-1.5 first:border-t-0">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">
+                    {m.drug}
+                    {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
+                  </div>
+                  <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
                 </div>
-                <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
+                {canPend && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} />}
               </li>
             ))}
           </ul>

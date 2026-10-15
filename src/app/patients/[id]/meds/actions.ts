@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { PatientTaking } from "@prisma/client";
+import type { PatientTaking, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { needsCosign, RX_COSIGNER_REQUIRED } from "@/lib/roles";
@@ -10,6 +10,8 @@ import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { daysSupplyFor } from "@/lib/meds/sig";
 import { refillReview, writePrescription } from "@/lib/meds/server";
+import { refillBlocker, refillDetails } from "@/lib/meds/refill";
+import { pendingReplacements } from "@/lib/meds/pending";
 import { problemLink } from "@/lib/problems/server";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -191,4 +193,52 @@ export async function denyRefill(requestId: string, next: string, form: FormData
   });
   refresh(req.patientId);
   redirect(next);
+}
+
+export type RefillResult = { added?: string; error?: string };
+
+// One-click Refill, from any medication list: the same prescription again goes into
+// the order basket for a prescriber to sign, replacing the current one when signed.
+// An open pharmacy refill request for the medication is answered by it.
+export async function refillMeds(patientId: string, medIds: string[]): Promise<RefillResult> {
+  const currentUser = await requirePermission("pendOrders");
+  const [meds, inBasket, requests] = await Promise.all([
+    db.medicationRequest.findMany({ where: { id: { in: medIds }, patientId } }),
+    pendingReplacements(patientId),
+    db.refillRequest.findMany({ where: { patientId, medicationId: { in: medIds }, status: { in: ["requested", "pended"] } }, select: { id: true, medicationId: true } }),
+  ]);
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const m of meds.sort((a, b) => a.drug.localeCompare(b.drug))) {
+    if (inBasket.has(m.id)) {
+      skipped.push(`${m.drug} is already in the order basket.`);
+      continue;
+    }
+    const product = productFor(m);
+    const blocker = refillBlocker(m, product);
+    if (blocker || !product) {
+      skipped.push(blocker ?? "");
+      continue;
+    }
+    const details = refillDetails(m, product, requests.find((r) => r.medicationId === m.id)?.id);
+    await db.serviceRequest.create({
+      data: {
+        patientId,
+        type: "medication",
+        code: `RX:${product.rxnorm}`,
+        display: m.drug,
+        status: "pending",
+        priority: "routine",
+        orderedById: currentUser.id,
+        indication: m.indication,
+        conditionId: m.conditionId,
+        instructions: m.pharmacyNote,
+        details: details as Prisma.InputJsonValue,
+      },
+    });
+    added.push(m.drug);
+  }
+  refresh(patientId);
+  if (!added.length) return { error: skipped.join(" ") || "Nothing to refill." };
+  return { added: `${added.join(", ")}${skipped.length ? `. ${skipped.join(" ")}` : ""}` };
 }

@@ -17,7 +17,9 @@ import { RxComposer, type RxStart } from "@/components/meds/rx-composer";
 import { DiscontinueButton, TakingControl } from "@/components/meds/med-controls";
 import { OutsideMedForm } from "@/components/meds/outside-med-form";
 import { addOrder, removePendingOrder, signOrders, updatePendingOrder } from "../orders/actions";
-import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMedsReviewed, setPreferredPharmacy, setTaking } from "./actions";
+import { cosignPrescription, discontinueMed, documentOutsideMed, holdMed, markMedsReviewed, refillMeds, setPreferredPharmacy, setTaking } from "./actions";
+import { RefillButton } from "@/components/meds/refill-button";
+import { refillBlocker } from "@/lib/meds/refill";
 import { logChartView } from "@/lib/audit/server";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +98,9 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
       refillRequestId: sp.refill,
     };
   }
+
+  // Clinic prescriptions with nothing already in the basket for them.
+  const refillable = current.filter((m) => !pendingFor.has(m.id) && !refillBlocker(m, productFor(m)));
 
   const warnings = await pendingOrderWarnings(pendingOrders, ctx);
   const rows = pendingOrders.map((o) => basketRow(o, currentUser.id, warnings.get(o.id)));
@@ -211,11 +216,16 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
             <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">
               Current medications <span className="font-normal text-ink-3">({current.length})</span>
             </h2>
+            {canPend && refillable.length > 1 && (
+              <RefillButton action={refillMeds.bind(null, id, refillable.map((m) => m.id))} variant="primary" title="The same prescriptions again, into the order basket">
+                Refill all ({refillable.length})
+              </RefillButton>
+            )}
           </header>
           {current.length === 0 ? (
             <Empty>No current medications.</Empty>
           ) : (
-            <table className="w-full min-w-[780px]">
+            <table className="w-full min-w-[700px]">
               <thead className="text-left text-[11.5px] text-ink-3">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">Medication and sig</th>
@@ -242,7 +252,7 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                           {isControlled(m.drug) && <Chip tone="crit">Controlled</Chip>}
                           {outside && <Chip tone="muted">OUTSIDE / OTC</Chip>}
                           {awaitingCosign && <Chip tone="accent">AWAITING COSIGN</Chip>}
-                          {pendingRx && <Chip tone="warn">CHANGE PENDING</Chip>}
+                          {pendingRx && <Chip tone="warn">{(pendingRx.details as Partial<RxDetails> | null)?.refill ? "REFILL IN BASKET" : "CHANGE IN BASKET"}</Chip>}
                         </div>
                         <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason })}</div>
                         {m.indication && <div className="text-[12px] text-ink-3">For {m.indication}</div>}
@@ -308,8 +318,8 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                       <td className="px-3 py-2">
                         <TakingControl value={m.taking} note={m.takingNote} action={setTaking.bind(null, id, m.id)} disabled={!canReview} />
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex flex-wrap justify-end gap-1">
+                      <td className="w-px whitespace-nowrap px-3 py-2 text-right">
+                        <div className="flex flex-col items-end gap-1">
                           {awaitingCosign && m.cosignerId === currentUser.id && (
                             <ActionButton variant="primary" action={cosignPrescription.bind(null, m.id, undefined)}>
                               Cosign
@@ -317,15 +327,28 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                           )}
                           {canPend && product && !pendingRx && (
                             <>
-                              <Link href={`?rx=${m.id}#prescribe`} className="rounded border border-line px-2.5 py-1 text-[12.5px] font-medium hover:bg-panel-muted">
-                                {outside ? "Prescribe" : "Reorder"}
-                              </Link>
+                              {outside ? (
+                                <Link href={`?rx=${m.id}#prescribe`} className="rounded border border-line px-2.5 py-0.5 text-[12.5px] font-medium hover:bg-panel-muted">
+                                  Prescribe
+                                </Link>
+                              ) : (
+                                <RefillButton action={refillMeds.bind(null, id, [m.id])} title={`Same prescription of ${m.drug} again`} />
+                              )}
                               {!outside && (
-                                <Link href={`?rx=${m.id}&modify=1#prescribe`} className="rounded border border-transparent px-2.5 py-1 text-[12.5px] font-medium text-ink-2 hover:bg-panel-muted">
+                                <Link
+                                  href={`?rx=${m.id}&modify=1#prescribe`}
+                                  title={`Change the dose or instructions for ${m.drug}`}
+                                  className="rounded border border-line px-2.5 py-0.5 text-[12.5px] font-medium hover:bg-panel-muted"
+                                >
                                   Modify
                                 </Link>
                               )}
                             </>
+                          )}
+                          {canPend && pendingRx && (
+                            <Link href={`?rx=${m.id}&modify=1#prescribe`} className="rounded px-2.5 py-0.5 text-[12.5px] font-medium text-accent hover:underline">
+                              Change
+                            </Link>
                           )}
                           {m.rxClass === "print" && (
                             <Link href={`/print/rx?med=${m.id}`} className="rounded px-2.5 py-1 text-[12.5px] font-medium text-accent hover:underline">

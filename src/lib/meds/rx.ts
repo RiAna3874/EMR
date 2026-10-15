@@ -23,6 +23,8 @@ export type RxDetails = {
   replacesId?: string | null;
   // Written in answer to a pharmacy refill request.
   refillRequestId?: string | null;
+  // Added with one-click Refill: the same prescription again, unchanged.
+  refill?: boolean;
 };
 
 // How a new prescription reaches the patient. The clinic has no electronic link to

@@ -54,7 +54,7 @@ export function OrderBasket({
   }
 
   return (
-    <section className="rounded-md border border-line bg-panel shadow-sm">
+    <section id="order-basket" className="rounded-md border border-line bg-panel shadow-sm">
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
         <h2 className="text-[13px] font-semibold">Order basket</h2>
         {rows.length > 0 && <span className="rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white">{rows.length}</span>}

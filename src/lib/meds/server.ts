@@ -55,7 +55,9 @@ export async function writePrescription(
       where: { id: prior.id },
       data: { status: "replaced", end: now, endedById: rx.prescriberId, endReason: rx.refillRequestId
           ? "Refill approved"
-          : prior.drug !== rx.drug
+          : rx.refill
+            ? "Refilled"
+            : prior.drug !== rx.drug
             ? `Changed to ${rx.drug}`
             : prior.dose !== rx.dose || prior.frequency.replace(/\s+for \d+ days?$/, "") !== rx.frequency
               ? `Changed to ${rx.dose} ${rx.frequency}`

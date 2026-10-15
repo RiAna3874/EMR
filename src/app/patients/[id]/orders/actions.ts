@@ -240,6 +240,7 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
           patientInstructions: d.patientInstructions,
           replacesId: d.replacesId,
           refillRequestId: d.refillRequestId,
+          refill: d.refill,
           patientId,
           drug: p.display,
           rxnorm: p.code.replace(/^RX:/, ""),
