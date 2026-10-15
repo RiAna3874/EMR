@@ -45,6 +45,7 @@ Environment variables:
 | `MERIDIAN_CLINIC_NAME`, `MERIDIAN_CLINIC_ADDRESS`, `MERIDIAN_CLINIC_PHONE`, `MERIDIAN_CLINIC_FAX` | Printed on letters, requisitions and prescriptions |
 | `MERIDIAN_CLINIC_DAYS`, `MERIDIAN_CLINIC_HOURS` | Optional: the standard clinic week for doctors who have no hours of their own, such as `Sun,Mon,Tue,Wed,Thu` and `09:00-17:00` (the defaults). Each doctor's own hours are set at Schedule, Provider templates. |
 | `MERIDIAN_APP_NAME`, `MERIDIAN_APP_FULL_NAME`, `MERIDIAN_LOGO_URL`, `MERIDIAN_ACCENT_COLOR` | Optional: your own product name, logo and color. See [Your own name and look](#your-own-name-and-look). |
+| `MERIDIAN_SMS_PROVIDER`, `MERIDIAN_SMS_API_KEY`, `MERIDIAN_SMS_SENDER_ID` | Optional: texts to patients' phones through a Bangladesh SMS gateway. See [SMS.md](SMS.md). Unset, texts are only kept on the chart. |
 | `ANTHROPIC_API_KEY` | **Leave unset** until you have a signed agreement with Anthropic (see GO-LIVE.md). Without it, the Import tab says import isn't configured and nothing leaves your server. |
 
 Do **not** set `MERIDIAN_DEMO_ACCOUNTS`, `MERIDIAN_EXTRACTION_FIXTURE` or `MERIDIAN_DOCUMENT_FIXTURES` on a live site.

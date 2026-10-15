@@ -13,6 +13,7 @@ import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
 import { writePrescription } from "@/lib/meds/server";
 import { needsCosign, RX_COSIGNER_REQUIRED } from "@/lib/roles";
 import { problemLink } from "@/lib/problems/server";
+import { textSignedOrders } from "@/lib/sms/server";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const PRIORITIES: OrderPriority[] = ["routine", "urgent", "stat"];
@@ -269,6 +270,12 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
       });
     }
   });
+  // One text to the patient's phone saying what was signed. A texting problem never undoes the signing.
+  try {
+    await textSignedOrders(patientId, currentUser.name, pending, currentUser.id);
+  } catch (e) {
+    console.error("Couldn't queue the patient's text", e);
+  }
   revalidatePath(`/patients/${patientId}`, "layout");
   revalidatePath("/inbox");
 }

@@ -264,6 +264,7 @@ model Practitioner {
   scheduleBlocks     ScheduleBlock[]      @relation("BlockProvider")
   encounterEvents    EncounterEvent[]
   visitDiagnoses     EncounterDiagnosis[] @relation("DiagnosisAddedBy")
+  smsSent            SmsMessage[]         @relation("SmsSentBy")
   // Secure chat.
   chatStatus         ChatStatus           @default(available)
   chatStatusNote     String?
@@ -361,6 +362,9 @@ model Patient {
   mergedIntoId             String?
   mergedAt                 DateTime?
   mergedById               String?
+  // Text messages (src/lib/sms). Set when the patient asked not to get texts; null means texts on.
+  smsOptOutAt              DateTime?
+  smsOptOutById            String?
 
   encounters     Encounter[]
   conditions     Condition[]
@@ -378,6 +382,7 @@ model Patient {
   media          MediaItem[]
   conversations  Conversation[]
   visitDiagnoses EncounterDiagnosis[]
+  smsMessages    SmsMessage[]
 
   @@index([lastName, firstName])
   // The duplicate-patient check looks up by date of birth.
@@ -1032,4 +1037,40 @@ model MediaItem {
   enteredInErrorById   String?
 
   @@index([patientId, takenAt])
+}
+
+enum SmsKind {
+  orders // prescriptions and orders just signed
+  refill // a pharmacy refill request approved
+  manual // typed by staff on the Texts tab
+}
+
+enum SmsStatus {
+  queued // waiting on the gateway
+  sent // the gateway accepted it
+  failed
+  logged // no gateway set up: kept on the chart, not sent
+}
+
+// Every text message sent, or meant to be sent, to a patient's phone (src/lib/sms).
+model SmsMessage {
+  id          String        @id @default(cuid())
+  patientId   String
+  patient     Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  // The number it went to, in international digits (8801712345678).
+  to          String
+  body        String
+  kind        SmsKind
+  status      SmsStatus     @default(queued)
+  // The gateway used (bulksmsbd, sslwireless), its reference for the message, and why it failed.
+  provider    String?
+  providerRef String?
+  error       String?
+  sentById    String?
+  sentBy      Practitioner? @relation("SmsSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  sentAt      DateTime?
+
+  @@index([patientId, createdAt])
+  @@index([createdAt])
 }

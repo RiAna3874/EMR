@@ -49,6 +49,7 @@ export const MODEL_LABELS: Record<string, string> = {
   DocumentReference: "Uploaded file",
   ImportJob: "Report import",
   ServiceRequest: "Order",
+  SmsMessage: "Text message",
   ClinicalDocument: "Outside document",
   Conversation: "Secure chat",
   ChatMessage: "Secure chat message",

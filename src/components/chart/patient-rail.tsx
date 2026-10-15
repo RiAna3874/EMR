@@ -61,7 +61,10 @@ export function PatientRail({
           <dt className="text-ink-3">Language</dt>
           <dd>{p.preferredLanguage}</dd>
           <dt className="text-ink-3">Phone</dt>
-          <dd className="tabular">{p.phone}</dd>
+          <dd className="tabular">
+            {p.phone}
+            {p.smsOptOutAt && <span className="ml-1.5 whitespace-nowrap rounded bg-crit-soft px-1 text-[10.5px] font-medium text-crit">No texts</span>}
+          </dd>
         </dl>
         <Link href={`${base}/edit`} className="mt-1 inline-block text-[11.5px] text-accent hover:underline">
           Edit patient details

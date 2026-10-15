@@ -22,6 +22,7 @@ export const chartTabs: { slug: string; label: string; needs?: Permission }[] = 
   { slug: "media", label: "Media", needs: "viewClinical" },
   { slug: "import", label: "Import", needs: "importReports" },
   { slug: "appointments", label: "Appointments" },
+  { slug: "texts", label: "Texts", needs: "textPatients" },
 ];
 
 export function ChartTabs({ patientId, label, counts, allowed }: { patientId: string; label: string; counts: Record<string, number>; allowed: Permission[] }) {

@@ -10,6 +10,7 @@ import { maxRefills, medWarnings } from "@/lib/meds/checks";
 import { productFor } from "@/lib/meds/formulary";
 import { daysSupplyFor } from "@/lib/meds/sig";
 import { refillReview, writePrescription } from "@/lib/meds/server";
+import { textRefillApproved } from "@/lib/sms/server";
 import { refillBlocker, refillDetails, refillProduct } from "@/lib/meds/refill";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { problemLink } from "@/lib/problems/server";
@@ -179,6 +180,11 @@ export async function approveRefill(requestId: string, next: string, form: FormD
       },
     });
   });
+  try {
+    await textRefillApproved(med.patientId, currentUser.name, med.drug, currentUser.id);
+  } catch (e) {
+    console.error("Couldn't queue the patient's text", e);
+  }
   refresh(med.patientId);
   redirect(next);
 }
