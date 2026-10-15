@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { vitalObservations } from "./vitals";
+import { planVitalsEdit, vitalObservations, vitalsFormValues } from "./vitals";
 
 const form = (v: Record<string, string>) => {
   const f = new FormData();
@@ -55,4 +55,31 @@ test("POC glucose is kept in mmol/L under its timing, and flagged for that timin
 test("a glucose in the wrong unit is refused", () => {
   assert.match(file({ glucose: "180" }).error ?? "", /mmol\/L or mg\/dL/);
   assert.match(file({ glucose: "5", glucoseUnit: "mg" }).error ?? "", /mmol\/L or mg\/dL/);
+});
+
+test("editing a set: changed numbers are corrected, cleared boxes removed, new ones added", () => {
+  const filed = file({ sbp: "180", dbp: "80", hr: "72", temp: "98.6", tempUnit: "F", weight: "70", height: "170" }).data.map((d, i) => ({ ...d, id: `o${i}` }));
+  const values = vitalsFormValues(filed);
+  assert.equal(values.temp, "98.6");
+  assert.equal(values.height, "170");
+
+  // Same values back: nothing to do (temperature round-trips through °F).
+  assert.ok(planVitalsEdit(filed, file({ ...values, tempUnit: "F" }).data).empty);
+
+  const plan = planVitalsEdit(filed, file({ ...values, tempUnit: "F", sbp: "118", hr: "", weight: "72", spo2: "97" }).data);
+  assert.deepEqual(plan.change.map((c) => [c.from.code, c.to.valueNum]), [["8480-6", 118], ["29463-7", 72], ["39156-5", 24.9]]);
+  assert.deepEqual(plan.remove.map((r) => r.code), ["8867-4"]);
+  assert.deepEqual(plan.add.map((a) => a.code), ["59408-5"]);
+});
+
+test("every filed temperature converts back to the same °C through the °F edit box", () => {
+  for (let c = 300; c <= 450; c++) {
+    const temp = vitalsFormValues([{ code: "8310-5", valueNum: c / 10 }]).temp;
+    assert.equal(row(file({ temp, tempUnit: "F" }), "8310-5")?.valueNum, c / 10);
+  }
+});
+
+test("a glucose reading is edited under its own timing", () => {
+  const filed = file({ glucose: "6.1", glucoseUnit: "mmol", glucoseTiming: "fasting" }).data;
+  assert.deepEqual([vitalsFormValues(filed).glucose, vitalsFormValues(filed).glucoseTiming], ["6.1", "fasting"]);
 });

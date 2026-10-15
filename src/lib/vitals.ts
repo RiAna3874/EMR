@@ -133,3 +133,49 @@ function rows(entries: Entry[], { patientId, at, encounterId }: { patientId: str
       sortOrder: e.sortOrder,
     }));
 }
+
+export const VITALS_CHANGE_REASONS = ["Typing mistake", "Wrong unit", "Typed in the wrong box", "Other"];
+
+export type VitalRow = ReturnType<typeof rows>[number];
+type StoredVital = { id: string; code: string; valueNum: number | null; unit: string | null; refLow: number | null; refHigh: number | null; flag: Flag | null };
+
+// Fixing one set of vitals: the set as re-entered, compared with what was filed.
+// A changed number is corrected (old value kept), a cleared box removes that reading,
+// a filled-in empty box adds one. BMI follows weight and height on its own.
+export function planVitalsEdit(stored: StoredVital[], next: VitalRow[]) {
+  const nextByCode = new Map(next.map((n) => [n.code, n]));
+  const storedCodes = new Set(stored.map((s) => s.code));
+  const change: { from: StoredVital; to: VitalRow }[] = [];
+  const remove: StoredVital[] = [];
+  for (const s of stored) {
+    const n = nextByCode.get(s.code);
+    if (!n) remove.push(s);
+    else if (n.valueNum !== s.valueNum || n.unit !== s.unit) change.push({ from: s, to: n });
+  }
+  const add = next.filter((n) => !storedCodes.has(n.code));
+  return { change, remove, add, empty: !change.length && !remove.length && !add.length };
+}
+
+const celsiusToFahrenheit = (c: number) => Math.round((c * 9) / 5 * 10 + 320) / 10;
+
+// The vitals entry fields filled in with a filed set, for editing it. Temperature
+// is shown in °F as it's usually typed; it converts back to the same °C.
+export function vitalsFormValues(stored: { code: string; valueNum: number | null }[]) {
+  const v = (code: string) => stored.find((s) => s.code === code)?.valueNum ?? null;
+  const s = (n: number | null) => (n === null ? "" : String(n));
+  const temp = v("8310-5");
+  const glucose = stored.find((o) => GLUCOSE_TIMINGS.some((t) => t.code === o.code) && o.valueNum !== null);
+  return {
+    sbp: s(v("8480-6")),
+    dbp: s(v("8462-4")),
+    hr: s(v("8867-4")),
+    rr: s(v("9279-1")),
+    temp: temp === null ? "" : String(celsiusToFahrenheit(temp)),
+    spo2: s(v("59408-5")),
+    weight: s(v("29463-7")),
+    height: s(v("8302-2")),
+    pain: s(v("72514-3")),
+    glucose: glucose ? s(glucose.valueNum) : "",
+    glucoseTiming: GLUCOSE_TIMINGS.find((t) => t.code === glucose?.code)?.key ?? "random",
+  };
+}
