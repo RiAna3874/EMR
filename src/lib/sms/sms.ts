@@ -136,3 +136,32 @@ export function manualText(body: string, sender: string): string {
 }
 
 export const MANUAL_MAX = 480;
+
+export type RxTextInput = {
+  doctor: string;
+  date: string; // already in the patient's language, e.g. "১৫ অক্টোবর ২০২৬"
+  // One line per medicine, as the printed prescription writes it: "Tab. Napa 500 mg — 1+1+1 — after food — 5 days".
+  meds: string[];
+  tests: { display: string; fasting: boolean }[];
+  nextVisit?: string | null;
+};
+
+// The visit's prescription as one text: medicines with how to take them, tests to do and the
+// next visit. Like the printed copy it leaves out the diagnosis.
+export function prescriptionText(rx: RxTextInput, o: Omit<SmsOptions, "details">): string | null {
+  if (!rx.meds.length && !rx.tests.length) return null;
+  const bn = o.lang === "bn";
+  const lines = [[`${o.sender}: ${bn ? "প্রেসক্রিপশন" : "Prescription"}`, rx.doctor && doctorName(rx.doctor, o.lang), rx.date].filter(Boolean).join(", ")];
+  if (rx.meds.length) {
+    lines.push(bn ? "ওষুধ:" : "Medicines:");
+    rx.meds.forEach((m, i) => lines.push(`${bn ? bnNum(i + 1) : i + 1}. ${m}`));
+  }
+  if (rx.tests.length) {
+    const fasting = rx.tests.some((t) => t.fasting);
+    lines.push(`${bn ? "পরীক্ষা" : "Tests"}: ${rx.tests.map((t) => t.display).join(", ")}`);
+    if (fasting) lines.push(bn ? "খালি পেটে আসবেন (৮-১০ ঘণ্টা না খেয়ে, পানি খাওয়া যাবে)।" : "Come fasting (no food for 8-10 hours, water is fine).");
+  }
+  if (rx.nextVisit) lines.push(`${bn ? "পরবর্তী সাক্ষাৎ" : "Next visit"}: ${rx.nextVisit}`);
+  if (o.clinicPhone) lines.push(bn ? `প্রশ্ন থাকলে: ${o.clinicPhone}` : `Questions: ${o.clinicPhone}`);
+  return lines.join("\n");
+}

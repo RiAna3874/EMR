@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/session";
 import { brand } from "@/lib/brand";
 import { cantText, queueText } from "@/lib/sms/server";
 import { MANUAL_MAX, manualText } from "@/lib/sms/sms";
+import { visitPrescriptionText } from "@/lib/sms/prescription";
 
 export type TextState = { sent?: boolean; logged?: boolean; error?: string } | undefined;
 
@@ -42,4 +43,17 @@ export async function setTextsOff(patientId: string, off: boolean) {
   const user = await requirePermission("textPatients");
   await db.patient.update({ where: { id: patientId }, data: off ? { smsOptOutAt: new Date(), smsOptOutById: user.id } : { smsOptOutAt: null, smsOptOutById: null } });
   revalidatePath(`/patients/${patientId}`, "layout");
+}
+
+// The visit prescription by text, from the Visit tab. Built again here from what's signed now,
+// so the patient gets what the chart says, not what an older page showed.
+export async function sendVisitPrescription(patientId: string, encounterId: string, _prev: TextState): Promise<TextState> {
+  const user = await requirePermission("textPatients");
+  const rx = await visitPrescriptionText(patientId, encounterId);
+  if (!rx) return { error: "Visit not found." };
+  if (rx.blocked || !rx.text) return { error: `Not sent. ${rx.blocked}` };
+  const msg = await queueText(patientId, "prescription", rx.text, user.id);
+  refresh(patientId);
+  revalidatePath(`/patients/${patientId}/visit`);
+  return { sent: true, logged: msg?.status === "logged" };
 }

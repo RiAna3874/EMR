@@ -125,3 +125,32 @@ test("SSL Wireless: SUCCESS is sent; errors and unreachable gateways are failure
   assert.equal(r.ok, false);
   assert.match((r as { error: string }).error, /ECONNREFUSED/);
 });
+
+test("the visit prescription by text: medicines, tests and next visit, no diagnosis", async () => {
+  const { prescriptionText } = await import("./sms");
+  const rx = {
+    doctor: "Dana Chen",
+    date: "১৫ অক্টোবর ২০২৬",
+    meds: ["Tab. Napa 500 mg — ১+১+১ — খাবার পরে — ৫ দিন", "Cap. Seclo 20 mg — ১+০+১ — খাবারের আগে — চলবে"],
+    tests: [{ display: "CBC", fasting: false }, { display: "Lipid panel", fasting: true }],
+    nextVisit: "বুধবার, ২৯ অক্টোবর ২০২৬",
+  };
+  assert.equal(
+    prescriptionText(rx, { lang: "bn", sender: "SAFIX", clinicPhone: "01712-000000" }),
+    [
+      "SAFIX: প্রেসক্রিপশন, ডা. Dana Chen, ১৫ অক্টোবর ২০২৬",
+      "ওষুধ:",
+      "১. Tab. Napa 500 mg — ১+১+১ — খাবার পরে — ৫ দিন",
+      "২. Cap. Seclo 20 mg — ১+০+১ — খাবারের আগে — চলবে",
+      "পরীক্ষা: CBC, Lipid panel",
+      "খালি পেটে আসবেন (৮-১০ ঘণ্টা না খেয়ে, পানি খাওয়া যাবে)।",
+      "পরবর্তী সাক্ষাৎ: বুধবার, ২৯ অক্টোবর ২০২৬",
+      "প্রশ্ন থাকলে: 01712-000000",
+    ].join("\n"),
+  );
+  assert.equal(
+    prescriptionText({ doctor: "Dr. Dana Chen", date: "15 Oct 2026", meds: [], tests: [{ display: "X-ray chest", fasting: false }] }, { lang: "en", sender: "SAFIX" }),
+    "SAFIX: Prescription, Dr. Dana Chen, 15 Oct 2026\nTests: X-ray chest",
+  );
+  assert.equal(prescriptionText({ doctor: "X", date: "d", meds: [], tests: [] }, { lang: "en", sender: "SAFIX" }), null);
+});

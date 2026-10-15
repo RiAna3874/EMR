@@ -23,6 +23,9 @@ import { RefillButton } from "@/components/meds/refill-button";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { refillBlocker } from "@/lib/meds/refill";
 import { refillMeds } from "../meds/actions";
+import { visitPrescriptionText } from "@/lib/sms/prescription";
+import { SendRxText } from "@/components/sms/send-rx-text";
+import { localNumber } from "@/lib/sms/sms";
 import { addDiagnosis, closeVisit, makePrimary, removeDiagnosis, saveFollowUp, saveVisitText } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -82,6 +85,13 @@ export default async function Visit({ params, searchParams }: { params: Promise<
   const usedProblems = new Set(details.diagnoses.map((d) => d.conditionId));
   const followUp = followUpText(visit, fmtDate);
   const printHref = `/print/visit?encounter=${visit.id}`;
+  const canText = can(user.role, "textPatients");
+  const [rxText, rxSent] = canText
+    ? await Promise.all([
+        visitPrescriptionText(id, visit.id),
+        db.smsMessage.findFirst({ where: { patientId: id, kind: "prescription", createdAt: { gte: new Date(new Date(visit.start).setHours(0, 0, 0, 0)) } }, orderBy: { createdAt: "desc" } }),
+      ])
+    : [null, null];
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[1fr_300px]">
@@ -373,6 +383,16 @@ export default async function Visit({ params, searchParams }: { params: Promise<
             <Link href={printHref} className={`${linkBtn} block border-line bg-panel text-center hover:bg-panel-muted`}>
               Print visit prescription
             </Link>
+            {rxText && (
+              <SendRxText
+                patientId={id}
+                encounterId={visit.id}
+                text={rxText.text}
+                to={rxText.to && localNumber(rxText.to)}
+                blocked={rxText.blocked}
+                sentAt={rxSent ? fmtTime(rxSent.createdAt) : null}
+              />
+            )}
             {isOpen && can(user.role, "seePatients") && (
               <form action={closeVisit.bind(null, id, visit.id)}>
                 <Button type="submit" disabled={blockers.length > 0} className="w-full disabled:cursor-not-allowed disabled:opacity-50">

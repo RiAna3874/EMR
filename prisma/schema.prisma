@@ -1043,6 +1043,7 @@ enum SmsKind {
   orders // prescriptions and orders just signed
   refill // a pharmacy refill request approved
   manual // typed by staff on the Texts tab
+  prescription // the visit prescription, sent from the Visit tab
 }
 
 enum SmsStatus {
