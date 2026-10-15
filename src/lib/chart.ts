@@ -1,16 +1,26 @@
 import type { Observation } from "@prisma/client";
 import { db } from "@/lib/db";
+import { GLUCOSE_CODES } from "@/lib/glucose";
 
-// Vitals from the most recent encounter that has any.
+// Vitals from the most recent encounter that has any. A fingerstick glucose is often
+// checked on its own, so it doesn't count as a set: the latest glucose reading is added
+// to the latest set of the other vitals (and may be from a different time). Height alone
+// doesn't make a set either: the vitals form fills it in from last time.
 export async function latestVitals(patientId: string) {
-  const last = await db.observation.findFirst({
-    where: { patientId, category: "vital_signs" },
-    orderBy: { effectiveAt: "desc" },
-    select: { effectiveAt: true },
-  });
-  if (!last) return [];
+  const where = { patientId, category: "vital_signs" as const };
+  const [last, lastGlucose] = await Promise.all([
+    db.observation.findFirst({ where: { ...where, code: { notIn: [...GLUCOSE_CODES, "8302-2"] } }, orderBy: { effectiveAt: "desc" }, select: { effectiveAt: true } }),
+    db.observation.findFirst({ where: { ...where, code: { in: GLUCOSE_CODES } }, orderBy: { effectiveAt: "desc" }, select: { effectiveAt: true } }),
+  ]);
+  if (!last && !lastGlucose) return [];
   return db.observation.findMany({
-    where: { patientId, category: "vital_signs", effectiveAt: last.effectiveAt },
+    where: {
+      ...where,
+      OR: [
+        ...(last ? [{ effectiveAt: last.effectiveAt, code: { notIn: GLUCOSE_CODES } }] : []),
+        ...(lastGlucose ? [{ effectiveAt: lastGlucose.effectiveAt, code: { in: GLUCOSE_CODES } }] : []),
+      ],
+    },
     orderBy: { sortOrder: "asc" },
   });
 }

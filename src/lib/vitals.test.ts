@@ -36,3 +36,23 @@ test("heart and breathing rates are flagged for the child's age", () => {
   // Children's blood pressure isn't flagged against adult limits.
   assert.equal(row(file({ sbp: "95", dbp: "55" }, toddler), "8480-6")?.flag, null);
 });
+
+test("POC glucose is kept in mmol/L under its timing, and flagged for that timing", () => {
+  const fasting = row(file({ glucose: "6.2", glucoseTiming: "fasting" }), "poc-glucose-fasting");
+  assert.equal(fasting?.valueNum, 6.2);
+  assert.equal(fasting?.unit, "mmol/L");
+  assert.equal(fasting?.flag, "H");
+  // The same number 2 hours after a meal is normal.
+  assert.equal(row(file({ glucose: "6.2", glucoseTiming: "post_meal" }), "poc-glucose-post-meal")?.flag, "N");
+  // mg/dL is converted; random is the default timing.
+  const mg = file({ glucose: "180", glucoseUnit: "mg" });
+  assert.equal(row(mg, "poc-glucose-random")?.valueNum, 10);
+  assert.equal(mg.data.filter((d) => d.code.startsWith("poc-glucose")).length, 1);
+  assert.equal(row(file({ glucose: "2.5" }), "poc-glucose-random")?.flag, "LL");
+  assert.equal(row(file({ glucose: "22" }), "poc-glucose-random")?.flag, "HH");
+});
+
+test("a glucose in the wrong unit is refused", () => {
+  assert.match(file({ glucose: "180" }).error ?? "", /mmol\/L or mg\/dL/);
+  assert.match(file({ glucose: "5", glucoseUnit: "mg" }).error ?? "", /mmol\/L or mg\/dL/);
+});
