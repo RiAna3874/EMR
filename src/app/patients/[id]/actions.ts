@@ -7,7 +7,7 @@ import { baseDb, db } from "@/lib/db";
 import { logEvent } from "@/lib/audit/server";
 import { ALLERGY_REMOVAL_REASONS } from "@/components/entered-in-error";
 import { requirePermission } from "@/lib/session";
-import { vitalObservations } from "@/lib/vitals";
+import { planVitalsEdit, VITALS_CHANGE_REASONS, vitalObservations } from "@/lib/vitals";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -19,6 +19,48 @@ export async function recordVitals(patientId: string, form: FormData) {
   if (data.length) await db.observation.createMany({ data });
   revalidatePath(`/patients/${patientId}`, "layout");
   redirect(`/patients/${patientId}/vitals`);
+}
+
+// Fixing a set of vitals that was typed wrong. A changed number keeps its old value in
+// ObservationCorrection and gets a "C" mark; a cleared box marks that one reading entered
+// in error. Nothing is erased: the Vitals tab lists every change, who made it and why.
+export async function correctVitals(patientId: string, at: string, form: FormData) {
+  const user = await requirePermission("recordVitals");
+  const when = new Date(at);
+  const back = (error: string): never => redirect(`/patients/${patientId}/vitals?edit=${encodeURIComponent(at)}&error=${encodeURIComponent(error)}`);
+  if (Number.isNaN(when.getTime())) redirect(`/patients/${patientId}/vitals`);
+  const why = str(form, "reason");
+  const note = str(form, "note");
+  if (!VITALS_CHANGE_REASONS.includes(why)) back("Choose why the vitals are being changed.");
+  if (why === "Other" && !note) back("Say briefly what was wrong.");
+  const reason = (note ? `${why}: ${note}` : why).slice(0, 500);
+
+  const stored = await db.observation.findMany({ where: { patientId, category: "vital_signs", effectiveAt: when } });
+  if (!stored.length) back("These vitals are no longer on the chart.");
+  const { dob } = await db.patient.findUniqueOrThrow({ where: { id: patientId }, select: { dob: true } });
+  const { data, error } = vitalObservations(form, { patientId, at: when, encounterId: stored[0].encounterId ?? undefined, dob });
+  if (error) back(error.replace("Nothing was filed.", "Nothing was changed."));
+  const plan = planVitalsEdit(stored, data);
+  if (plan.empty) back("Nothing was changed: the numbers are the same as before.");
+
+  const now = new Date();
+  await db.$transaction([
+    ...plan.change.flatMap(({ from, to }) => [
+      db.observationCorrection.create({
+        data: { observationId: from.id, valueNum: from.valueNum, unit: from.unit, refLow: from.refLow, refHigh: from.refHigh, flag: from.flag, reason, correctedById: user.id, correctedAt: now },
+      }),
+      db.observation.update({
+        where: { id: from.id },
+        data: { valueNum: to.valueNum, unit: to.unit, refLow: to.refLow, refHigh: to.refHigh, flag: to.flag, correctedAt: now },
+      }),
+    ]),
+    ...(plan.remove.length
+      ? [db.observation.updateMany({ where: { id: { in: plan.remove.map((r) => r.id) } }, data: { enteredInErrorAt: now, enteredInErrorReason: reason, enteredInErrorById: user.id } })]
+      : []),
+    ...(plan.add.length ? [db.observation.createMany({ data: plan.add.map((a) => ({ ...a, correctedAt: now })) })] : []),
+  ]);
+  revalidatePath(`/patients/${patientId}`, "layout");
+  redirect(`/patients/${patientId}/vitals?changed=${encodeURIComponent(at)}`);
 }
 
 export async function addAllergy(patientId: string, form: FormData) {
