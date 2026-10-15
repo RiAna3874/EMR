@@ -4,6 +4,7 @@ export const SMS_KIND_LABEL: Record<SmsKind, string> = {
   orders: "Orders signed",
   refill: "Refill approved",
   manual: "Typed",
+  prescription: "Prescription",
 };
 
 const STATUS: Record<SmsStatus, { label: string; cls: string }> = {

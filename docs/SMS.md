@@ -6,6 +6,8 @@ SAFIX can text a patient's mobile phone:
 - **When a pharmacy refill request is approved.**
 - **Whenever staff type one**, on the chart's **Texts** tab. Quick buttons fill in common texts such as "Your report is ready" in Bangla or English.
 
+- **The whole prescription, when you choose to send it.** On the Visit tab, under **Print visit prescription**, open **Send prescription by SMS**. It shows the exact text first: each medicine with its 1+0+1 schedule, before or after food and how long, the tests to do (with a fasting reminder when one needs it) and the next visit. Click **Send to patient**. Like the printed copy, it leaves out the diagnosis. A long prescription takes several SMS, and the preview says how many.
+
 Patients whose preferred language is Bangla get Bangla texts; everyone else gets English. Texts go to the mobile number on the patient's registration (a landline can't get texts).
 
 Texts say what kind of thing was ordered and how many, never a diagnosis, and by default not the medicine or test names, because anyone holding the phone can read them. To include medicine names with dose and frequency, and test names, set `MERIDIAN_SMS_DETAILS=1`.

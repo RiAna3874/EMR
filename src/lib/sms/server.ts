@@ -73,7 +73,7 @@ export async function deliver(id: string) {
   if (!res.ok) console.error(`SMS ${id} not sent: ${res.error}`);
 }
 
-const fasting = (code: string) => /fasting/i.test(`${orderableByCode.get(code)?.display ?? ""} ${orderableByCode.get(code)?.specimen ?? ""}`);
+export const fasting = (code: string) => /fasting/i.test(`${orderableByCode.get(code)?.display ?? ""} ${orderableByCode.get(code)?.specimen ?? ""}`);
 
 // One text for everything signed together: prescriptions and orders.
 export async function textSignedOrders(patientId: string, prescriber: string, signed: ServiceRequest[], sentById: string) {
