@@ -1074,3 +1074,36 @@ model SmsMessage {
   @@index([patientId, createdAt])
   @@index([createdAt])
 }
+
+// Bangladesh's registered drug products, copied from the DGDA registry on the DGHS
+// national terminology server (src/lib/meds/dgda.ts). Replaced whole on each refresh
+// from Admin > Drug list; prescriptions keep the brand in their own code, not a link here.
+model RegisteredDrug {
+  // The registry's concept id, "{DAR number}--{trade-name-slug}".
+  id          String   @id
+  darNumber   String
+  tradeName   String
+  company     String
+  dosageForm  String
+  // Generic and strength as the registry writes them: "Amphotericin B 50 mg/vial".
+  generic     String
+  // Active ingredients from the registry's ICD-11 mappings, "; "-separated.
+  ingredients String   @default("")
+  // Lowercased brand, generic, ingredients, company and form, for search.
+  search      String
+  importedAt  DateTime @default(now())
+
+  @@index([tradeName])
+}
+
+// Each refresh of the DGDA drug list: progress while it runs, then the result.
+model DrugListImport {
+  id         String    @id @default(cuid())
+  status     String // running, done, failed
+  pages      Int       @default(0)
+  count      Int       @default(0)
+  error      String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  startedBy  String?
+}

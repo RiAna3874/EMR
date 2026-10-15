@@ -39,8 +39,8 @@ export async function addOrder(patientId: string, form: FormData) {
   const expected = str(form, "expectedAt");
   const product = o.type === "medication" ? productFor({ code: o.code }) : undefined;
   const details = product ? rxFromForm(form, product) : undefined;
-  // Off-list medications have no defaults to fall back on.
-  if (product?.offList && (!details?.dose || !details.frequency || !details.quantity)) return;
+  // Off-list and DGDA-registry medications have no defaults to fall back on.
+  if ((product?.offList || product?.dar) && (!details?.dose || !details.frequency || !details.quantity)) return;
   if (details) {
     // Changing a prescription already in the basket swaps it out.
     const edits = str(form, "editsOrderId");

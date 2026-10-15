@@ -81,12 +81,12 @@ function medOrderable(p: Product): Orderable {
 
 export const orderableByCode = new Map(ORDERABLES.map((o) => [o.code, o]));
 
-// As orderableByCode, plus medications prescribed off-list by name.
+// As orderableByCode, plus medications prescribed off-list by name or from the DGDA registry.
 export function orderableFor(code: string): Orderable | undefined {
   const known = orderableByCode.get(code);
   if (known) return known;
-  const offList = code.startsWith("RX:") ? productFor({ code }) : undefined;
-  return offList?.offList ? medOrderable(offList) : undefined;
+  const p = code.startsWith("RX:") ? productFor({ code }) : undefined;
+  return p && (p.offList || p.dar) ? medOrderable(p) : undefined;
 }
 
 // `problem`: a word in the name of the problem the set is usually for, to link its orders by default.

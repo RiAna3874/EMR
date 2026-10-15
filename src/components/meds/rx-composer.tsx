@@ -7,6 +7,7 @@ import { FORMULARY, offListProduct, productFor, type Product } from "@/lib/meds/
 import { isControlled, medWarnings } from "@/lib/meds/checks";
 import type { RxDetails } from "@/lib/meds/rx";
 import { RxForm, type PharmacyOption } from "./rx-form";
+import { useRegisteredDrugs } from "./use-registered-drugs";
 import type { ProblemOption } from "@/components/problem-picker";
 
 export type RxStart = {
@@ -49,7 +50,18 @@ export function RxComposer({
   const [start, setStart] = useState<RxStart | undefined>(initialStart);
   const [pending, startTransition] = useTransition();
   const searchRef = useRef<HTMLInputElement>(null);
-  const results = useMemo(() => search(q), [q]);
+  const listed = useMemo(() => search(q), [q]);
+  // Then every brand registered with the DGDA (Admin > Drug list), with its company.
+  const registered = useRegisteredDrugs(q, !start);
+  const results = useMemo(() => {
+    const seen = new Set(listed.map((p) => p.display.toLowerCase()));
+    const fromRegistry = registered.flatMap((h) => {
+      const p = productFor({ code: h.code });
+      return p && !seen.has(p.display.toLowerCase()) ? [p] : [];
+    });
+    return [...listed, ...fromRegistry];
+  }, [listed, registered]);
+  const companyOf = useMemo(() => new Map(registered.map((h) => [h.code, h.company])), [registered]);
   const product: Product | undefined = start ? productFor({ code: start.code }) : undefined;
   // Anything typed can be prescribed by name when the list doesn't have it.
   const offList = q.trim().length >= 3 ? offListProduct(q) : undefined;
@@ -110,9 +122,10 @@ export function RxComposer({
                         <span className="flex-1">
                           {p.display}
                           <span className="ml-2 text-[11.5px] text-ink-3">
-                            {p.dose} {p.frequency}
+                            {p.dar ? companyOf.get(`RX:${p.rxnorm}`) : `${p.dose} ${p.frequency}`}
                           </span>
                         </span>
+                        {p.dar && <span className="rounded bg-panel-muted px-1 text-[10px] font-semibold text-ink-3">DGDA</span>}
                         {isControlled(p.display) && <span className="rounded bg-crit-soft px-1 text-[10px] font-bold text-crit">Controlled</span>}
                         {w.some((x) => x.level === "stop") ? (
                           <span className="rounded bg-crit-soft px-1.5 text-[10.5px] font-semibold text-crit">ALERT</span>
@@ -166,7 +179,7 @@ export function RxComposer({
         />
       ) : (
         <p className="px-3 py-2.5 text-[12px] text-ink-3">
-          Checks run as you write: allergies, interactions with current medications, duplicate therapy, dose limits, kidney function, age, and controlled-drug rules. Anything not on the list can be prescribed by name, unchecked.
+          Checks run as you write: allergies, interactions with current medications, duplicate therapy, dose limits, kidney function, age, and controlled-drug rules. Every brand registered with the DGDA can be found by name too; anything else can be prescribed by name, unchecked.
         </p>
       )}
     </section>

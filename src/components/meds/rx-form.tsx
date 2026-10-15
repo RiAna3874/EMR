@@ -79,8 +79,8 @@ export function RxForm({
 
   const summary = rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
   const pharmacy = pharmacies.find((p) => p.id === pharmacyId);
-  // An off-list medication has no defaults, so the prescriber writes the whole sig.
-  const incomplete = !!product.offList && (!dose.trim() || !frequency.trim() || !shownQty.trim());
+  // An off-list or DGDA-registry medication has no defaults, so the prescriber writes the whole sig.
+  const incomplete = !!(product.offList || product.dar) && (!dose.trim() || !frequency.trim() || !shownQty.trim());
 
   return (
     <form action={onSubmit} className="space-y-3 bg-accent-soft/30 p-3" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
@@ -97,6 +97,11 @@ export function RxForm({
         <h3 className="text-[14px] font-semibold">{product.display}</h3>
         {isControlled(product.display) && <span className="rounded bg-crit-soft px-1.5 text-[10.5px] font-bold text-crit">Controlled</span>}
         {product.offList && <span className="rounded bg-warn-soft px-1.5 text-[10.5px] font-semibold text-warn">Not on the list</span>}
+        {product.dar && (
+          <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2" title="Registered with the Directorate General of Drug Administration">
+            DGDA {product.dar}
+          </span>
+        )}
         {product.otc && <span className="rounded bg-panel-muted px-1.5 text-[10.5px] font-semibold text-ink-2">OTC</span>}
         {replaces && (
           <span className="ml-auto rounded bg-warn-soft px-1.5 py-0.5 text-[11.5px] text-warn">

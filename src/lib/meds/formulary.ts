@@ -2,7 +2,10 @@
 // default sig the prescription composer fills in. Codes are "RX:<RxNorm>", the
 // same codes the Orders catalog and the medication list use. Products added for
 // Bangladesh have local codes ("BD-...") and list common local brands as keywords;
-// the clinic can add its own here. Anything else is prescribed off-list (below).
+// the clinic can add its own here. Any brand registered with the DGDA can be
+// prescribed from the registry (dgda.ts); anything else is prescribed off-list (below).
+
+import { registeredFromCode } from "./dgda";
 
 export type Product = {
   rxnorm: string;
@@ -23,6 +26,8 @@ export type Product = {
   otc?: boolean;
   // Typed by the prescriber, not on this list: no defaults, and the checks may not know it.
   offList?: boolean;
+  // A brand from Bangladesh's DGDA registry (dgda.ts), by DAR number: no clinic defaults.
+  dar?: string;
 };
 
 const tab = (p: Omit<Product, "unit" | "countable"> & { unit?: string }): Product => ({ unit: "tablets", countable: true, ...p });
@@ -126,11 +131,13 @@ const offListFromCode = (code: string | null | undefined) => {
   return raw?.startsWith(OFF_LIST) ? offListProduct(raw.slice(OFF_LIST.length)) : undefined;
 };
 
+const fromCode = (code: string | null | undefined) => offListFromCode(code) ?? registeredFromCode(code);
+
 export const productByCode = new Map(FORMULARY.map((p) => [`RX:${p.rxnorm}`, p]));
 export const productByName = new Map(FORMULARY.map((p) => [p.display.toLowerCase(), p]));
 
 export const productFor = (m: { rxnorm?: string | null; drug?: string; code?: string | null }): Product | undefined =>
-  (m.code ? (productByCode.get(m.code) ?? offListFromCode(m.code)) : undefined) ??
-  offListFromCode(m.rxnorm) ??
+  (m.code ? (productByCode.get(m.code) ?? fromCode(m.code)) : undefined) ??
+  fromCode(m.rxnorm) ??
   (m.rxnorm ? productByCode.get(`RX:${m.rxnorm}`) : undefined) ??
   (m.drug ? productByName.get(m.drug.toLowerCase()) : undefined);

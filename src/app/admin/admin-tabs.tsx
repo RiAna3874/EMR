@@ -7,6 +7,7 @@ const tabs = [
   { href: "/admin/users", label: "Staff accounts" },
   { href: "/admin/access-log", label: "Access log" },
   { href: "/admin/texts", label: "Text messages" },
+  { href: "/admin/drugs", label: "Drug list" },
 ];
 
 export function AdminTabs() {
