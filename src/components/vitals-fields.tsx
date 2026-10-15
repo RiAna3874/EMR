@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Field, inputCls } from "@/components/form";
 import { VITAL_LIMITS } from "@/lib/vitals";
+import { GLUCOSE_LIMITS, GLUCOSE_TIMINGS } from "@/lib/glucose";
 
 const limits = (k: keyof typeof VITAL_LIMITS, step = "1") => ({ type: "number", min: VITAL_LIMITS[k].min, max: VITAL_LIMITS[k].max, step });
 
@@ -11,6 +12,8 @@ const limits = (k: keyof typeof VITAL_LIMITS, step = "1") => ({ type: "number", 
 // before the form is sent; the server checks them again.
 export function VitalsFields({ lastHeight }: { lastHeight?: number | null }) {
   const [tempUnit, setTempUnit] = useState<"F" | "C">("F");
+  const [glucoseUnit, setGlucoseUnit] = useState<"mmol" | "mg">("mmol");
+  const gl = GLUCOSE_LIMITS[glucoseUnit];
   return (
     <>
       <Field label="BP (mmHg)">
@@ -56,6 +59,41 @@ export function VitalsFields({ lastHeight }: { lastHeight?: number | null }) {
       </Field>
       <Field label="Pain (0–10)">
         <input name="pain" inputMode="numeric" {...limits("pain")} className={`${inputCls} w-16`} />
+      </Field>
+      <Field label="POC glucose">
+        <div className="flex items-center gap-1">
+          <input
+            name="glucose"
+            inputMode="decimal"
+            type="number"
+            min={gl.min}
+            max={gl.max}
+            step={glucoseUnit === "mmol" ? "0.1" : "1"}
+            aria-label="POC glucose"
+            className={`${inputCls} w-16`}
+          />
+          <input type="hidden" name="glucoseUnit" value={glucoseUnit} />
+          <div className="flex overflow-hidden rounded border border-line text-[12px]" role="group" aria-label="Glucose unit">
+            {(["mmol", "mg"] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                aria-pressed={glucoseUnit === u}
+                onClick={() => setGlucoseUnit(u)}
+                className={`px-1.5 py-0.5 ${glucoseUnit === u ? "bg-chrome text-white" : "bg-panel text-ink-2 hover:bg-panel-muted"}`}
+              >
+                {u === "mmol" ? "mmol/L" : "mg/dL"}
+              </button>
+            ))}
+          </div>
+          <select name="glucoseTiming" defaultValue="random" aria-label="When the glucose was taken" className={`${inputCls} w-auto`}>
+            {GLUCOSE_TIMINGS.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </Field>
     </>
   );

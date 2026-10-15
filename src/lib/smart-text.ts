@@ -3,6 +3,7 @@ import { latestVitals, pivot } from "@/lib/chart";
 import { age, fmtDate, fmtDob, fmtRange, fmtShortDate, fmtValue, isAbnormal, unitLabel } from "@/lib/format";
 import { displayName, type SessionUser } from "@/lib/roles";
 import { problemBasedAP } from "@/lib/notes/problem-ap";
+import { GLUCOSE_TIMINGS, fmtGlucose } from "@/lib/glucose";
 
 // Builds the value of each chart link (@VITALS@, @MEDS@, ...) for the note editor.
 // See chartLinks in src/lib/notes/library.ts for the list.
@@ -35,6 +36,13 @@ export async function smartTextFor(patientId: string, currentUser: SessionUser):
         vital("59408-5", "SpO2"),
         vital("29463-7", "Wt"),
         vital("39156-5", "BMI"),
+        ...GLUCOSE_TIMINGS.map((t) => {
+          const g = v[t.code];
+          if (g?.valueNum == null) return null;
+          const flag = g.flag && g.flag !== "N" ? ` [${g.flag}]` : "";
+          const when = fmtShortDate(g.effectiveAt) !== fmtShortDate(vitals[0].effectiveAt) ? ` on ${fmtShortDate(g.effectiveAt)}` : "";
+          return `${t.short} ${fmtGlucose(g.valueNum)}${flag}${when}`;
+        }),
       ]
         .filter(Boolean)
         .join(", ")

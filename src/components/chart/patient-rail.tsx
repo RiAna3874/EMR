@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { AllergyIntolerance, Condition, Encounter, Observation, Patient, Practitioner } from "@prisma/client";
 import { age, fmtDate, fmtDob, fmtShortDate, fmtTime, sexShort, unitLabel } from "@/lib/format";
 import { flagText } from "@/components/flag";
+import { GLUCOSE_TIMINGS, fmtGlucose, isGlucoseCode } from "@/lib/glucose";
 
 type RailPatient = Patient & {
   pcp: Practitioner | null;
@@ -126,9 +127,10 @@ export function PatientRail({
                 ["8310-5", "Temp"],
                 ["29463-7", "Wt"],
                 ["39156-5", "BMI"],
+                ...GLUCOSE_TIMINGS.map((t) => [t.code, t.short]),
               ].map(([code, label]) =>
                 v[code] ? (
-                  <RailVital key={code} label={label} o={v[code]} />
+                  <RailVital key={code} label={label} o={v[code]} setAt={vitals[0].effectiveAt} />
                 ) : null,
               )}
             </dl>
@@ -182,12 +184,13 @@ export function PatientRail({
   );
 }
 
-function RailVital({ label, o }: { label: string; o: Observation }) {
+function RailVital({ label, o, setAt }: { label: string; o: Observation; setAt?: Date }) {
   return (
     <>
       <dt className="text-ink-3">{label}</dt>
       <dd className={flagText(o.flag)}>
-        {o.valueNum} {unitLabel(o.unit)}
+        {o.valueNum !== null && isGlucoseCode(o.code) ? fmtGlucose(o.valueNum) : `${o.valueNum} ${unitLabel(o.unit)}`}
+        {isGlucoseCode(o.code) && setAt && fmtShortDate(o.effectiveAt) !== fmtShortDate(setAt) && <span className="text-ink-3"> · {fmtShortDate(o.effectiveAt)}</span>}
       </dd>
     </>
   );

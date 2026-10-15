@@ -1,5 +1,6 @@
 import type { Flag } from "@prisma/client";
 import { age } from "@/lib/format";
+import { GLUCOSE_LIMITS, GLUCOSE_TIMINGS, glucoseFlag, mgToMmol } from "@/lib/glucose";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const num = (f: FormData, k: string) => {
@@ -41,10 +42,11 @@ export function normalRanges(ageYears: number | null) {
 
 export const fahrenheitToCelsius = (f: number) => Math.round(((f - 32) * 5) / 9 * 10) / 10;
 
-type Entry = { code: string; display: string; value: number | null; unit: string; range?: number[] | null };
+type Entry = { code: string; display: string; value: number | null; unit: string; range?: readonly number[] | null; flag?: Flag | null };
 
 // Observation rows for the vitals entry fields; blank fields are skipped and BMI is
-// computed from weight and height. Temperature can be typed in °F or °C and is kept in °C.
+// computed from weight and height. Temperature can be typed in °F or °C and is kept in °C;
+// POC glucose in mmol/L or mg/dL and is kept in mmol/L, filed under its timing.
 // Returns an error instead when a value can't be right, so nothing is filed.
 export function vitalObservations(
   form: FormData,
@@ -61,8 +63,11 @@ export function vitalObservations(
     weight: num(form, "weight"),
     height: num(form, "height"),
     pain: num(form, "pain"),
+    glucose: num(form, "glucose"),
   };
-  const check: [number | null, (typeof VITAL_LIMITS)[keyof typeof VITAL_LIMITS], string][] = [
+  const mg = str(form, "glucoseUnit") === "mg";
+  const timing = GLUCOSE_TIMINGS.find((t) => t.key === str(form, "glucoseTiming")) ?? GLUCOSE_TIMINGS[1];
+  const check: [number | null, { label: string; min: number; max: number }, string][] = [
     [values.sbp, VITAL_LIMITS.sbp, "mmHg"],
     [values.dbp, VITAL_LIMITS.dbp, "mmHg"],
     [values.hr, VITAL_LIMITS.hr, "/min"],
@@ -72,12 +77,14 @@ export function vitalObservations(
     [values.weight, VITAL_LIMITS.weight, "kg"],
     [values.height, VITAL_LIMITS.height, "cm"],
     [values.pain, VITAL_LIMITS.pain, ""],
+    [values.glucose, mg ? GLUCOSE_LIMITS.mg : GLUCOSE_LIMITS.mmol, mg ? "mg/dL" : "mmol/L"],
   ];
   for (const [v, lim, unit] of check) {
     if (v === null) continue;
     if (Number.isNaN(v)) return { data: [], error: `${lim.label} must be a number.` };
     if (v < lim.min || v > lim.max) {
-      const hint = lim.label === "Temperature" ? ` Is the unit right (°F or °C)?` : "";
+      const hint =
+        lim.label === "Temperature" ? ` Is the unit right (°F or °C)?` : lim.label === "POC glucose" ? ` Is the unit right (mmol/L or mg/dL)?` : "";
       return { data: [], error: `${lim.label} ${v} ${unit} is outside ${lim.min} to ${lim.max} ${unit}.${hint} Nothing was filed.`.replace(/ +\./g, ".") };
     }
   }
@@ -99,6 +106,10 @@ export function vitalObservations(
     { code: "8302-2", display: "Height", value: height, unit: "cm" },
     { code: "39156-5", display: "BMI", value: weight && height ? Math.round((weight / (height / 100) ** 2) * 10) / 10 : null, unit: "kg/m2", range: r.bmi },
     { code: "72514-3", display: "Pain score", value: values.pain, unit: "{score}" },
+    ...GLUCOSE_TIMINGS.map((t) => {
+      const mmol = t === timing && values.glucose !== null ? (mg ? mgToMmol(values.glucose) : values.glucose) : null;
+      return { code: t.code, display: `POC glucose (${t.label.toLowerCase()})`, value: mmol, unit: "mmol/L", range: t.range, flag: mmol === null ? null : glucoseFlag(mmol, t.range) };
+    }),
   ];
   return { data: rows(entries, { patientId, at, encounterId }), error: null };
 }
@@ -117,7 +128,7 @@ function rows(entries: Entry[], { patientId, at, encounterId }: { patientId: str
       unit: e.unit,
       refLow: e.range?.[0] ?? null,
       refHigh: e.range?.[1] ?? null,
-      flag: flagFor(e.value!, e.range?.[0], e.range?.[1]),
+      flag: e.flag ?? flagFor(e.value!, e.range?.[0], e.range?.[1]),
       effectiveAt: at,
       sortOrder: e.sortOrder,
     }));

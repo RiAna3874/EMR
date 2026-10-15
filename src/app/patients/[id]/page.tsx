@@ -14,8 +14,9 @@ import { sigText } from "@/lib/meds/sig";
 import { logChartView } from "@/lib/audit/server";
 import { MedRowActions } from "@/components/meds/med-row-actions";
 import { pendingReplacements } from "@/lib/meds/pending";
+import { GLUCOSE_CODES, isGlucoseCode, mmolToMg } from "@/lib/glucose";
 
-const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5"];
+const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5", ...GLUCOSE_CODES];
 
 export default async function Summary({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ registered?: string }> }) {
   const { id } = await params;
@@ -149,7 +150,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
                   <tr key={r.code} className="border-t border-line first:border-t-0">
                     <td className="px-3 py-1.5 text-ink-2">{r.display}</td>
                     <td className={`tabular px-2 py-1.5 text-right font-medium ${flagText(latest.flag)}`}>
-                      {fmtValue(latest)} <span className="font-normal text-ink-3">{unitLabel(r.unit)}</span>
+                      {isGlucoseCode(r.code) && latest.valueNum !== null ? latest.valueNum.toFixed(1) : fmtValue(latest)} <span className="font-normal text-ink-3">{unitLabel(r.unit)}</span>
+                      {isGlucoseCode(r.code) && latest.valueNum !== null && <div className="text-[11px] font-normal text-ink-3">{mmolToMg(latest.valueNum)} mg/dL</div>}
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />

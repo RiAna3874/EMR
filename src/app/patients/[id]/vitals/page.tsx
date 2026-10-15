@@ -14,6 +14,7 @@ import { recordVitals } from "../actions";
 import { logChartView } from "@/lib/audit/server";
 import { EnteredInError } from "@/components/entered-in-error";
 import { markVitalsInError } from "../error-actions";
+import { GLUCOSE_CODES, isGlucoseCode, mmolToMg } from "@/lib/glucose";
 
 const MAX_COLUMNS = 8;
 
@@ -25,6 +26,7 @@ const GRAPHS: { title: string; codes: string[]; unit: string; low?: number; high
   { title: "BMI", codes: ["39156-5"], unit: "kg/m²", low: 18.5, high: 24.9 },
   { title: "SpO₂", codes: ["59408-5"], unit: "%", low: 95, high: 100 },
   { title: "Temperature", codes: ["8310-5"], unit: "°C", low: 36.1, high: 37.8 },
+  { title: "POC glucose", codes: GLUCOSE_CODES, unit: "mmol/L", low: 3.9, high: 7.8 },
 ];
 
 export default async function Vitals({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ view?: string; error?: string }> }) {
@@ -116,8 +118,9 @@ export default async function Vitals({ params, searchParams }: { params: Promise
                       <td key={t} className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}>
                         {o ? (
                           <>
-                            {fmtValue(o)}
+                            {isGlucoseCode(r.code) && o.valueNum !== null ? o.valueNum.toFixed(1) : fmtValue(o)}
                             <FlagBadge flag={o.flag} />
+                            {isGlucoseCode(r.code) && o.valueNum !== null && <div className="text-[11px] text-ink-3">{mmolToMg(o.valueNum)} mg/dL</div>}
                           </>
                         ) : (
                           <span className="text-ink-3">—</span>

@@ -16,6 +16,8 @@ export const SYNONYMS: string[][] = [
   ["glucose", "blood sugar", "blood glucose", "sugar"],
   ["fbs", "fasting blood sugar", "fasting glucose", "fasting plasma glucose", "fpg"],
   ["rbs", "random blood sugar", "random glucose"],
+  ["2habf", "2 hours after meal", "post meal glucose", "post prandial", "ppbs", "2hpp", "after meal glucose"],
+  ["poc glucose", "fingerstick", "finger stick", "cbg", "capillary glucose", "glucometer", "bsl"],
   ["creatinine", "creat", "s creatinine", "serum creatinine"],
   ["egfr", "gfr", "glomerular filtration rate"],
   ["bun", "urea", "blood urea nitrogen"],
