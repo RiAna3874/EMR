@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { touchOpenPatient } from "@/lib/open-patients";
 
 import type { Permission } from "@/lib/roles";
@@ -53,6 +53,44 @@ export function ChartTabs({ patientId, label, counts, allowed }: { patientId: st
           </Link>
         );
       })}
+      {!pathname.startsWith(`${base}/search`) && <ChartSearchBox base={base} />}
     </nav>
+  );
+}
+
+// Opens chart search (/patients/[id]/search). "/" jumps here from anywhere in the chart.
+function ChartSearchBox({ base }: { base: string }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        input.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <form
+      className="ml-auto flex items-center py-1.5 pl-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        router.push(`${base}/search${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
+      }}
+    >
+      <input
+        ref={input}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search chart  /"
+        aria-label="Search this chart"
+        className="w-44 rounded border border-line bg-panel-muted px-2.5 py-1 text-[12.5px] outline-none transition-[width] focus:w-64 focus:border-accent focus:bg-panel"
+      />
+    </form>
   );
 }

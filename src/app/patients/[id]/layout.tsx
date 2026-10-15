@@ -9,6 +9,8 @@ import { ChartTabs } from "@/components/chart/chart-tabs";
 import { documentsWhere } from "@/lib/documents/server";
 import { activeMembership } from "@/lib/chat/server";
 import { conversationName } from "@/lib/chat/chat";
+import { Suspense } from "react";
+import { SearchHighlighter } from "@/components/search/search-highlighter";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +65,12 @@ export default async function ChartLayout({ children, params }: { children: Reac
       <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} chats={allowed.includes("useChat") ? chats : null} admin={currentUser.isAdmin} />
       <div className="flex min-w-0 flex-1 flex-col">
         <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, meds: refillRequests, notes: drafts, orders: unsignedOrders, documents: docsToReview, import: toVerify }} allowed={allowed} />
-        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+        <div id="chart-content" className="min-h-0 flex-1 overflow-auto">
+          {children}
+        </div>
+        <Suspense>
+          <SearchHighlighter rootId="chart-content" />
+        </Suspense>
       </div>
     </div>
   );
