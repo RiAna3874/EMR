@@ -35,9 +35,22 @@ const patientForText = (patientId: string) =>
 export async function queueText(patientId: string, kind: SmsKind, body: string, sentById: string | null) {
   const p = await patientForText(patientId);
   if (!p || p.mergedIntoId || cantText(p)) return null;
-  const msg = await db.smsMessage.create({ data: { patientId, to: smsNumber(p.phone)!, body, kind, sentById } });
-  after(() => deliver(msg.id));
+  // Without a gateway there's nothing to wait for: the text is logged as not sent straight away.
+  const status = gatewayConfig() ? "queued" : "logged";
+  const msg = await db.smsMessage.create({ data: { patientId, to: smsNumber(p.phone)!, body, kind, sentById, status } });
+  if (status === "queued") after(() => deliver(msg.id));
   return msg;
+}
+
+// Texts still waiting a minute after they were queued, because the server restarted before
+// sending them or the gateway was set up since. Sent after the page that found them responds.
+export async function sendStuckTexts(where: { patientId?: string } = {}) {
+  const stuck = await baseDb.smsMessage.findMany({
+    where: { ...where, status: "queued", createdAt: { lt: new Date(Date.now() - 60_000) } },
+    select: { id: true },
+    take: 20,
+  });
+  if (stuck.length) after(async () => { for (const m of stuck) await deliver(m.id); });
 }
 
 // Hands one queued text to the gateway and records what it said. Without a gateway the

@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { fmtDateTime, fullName } from "@/lib/format";
 import { gatewayConfig, gatewayProblem } from "@/lib/sms/gateway";
 import { localNumber, smsParts } from "@/lib/sms/sms";
+import { sendStuckTexts } from "@/lib/sms/server";
 import { SmsStatusChip, SMS_KIND_LABEL } from "@/components/sms/sms-bits";
 
 export const metadata = { title: "Text messages" };
@@ -16,6 +17,7 @@ const STATUSES: SmsStatus[] = ["sent", "failed", "logged", "queued"];
 // Every text sent to patients, for checking that texts go out and what they cost.
 export default async function TextLog({ searchParams }: { searchParams: Promise<{ status?: string; before?: string }> }) {
   await requireAdmin();
+  await sendStuckTexts();
   const f = await searchParams;
   const status = STATUSES.includes(f.status as SmsStatus) ? (f.status as SmsStatus) : undefined;
   const before = f.before ? new Date(f.before) : null;
