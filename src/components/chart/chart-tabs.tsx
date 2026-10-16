@@ -13,6 +13,7 @@ export const chartTabs: { slug: string; label: string; needs?: Permission }[] = 
   { slug: "visit", label: "Visit", needs: "viewClinical" },
   { slug: "results", label: "Results", needs: "viewClinical" },
   { slug: "vitals", label: "Vitals", needs: "viewClinical" },
+  { slug: "sugar", label: "Blood sugar", needs: "viewClinical" },
   { slug: "meds", label: "Medications", needs: "viewClinical" },
   { slug: "problems", label: "Problems", needs: "viewClinical" },
   { slug: "allergies", label: "Allergies", needs: "viewClinical" },
@@ -44,7 +45,7 @@ export function ChartTabs({ patientId, label, counts, allowed }: { patientId: st
           <Link
             key={t.slug}
             href={href}
-            className={`-mb-px border-b-2 px-3 py-2.5 text-[13px] ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] ${
               active ? "border-accent font-semibold text-ink" : "border-transparent text-ink-2 hover:border-line hover:text-ink"
             }`}
           >

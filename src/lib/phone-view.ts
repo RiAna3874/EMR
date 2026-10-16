@@ -12,7 +12,7 @@ export const isPhone = (userAgent: string) => /iPhone|iPod|Android.*Mobile|Mobil
 
 // Pages a phone opens as they are: sign-in steps, files, printouts and the switches themselves.
 const KEEP = /^\/(m|login|lock|account|setup|api|media|documents|print|view|app-icon|_next)(\/|$)/;
-const CHART_SECTIONS = new Set(["results", "vitals", "meds", "notes", "media", "import"]);
+const CHART_SECTIONS = new Set(["results", "vitals", "sugar", "meds", "notes", "media", "import"]);
 
 // The phone view's screen for a full-site address, so a link, bookmark or old tab opened on a
 // phone lands in the phone view. Pages with no phone screen go to the nearest one (a chart

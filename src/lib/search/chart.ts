@@ -1,3 +1,4 @@
+import { isBloodSugar } from "@/lib/labs/groups";
 import "server-only";
 import { db } from "@/lib/db";
 import { can, type SessionUser } from "@/lib/roles";
@@ -141,7 +142,7 @@ export async function gatherChart(patientId: string, user: SessionUser): Promise
       refLow: latest.refLow,
       refHigh: latest.refHigh,
       refText: latest.refText,
-      graphHref: vital ? `${base}/vitals?view=graph` : `${base}/results?view=graph&codes=${encodeURIComponent(latest.code)}`,
+      graphHref: isBloodSugar(latest, latest.report?.display) ? `${base}/sugar` : vital ? `${base}/vitals?view=graph` : `${base}/results?view=graph&codes=${encodeURIComponent(latest.code)}`,
       points: obs.map((o) => ({
         t: o.effectiveAt.getTime(),
         v: o.valueNum,

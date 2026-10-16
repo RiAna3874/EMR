@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { resultHref } from "@/lib/labs/groups";
 import { db } from "@/lib/db";
 import { clinic } from "@/lib/clinic";
 import { recentAbnormalLabs, todaysSchedule } from "@/lib/queries";
@@ -203,7 +204,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                   {abnormal.slice(0, 40).map((o) => (
                     <li key={o.id} className="border-t border-line first:border-t-0">
                       <Link
-                        href={`/patients/${o.patientId}/results#${o.code}`}
+                        href={resultHref(`/patients/${o.patientId}`, o, o.report?.display)}
                         className="flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-accent-soft/40"
                       >
                         <span className="min-w-0 truncate">

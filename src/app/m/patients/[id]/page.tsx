@@ -131,7 +131,7 @@ export default async function PhoneSummary({ params, searchParams }: { params: P
           latestAbnormal.map((o) => {
             const sugar = sugarReading(o, o.report?.display);
             return (
-              <RowLink key={o.id} href={`${base}/results/${sugar ? "sugar" : encodeURIComponent(o.code)}`}>
+              <RowLink key={o.id} href={sugar ? `${base}/sugar` : `${base}/results/${encodeURIComponent(o.code)}`}>
                 <div className="flex items-baseline gap-2">
                   <span className="min-w-0 flex-1 truncate">{o.display}</span>
                   <span className={`tabular shrink-0 font-semibold ${flagText(o.flag)}`}>
