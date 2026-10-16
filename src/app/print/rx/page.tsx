@@ -58,6 +58,23 @@ export default async function PrintRx({ searchParams }: { searchParams: Promise<
             {sigText({ dose: med.dose, route: med.route, frequency: med.frequency, prn: med.prn, prnReason: med.prnReason, steps: med.steps })}
           </div>
           {med.patientInstructions && <div>{med.patientInstructions}</div>}
+          {(med.courseStart || med.end) && (
+            <div>
+              {med.courseStart && (
+                <>
+                  <span className="font-semibold">Start: </span>
+                  {fmtDateOnly(med.courseStart)}
+                  {med.end && " · "}
+                </>
+              )}
+              {med.end && (
+                <>
+                  <span className="font-semibold">End: </span>
+                  {fmtDateOnly(med.end)}
+                </>
+              )}
+            </div>
+          )}
           <div>
             <span className="font-semibold">Dispense: </span>
             {med.quantity}

@@ -7,6 +7,9 @@ import { requirePermission } from "@/lib/session";
 import { orderableByCode, orderableFor, orderSetById, type Orderable } from "@/lib/orders/catalog";
 import { orderDefaults } from "@/lib/orders/defaults";
 import { toLocalDate } from "@/lib/format";
+import { addDays, checkedEnd, courseDays, daysBetween, isYmd } from "@/lib/orders/dates";
+import { parseSteps } from "@/lib/meds/steps";
+import { daysSupplyFor, suggestQuantity } from "@/lib/meds/sig";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { productFor, writesOwnSig } from "@/lib/meds/formulary";
 import { rxFromForm, type RxDetails } from "@/lib/meds/rx";
@@ -59,7 +62,11 @@ export async function addOrder(patientId: string, form: FormData) {
       priority: PRIORITIES.includes(priority) ? priority : "routine",
       ...link,
       instructions: (product ? str(form, "pharmacyNote") : str(form, "instructions")) || null,
-      expectedAt: expected ? new Date(expected) : null,
+      expectedAt: details ? null : isYmd(expected) ? new Date(expected) : null,
+      expiresAt: details ? null : (() => {
+        const end = checkedEnd(expected || null, str(form, "expiresAt") || null);
+        return end ? new Date(end) : null;
+      })(),
       details: details as Prisma.InputJsonValue | undefined,
     },
   });
@@ -150,22 +157,62 @@ export async function removePendingOrder(patientId: string, orderId: string) {
   revalidatePath("/inbox");
 }
 
-// Inline edits in the order basket. Only the fields sent change.
+// Inline edits in the order basket. Only the fields sent change. Start and end dates:
+// expectedAt / expiresAt on an order; startDate / endDate on a prescription, whose
+// end sets its course length (and the amount to dispense, unless it was typed).
 export async function updatePendingOrder(patientId: string, orderId: string, form: FormData) {
   await requirePermission("pendOrders");
+  const order = await db.serviceRequest.findFirstOrThrow({ where: { id: orderId, patientId, status: "pending" } });
   const priority = str(form, "priority") as OrderPriority;
-  const expected = str(form, "expectedAt");
   const link = form.has("conditionId") ? await problemLink(patientId, str(form, "conditionId"), null) : undefined;
+  const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+  const start = form.has("expectedAt") ? (isYmd(str(form, "expectedAt")) ? str(form, "expectedAt") : null) : ymd(order.expectedAt);
+  let end = form.has("expiresAt") ? str(form, "expiresAt") || null : ymd(order.expiresAt);
+  // Moving the start past the end keeps the order the same length.
+  if (form.has("expectedAt") && !form.has("expiresAt") && start && end && end < start && order.expectedAt) {
+    end = addDays(end, daysBetween(ymd(order.expectedAt)!, start));
+  }
+  end = checkedEnd(start, end);
+  const details = order.type === "medication" && (form.has("startDate") || form.has("endDate")) ? rxWithDates(order, form) : undefined;
   await db.serviceRequest.update({
     where: { id: orderId, patientId, status: "pending" },
     data: {
       priority: PRIORITIES.includes(priority) ? priority : undefined,
-      expectedAt: form.has("expectedAt") ? (/^\d{4}-\d{2}-\d{2}$/.test(expected) ? new Date(expected) : null) : undefined,
+      expectedAt: order.type === "medication" ? undefined : start ? new Date(start) : null,
+      expiresAt: order.type === "medication" ? undefined : end ? new Date(end) : null,
       ...(link ?? {}),
       instructions: form.has("instructions") ? str(form, "instructions") || null : undefined,
+      details: details as Prisma.InputJsonValue | undefined,
     },
   });
   revalidatePath(`/patients/${patientId}`, "layout");
+}
+
+// A pending prescription with a new start date and/or end date (empty end = ongoing).
+function rxWithDates(order: { code: string; details: Prisma.JsonValue }, form: FormData): RxDetails {
+  const d = { ...((order.details ?? {}) as RxDetails) };
+  const today = toLocalDate(new Date());
+  if (form.has("startDate")) {
+    const s = str(form, "startDate");
+    d.startDate = isYmd(s) && s > today ? s : null;
+  }
+  if (!form.has("endDate") || parseSteps(d.steps)) return d;
+  const start = d.startDate ?? today;
+  const end = checkedEnd(start, str(form, "endDate"));
+  const days = end ? courseDays(start, end) : null;
+  if (days === (d.durationDays ?? null)) return d;
+  const product = productFor({ code: order.code });
+  if (product) {
+    const sig = { dose: d.dose, frequency: d.frequency };
+    // Keep a typed amount; follow the course with one the form worked out.
+    const auto = suggestQuantity(product, sig, d.durationDays || product.days);
+    if (!d.quantity || d.quantity === auto) {
+      d.quantity = suggestQuantity(product, sig, days || product.days) ?? d.quantity;
+      d.daysSupply = daysSupplyFor(product, sig, d.quantity) ?? days ?? d.daysSupply;
+    }
+  }
+  d.durationDays = days;
+  return d;
 }
 
 // "Link all to": every order in the basket goes with one problem.
@@ -236,6 +283,7 @@ export async function signOrders(patientId: string, form: FormData): Promise<{ e
           prn: d.prn,
           prnReason: d.prnReason,
           durationDays: d.durationDays,
+          startDate: d.startDate,
           quantity: d.quantity ?? "",
           daysSupply: d.daysSupply,
           refills: d.refills ?? 0,

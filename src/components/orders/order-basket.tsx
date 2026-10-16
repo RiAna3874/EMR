@@ -6,6 +6,8 @@ import type { OrderPriority } from "@prisma/client";
 import { Button, inputCls } from "@/components/form";
 import type { ProblemOption } from "@/components/problem-picker";
 import { OrderTypeIcon, WarningList, type BasketRow } from "./order-bits";
+import { DatePicks, todayYmd } from "./date-picks";
+import { BASKET_ORDER_END_PICKS, BASKET_RX_END_PICKS, BASKET_START_PICKS, relativeDayLabel } from "@/lib/orders/dates";
 
 export type { BasketRow };
 
@@ -191,8 +193,8 @@ function BasketItem({ r, problems, disabled, save, onRemove }: { r: BasketRow; p
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 pl-10">
-        {r.type !== "medication" && (
+      {r.type !== "medication" && (
+        <div className="flex flex-wrap items-center gap-2 pl-10">
           <div role="radiogroup" aria-label={`Priority for ${r.display}`} className="flex overflow-hidden rounded border border-line text-[11.5px]">
             {PRIORITIES.map(([value, label]) => (
               <button
@@ -210,19 +212,10 @@ function BasketItem({ r, problems, disabled, save, onRemove }: { r: BasketRow; p
               </button>
             ))}
           </div>
-        )}
-        {r.takesDate && (
-          <input
-            key={r.expectedAt ?? ""}
-            type="date"
-            aria-label={`Date for ${r.display}`}
-            defaultValue={r.expectedAt ?? ""}
-            disabled={disabled}
-            onChange={(e) => e.target.value !== (r.expectedAt ?? "") && save("expectedAt", e.target.value)}
-            className={`${inputCls} py-0 text-[11.5px]`}
-          />
-        )}
-      </div>
+        </div>
+      )}
+
+      <BasketDates r={r} disabled={disabled} save={save} />
 
       <div className="pl-10">
         <select
@@ -270,5 +263,45 @@ function BasketItem({ r, problems, disabled, save, onRemove }: { r: BasketRow; p
         </div>
       )}
     </li>
+  );
+}
+
+// Start and end dates with Epic's quick picks. A prescription starts today unless
+// told otherwise, and its end date is its course (empty = ongoing).
+function BasketDates({ r, disabled, save }: { r: BasketRow; disabled: boolean; save: (field: string, value: string) => void }) {
+  const today = todayYmd();
+  const rx = r.type === "medication";
+  const start = r.expectedAt ?? (rx ? today : "");
+  return (
+    <div className="space-y-1 pl-10">
+      <DatePicks
+        label="Start"
+        value={start}
+        from={today}
+        min={rx ? today : undefined}
+        picks={BASKET_START_PICKS}
+        disabled={disabled}
+        compact
+        onChange={(v) => save(rx ? "startDate" : "expectedAt", v)}
+      />
+      {rx && r.endFromSteps ? (
+        <p className="text-[11px] text-ink-3">
+          <span className="inline-block w-9">End</span>
+          {r.expiresAt ? `${relativeDayLabel(r.expiresAt, today)}, when the last step finishes` : "Ongoing (the last step has no end)"}. Change the steps with Modify.
+        </p>
+      ) : (
+        <DatePicks
+          label="End"
+          value={r.expiresAt ?? ""}
+          from={start || today}
+          min={start || undefined}
+          picks={rx ? BASKET_RX_END_PICKS.map((p) => ({ label: p.label, days: p.days - 1 })) : BASKET_ORDER_END_PICKS}
+          none={rx ? "Ongoing" : "No end"}
+          disabled={disabled}
+          compact
+          onChange={(v) => save(rx ? "endDate" : "expiresAt", v)}
+        />
+      )}
+    </div>
   );
 }

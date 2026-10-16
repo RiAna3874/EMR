@@ -5,6 +5,8 @@ import type { OrderContext } from "@/lib/orders/checks";
 import { fillStatus, refillProtocol } from "./checks";
 import { rxClassFor, type RxDetails } from "./rx";
 import { parseSteps, stepsFrequency, totalDays } from "./steps";
+import { courseEnd, isYmd } from "@/lib/orders/dates";
+import { toLocalDate } from "@/lib/format";
 
 // The order-check context without one medication: a reorder or dose change
 // shouldn't warn that the patient already takes the drug it replaces.
@@ -56,6 +58,10 @@ export async function writePrescription(
   const dose = steps ? steps[0].dose : rx.dose;
   const frequency = steps ? stepsFrequency(steps) : rx.durationDays ? `${rx.frequency} for ${rx.durationDays} days` : rx.frequency;
   const courseDays = steps ? totalDays(steps) : rx.durationDays;
+  // A start date still ahead holds the course until then; one already passed starts it today.
+  const today = toLocalDate(now);
+  const startsOn = isYmd(rx.startDate) && rx.startDate > today ? rx.startDate : null;
+  const firstDay = startsOn ?? today;
   if (prior) {
     await tx.medicationRequest.update({
       where: { id: prior.id },
@@ -88,8 +94,10 @@ export async function writePrescription(
       // A reorder or change stays under the problem the medication was for.
       conditionId: rx.conditionId ?? (rx.indication ? null : prior?.conditionId) ?? null,
       status: "active",
-      start: prior?.start ?? now,
-      end: courseDays ? new Date(now.getTime() + courseDays * 86_400_000) : null,
+      start: prior?.start ?? new Date(firstDay),
+      courseStart: startsOn ? new Date(startsOn) : null,
+      // The last day of the course, counting the first.
+      end: courseDays ? new Date(courseEnd(firstDay, courseDays)) : null,
       prescriberId: rx.prescriberId,
       rxClass,
       authoredAt: now,

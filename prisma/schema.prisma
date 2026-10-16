@@ -555,6 +555,8 @@ model MedicationRequest {
   status              MedStatus
   start               DateTime           @db.Date // when the patient started this therapy
   end                 DateTime?          @db.Date
+  // The day this prescription's dosing begins, when not the day it was written (Epic's start date).
+  courseStart         DateTime?          @db.Date
   prescriberId        String?
   prescriber          Practitioner?      @relation(fields: [prescriberId], references: [id])
   // The prescription itself.
@@ -905,7 +907,8 @@ model ServiceRequest {
   instructions   String?
   details        Json? // medication: dose, route, frequency, quantity, refills
   orderSet       String?
-  expectedAt     DateTime?     @db.Date
+  expectedAt     DateTime?     @db.Date // start date: when it should be done (a lab drawn, a scan booked)
+  expiresAt      DateTime?     @db.Date // end date: the order lapses after this day if not done
   orderedById    String
   orderedBy      Practitioner  @relation(fields: [orderedById], references: [id])
   createdAt      DateTime      @default(now())

@@ -39,7 +39,14 @@ export async function completeLabOrder(
   observationCodes: string[],
 ) {
   const candidates = await tx.serviceRequest.findMany({
-    where: { patientId: report.patientId, type: "lab", status: "signed", signedAt: { lte: new Date(report.effectiveAt.getTime() + 86_400_000) } },
+    where: {
+      patientId: report.patientId,
+      type: "lab",
+      status: "signed",
+      signedAt: { lte: new Date(report.effectiveAt.getTime() + 86_400_000) },
+      // An order past its end date has lapsed; a later result doesn't complete it.
+      OR: [{ expiresAt: null }, { expiresAt: { gte: new Date(report.effectiveAt.toISOString().slice(0, 10)) } }],
+    },
     orderBy: { signedAt: "asc" },
   });
   const codes = new Set([report.code, ...observationCodes]);
