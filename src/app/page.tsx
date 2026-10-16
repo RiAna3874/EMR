@@ -14,12 +14,17 @@ import { NextStepButton } from "@/components/schedule/next-step";
 import { visitType } from "@/lib/scheduling/visit-types";
 import { startOfDay } from "@/lib/scheduling/server";
 import { OPEN_STATUSES } from "@/lib/visits/close";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { isPhone, VIEW_COOKIE } from "@/lib/phone-view";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ denied?: string; view?: string }> }) {
   const { denied, view } = await searchParams;
   const currentUser = await requireUser();
+  // A phone opening My Day (after sign-in, too) gets the phone view, unless it chose the full site.
+  if (!denied && !view && isPhone((await headers()).get("user-agent") ?? "") && (await cookies()).get(VIEW_COOKIE)?.value !== "desktop") redirect("/m");
   // Front desk gets the schedule; clinical panels need clinical access.
   const clinical = can(currentUser.role, "viewClinical");
   const [schedule, abnormal, draftNotes, toVerify, openVisits] = await Promise.all([

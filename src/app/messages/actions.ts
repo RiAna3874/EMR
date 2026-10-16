@@ -71,7 +71,7 @@ export async function startConversation(_prev: ChatState, form: FormData): Promi
     conversationId = created.id;
   }
   refresh();
-  redirect(`/messages/${conversationId}`);
+  redirect(form.get("from") === "phone" ? `/m/chat/${conversationId}` : `/messages/${conversationId}`);
 }
 
 export async function sendMessage(conversationId: string, _prev: ChatState, form: FormData): Promise<ChatState> {

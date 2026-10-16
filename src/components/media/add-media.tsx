@@ -28,7 +28,8 @@ const today = () => {
 };
 
 // Taking or uploading photos and scans for the Media tab, naming each one before it is filed.
-export function AddMedia({ patientId, onClose }: { patientId: string; onClose: () => void }) {
+// savedHref: where to go once filed (the phone view's Media screen); the full site's Media tab by default.
+export function AddMedia({ patientId, onClose, savedHref }: { patientId: string; onClose: () => void; savedHref?: (firstId: string) => string }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Picked[]>([]);
   const [camera, setCamera] = useState(false);
@@ -103,7 +104,7 @@ export function AddMedia({ patientId, onClose }: { patientId: string; onClose: (
         if ("error" in res) return setError(res.error);
         picked.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
         setPicked([]);
-        router.push(`/patients/${patientId}/media?item=${res.ids[0]}`);
+        router.push(savedHref ? savedHref(res.ids[0]) : `/patients/${patientId}/media?item=${res.ids[0]}`);
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Saving failed.");
