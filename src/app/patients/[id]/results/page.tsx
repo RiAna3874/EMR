@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { buildTrend, type TrendSection } from "@/lib/labs/trends";
-import { SUGAR_TIMINGS, sugarLabel, sugarShort } from "@/lib/labs/groups";
+import { blocksOf, SUGAR_TIMINGS, sugarLabel, sugarShort } from "@/lib/labs/groups";
 import { fmtGlucose, GLUCOSE_CODES } from "@/lib/glucose";
 import { fmtDate, fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
@@ -22,7 +22,7 @@ import { correctLabResult } from "./actions";
 import { displayName, type SessionUser } from "@/lib/roles";
 import type { Flag, Sex } from "@prisma/client";
 
-const MAX_COLUMNS = 8;
+const MAX_COLUMNS = 7;
 const MAX_ALL_COLUMNS = 40;
 // The one blood sugar trend, in links: ?view=graph&codes=sugar
 const SUGAR_CODE = "sugar";
@@ -117,17 +117,21 @@ type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ in
 type ObsWithCorrections = ReportWithObs["observations"][number];
 
 type Section = TrendSection<ObsWithCorrections>;
+type Sub = Section["subs"][number];
+type Sugar = NonNullable<Sub["sugar"]>;
 type GridQuery = { group?: string; abn?: string; dates?: string };
 
-function trendHref(base: string, q: GridQuery) {
+function trendHref(base: string, q: GridQuery, hash = "") {
   const p = new URLSearchParams();
   if (q.group) p.set("group", q.group);
   if (q.abn) p.set("abn", q.abn);
   if (q.dates) p.set("dates", q.dates);
   const s = p.toString();
-  return s ? `${base}?${s}` : base;
+  return `${s ? `${base}?${s}` : base}${hash}`;
 }
 
+// Epic-style results review: a tree of sections and panels on the left, and on the
+// right one table per panel group with the newest results first.
 function TrendGrid({ sections, base, query }: { sections: Section[]; base: string; query: GridQuery }) {
   const abnormalOnly = query.abn === "1";
   const allDates = query.dates === "all";
@@ -135,143 +139,193 @@ function TrendGrid({ sections, base, query }: { sections: Section[]; base: strin
     .filter((s) => !query.group || s.key === query.group)
     .map((s) => (abnormalOnly ? onlyAbnormal(s) : s))
     .filter((s) => s.subs.length > 0);
-  const chip = (active: boolean) =>
-    `rounded-full border px-2.5 py-0.5 ${active ? "border-chrome bg-chrome text-white" : "border-line bg-panel text-ink-2 hover:border-accent hover:text-accent"}`;
+  const toggle = (active: boolean) =>
+    `rounded border px-2.5 py-0.5 ${active ? "border-chrome bg-chrome text-white" : "border-line bg-panel text-ink-2 hover:border-accent hover:text-accent"}`;
 
   return (
-    <div className="space-y-4">
-      <nav className="flex flex-wrap items-center gap-1.5 text-[12px]" aria-label="Result sections">
-        <Link href={trendHref(base, { ...query, group: undefined })} className={chip(!query.group)}>
-          All sections
+    <div className="flex items-start gap-3">
+      <nav className="sticky top-3 w-48 shrink-0 overflow-hidden rounded-md border border-line bg-panel text-[12.5px]" aria-label="Result sections">
+        <Link
+          href={trendHref(base, { ...query, group: undefined })}
+          className={`flex items-center justify-between border-b border-line px-3 py-2 font-semibold ${!query.group ? "bg-accent-soft text-ink" : "text-ink-2 hover:bg-panel-muted"}`}
+        >
+          All results
         </Link>
-        {sections.map((s) => (
-          <Link key={s.key} href={trendHref(base, { ...query, group: s.key })} className={chip(query.group === s.key)}>
-            {s.label}
-            {s.abnormal > 0 && (
-              <span className={`ml-1.5 rounded-full px-1.5 text-[10.5px] font-semibold ${query.group === s.key ? "bg-white/20" : "bg-high-soft text-high"}`} title="Tests whose latest result is out of range">
-                {s.abnormal}
-              </span>
-            )}
-          </Link>
-        ))}
-        <span className="ml-auto flex gap-1.5">
-          <Link href={trendHref(base, { ...query, abn: abnormalOnly ? undefined : "1" })} className={chip(abnormalOnly)} title="Only tests whose latest result is out of range">
-            Abnormal only
-          </Link>
-          <Link href={trendHref(base, { ...query, dates: allDates ? undefined : "all" })} className={chip(allDates)}>
-            All dates
-          </Link>
-        </span>
+        <div className="max-h-[calc(100vh-200px)] overflow-y-auto py-1">
+          {sections.map((s) => (
+            <div key={s.key} className="py-0.5">
+              <Link
+                href={trendHref(base, { ...query, group: s.key })}
+                className={`flex items-center gap-2 px-3 py-1 font-semibold ${query.group === s.key ? "bg-accent-soft text-ink" : "text-ink hover:bg-panel-muted"}`}
+              >
+                <span className="flex-1 truncate">{s.label}</span>
+                {s.abnormal > 0 && <AbnCount n={s.abnormal} />}
+              </Link>
+              {s.subs.map((x) => (
+                <Link
+                  key={x.key}
+                  href={trendHref(base, { ...query, group: query.group && query.group !== s.key ? s.key : query.group }, `#panel-${s.key}-${x.key}`)}
+                  className="flex items-center gap-2 py-0.5 pl-6 pr-3 text-ink-2 hover:bg-panel-muted hover:text-accent"
+                >
+                  <span className="flex-1 truncate">{x.label}</span>
+                  {x.abnormal > 0 && <AbnCount n={x.abnormal} />}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
       </nav>
 
-      {shown.length === 0 && (
-        <div className="rounded-md border border-line bg-panel">
-          <Empty>{abnormalOnly ? "No tests with an out-of-range latest result." : "No results in this section."}</Empty>
+      <div className="min-w-0 flex-1 space-y-3">
+        <div className="flex items-center gap-1.5 text-[12px]">
+          <span className="text-ink-3">Newest results on the left. Click a date to open its report, or a test to graph it.</span>
+          <span className="ml-auto flex gap-1.5">
+            <Link href={trendHref(base, { ...query, abn: abnormalOnly ? undefined : "1" })} className={toggle(abnormalOnly)} title="Only tests whose latest result is out of range">
+              Abnormal only
+            </Link>
+            <Link href={trendHref(base, { ...query, dates: allDates ? undefined : "all" })} className={toggle(allDates)} title="Show every date, not just the newest">
+              All dates
+            </Link>
+          </span>
         </div>
-      )}
 
-      {shown.map((s) => {
-        const cols = allDates ? s.times.slice(0, MAX_ALL_COLUMNS) : s.times.slice(0, MAX_COLUMNS);
-        const hidden = s.times.length - cols.length;
-        const span = cols.length + 4;
-        const sugar = s.subs.find((x) => x.sugar)?.sugar;
-        return (
-          <section key={s.key} id={`section-${s.key}`} className="scroll-mt-4 overflow-hidden rounded-md border border-line bg-panel">
-            <header className="flex items-baseline gap-3 border-b border-line bg-panel-muted px-3 py-2">
+        {shown.length === 0 && (
+          <div className="rounded-md border border-line bg-panel">
+            <Empty>{abnormalOnly ? "No tests with an out-of-range latest result." : "No results in this section."}</Empty>
+          </div>
+        )}
+
+        {shown.map((s) => (
+          <details key={s.key} open id={`section-${s.key}`} className="group scroll-mt-3 overflow-hidden rounded-md border border-line bg-panel">
+            <summary className="flex cursor-pointer list-none items-baseline gap-3 bg-chrome px-3 py-1.5 text-white">
+              <span className="text-[11px] transition-transform group-open:rotate-90">▶</span>
               <h2 className="text-[13.5px] font-semibold">{s.label}</h2>
-              <span className="text-[11.5px] text-ink-3">Latest {fmtDate(new Date(s.latestAt))}</span>
-              {s.abnormal > 0 && <span className="text-[11.5px] font-semibold text-high">{s.abnormal} out of range</span>}
-              {hidden > 0 && (
-                <Link href={trendHref(base, { ...query, dates: "all" })} className="ml-auto text-[11.5px] font-medium text-accent hover:underline">
-                  {hidden} older {hidden === 1 ? "date" : "dates"} not shown
-                </Link>
-              )}
-            </header>
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed" style={{ minWidth: 224 + cols.length * 84 + 288 }}>
-                <colgroup>
-                  <col className="w-56" />
-                  {cols.map((t) => (
-                    <col key={t} />
-                  ))}
-                  <col className="w-28" />
-                  <col className="w-20" />
-                  <col className="w-24" />
-                </colgroup>
-                <thead>
-                  <tr className="text-[11.5px] text-ink-3">
-                    <th className="px-3 py-1.5 text-left font-medium">Test</th>
-                    {cols.map((t) => (
-                      <th key={t} className="tabular px-3 py-1.5 text-right font-medium">
-                        <DateHead t={t} href={s.reportAt.has(t) ? `${base}?view=reports&report=${s.reportAt.get(t)}` : undefined} imported={s.imported.has(t)} />
-                      </th>
-                    ))}
-                    <th className="px-3 py-1.5 text-left font-medium">Range</th>
-                    <th className="px-3 py-1.5 text-left font-medium">Units</th>
-                    <th className="px-3 py-1.5 text-left font-medium">Trend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {s.subs.map((x) => (
-                    <Fragment key={x.key}>
-                      {(s.subs.length > 1 || x.label !== s.label) && (
-                        <tr className="border-t border-line bg-accent-soft/25">
-                          <th colSpan={span} className="px-3 py-1 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-2">
-                            {x.label}
-                          </th>
-                        </tr>
-                      )}
-                      {x.sugar && <SugarTrendRow sugar={x.sugar} cols={cols} base={base} />}
-                      {x.rows.map((r) => (
-                        <tr key={r.code} id={r.code} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-                          <td className="truncate px-3 py-1.5 pl-5">
-                            <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title="Graph this result">
-                              {r.display}
-                            </Link>
-                          </td>
-                          {cols.map((t) => {
-                            const o = r.byTime.get(t);
-                            return (
-                              <td
-                                key={t}
-                                className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
-                                title={o?.flag && o.flag !== "N" ? flagTitle(o.flag) : undefined}
-                              >
-                                {o ? (
-                                  <>
-                                    {fmtValue(o)}
-                                    <FlagBadge flag={o.flag} />
-                                    {o.correctedAt && <CorrectedMark obs={o} />}
-                                  </>
-                                ) : (
-                                  <span className="text-ink-3">—</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="tabular truncate px-3 py-1.5 text-ink-2">{fmtRange(r)}</td>
-                          <td className="truncate px-3 py-1.5 text-ink-2">{unitLabel(r.unit)}</td>
-                          <td className="px-3 py-1.5">
-                            <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
-                          </td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
+              <span className="text-[11.5px] text-white/70">Latest {fmtDate(new Date(s.latestAt))}</span>
+              {s.abnormal > 0 && <span className="ml-auto rounded bg-white/15 px-1.5 text-[11.5px] font-semibold">{s.abnormal} out of range</span>}
+            </summary>
+            <div className="divide-y divide-line">
+              {s.blocks.map((b) => (
+                <PanelTable key={b.subs[0].key} section={s} block={b} base={base} query={query} allDates={allDates} />
+              ))}
             </div>
-            {sugar && sugar.cells.length > 1 && (
-              <details open className="border-t border-line">
-                <summary className="cursor-pointer px-3 py-1.5 text-[12px] font-medium text-ink-2 hover:text-accent">Blood sugar graph</summary>
-                <div className="px-2 pb-2">
-                  <SugarChart sugar={sugar} base={base} height={180} />
-                </div>
-              </details>
-            )}
-          </section>
-        );
-      })}
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AbnCount({ n }: { n: number }) {
+  return (
+    <span className="rounded-full bg-high-soft px-1.5 text-[10.5px] font-semibold text-high" title={`${n} ${n === 1 ? "test's" : "tests'"} latest result is out of range`}>
+      {n}
+    </span>
+  );
+}
+
+function PanelTable({ section, block, base, query, allDates }: { section: Section; block: Section["blocks"][number]; base: string; query: GridQuery; allDates: boolean }) {
+  const cols = block.times.slice(0, allDates ? MAX_ALL_COLUMNS : MAX_COLUMNS);
+  const hidden = block.times.length - cols.length;
+  const single = block.subs.length === 1;
+  const title = single ? block.subs[0].label : block.subs.map((x) => x.label).join(", ");
+  return (
+    <div>
+      {block.subs.map((x) => (
+        <span key={x.key} id={`panel-${section.key}-${x.key}`} className="block scroll-mt-3" />
+      ))}
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed" style={{ minWidth: 192 + cols.length * 76 + 256 }}>
+          <colgroup>
+            <col className="w-48" />
+            {cols.map((t) => (
+              <col key={t} />
+            ))}
+            <col className="w-24" />
+            <col className="w-20" />
+            <col className="w-20" />
+          </colgroup>
+          <thead>
+            <tr className="bg-panel-muted text-[11.5px] text-ink-3">
+              <th className="sticky left-0 z-10 bg-panel-muted px-3 py-1.5 text-left text-[12.5px] font-semibold text-ink">
+                {single ? title : "Test"}
+                {hidden > 0 && (
+                  <Link href={trendHref(base, { ...query, dates: "all" })} className="block text-[11px] font-normal text-accent hover:underline">
+                    + {hidden} older {hidden === 1 ? "date" : "dates"}
+                  </Link>
+                )}
+              </th>
+              {cols.map((t) => (
+                <th key={t} className="tabular whitespace-nowrap px-2 py-1.5 text-right font-medium">
+                  <DateHead t={t} href={section.reportAt.has(t) ? `${base}?view=reports&report=${section.reportAt.get(t)}` : undefined} imported={section.imported.has(t)} />
+                </th>
+              ))}
+              <th className="px-3 py-1.5 text-left font-medium">Range</th>
+              <th className="px-3 py-1.5 text-left font-medium">Units</th>
+              <th className="px-3 py-1.5 text-left font-medium">Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {block.subs.map((x) => (
+              <Fragment key={x.key}>
+                {!single && (
+                  <tr className="border-t border-line">
+                    <th colSpan={cols.length + 4} className="bg-accent-soft/30 px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-2">
+                      {x.label}
+                    </th>
+                  </tr>
+                )}
+                {x.sugar && <SugarTrendRow sugar={x.sugar} cols={cols} base={base} />}
+                {x.rows.map((r) => (
+                  <tr key={r.code} id={r.code} className="group/row scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
+                    <td className="sticky left-0 z-10 truncate bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30">
+                      <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title={`Graph ${r.display}`}>
+                        {r.display}
+                      </Link>
+                    </td>
+                    {cols.map((t) => {
+                      const o = r.byTime.get(t);
+                      return (
+                        <td
+                          key={t}
+                          className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
+                          title={o?.flag && o.flag !== "N" ? flagTitle(o.flag) : undefined}
+                        >
+                          {o ? (
+                            <>
+                              {fmtValue(o)}
+                              <FlagBadge flag={o.flag} />
+                              {o.correctedAt && <CorrectedMark obs={o} />}
+                            </>
+                          ) : (
+                            <span className="text-ink-3/60">·</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="tabular truncate px-3 py-1.5 text-ink-2" title={fmtRange(r)}>
+                      {fmtRange(r)}
+                    </td>
+                    <td className="truncate px-3 py-1.5 text-ink-2" title={unitLabel(r.unit)}>
+                      {unitLabel(r.unit)}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {block.subs[0].sugar && block.subs[0].sugar.cells.length > 1 && (
+        <details className="border-t border-line">
+          <summary className="cursor-pointer px-3 py-1.5 text-[12px] font-medium text-accent hover:underline">Show blood sugar graph</summary>
+          <div className="px-2 pb-2">
+            <SugarChart sugar={block.subs[0].sugar} base={base} height={180} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -280,26 +334,28 @@ function TrendGrid({ sections, base, query }: { sections: Section[]; base: strin
 function onlyAbnormal(s: Section): Section {
   const latestFlag = (m: Map<number, { flag: Flag | null }>) => [...m.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
   const subs = s.subs
-    .map((x) => ({
-      ...x,
-      rows: x.rows.filter((r) => { const f = latestFlag(r.byTime); return f && f !== "N"; }),
-      sugar: x.sugar && x.sugar.cells.at(-1)?.flag && x.sugar.cells.at(-1)?.flag !== "N" ? x.sugar : undefined,
-    }))
+    .map((x) => {
+      const rows = x.rows.filter((r) => { const f = latestFlag(r.byTime); return f && f !== "N"; });
+      const sugar = x.sugar && x.sugar.cells.at(-1)?.flag && x.sugar.cells.at(-1)?.flag !== "N" ? x.sugar : undefined;
+      const times = [...new Set([...rows.flatMap((r) => [...r.byTime.keys()]), ...(sugar ? [...sugar.byTime.keys()] : [])])].sort((a, b) => b - a);
+      return { ...x, rows, sugar, times };
+    })
     .filter((x) => x.rows.length || x.sugar);
-  const times = new Set(subs.flatMap((x) => [...x.rows.flatMap((r) => [...r.byTime.keys()]), ...(x.sugar ? [...x.sugar.byTime.keys()] : [])]));
-  return { ...s, subs, times: s.times.filter((t) => times.has(t)) };
+  return { ...s, subs, blocks: blocksOf(subs), times: [...new Set(subs.flatMap((x) => x.times))].sort((a, b) => b - a) };
 }
 
 function DateHead({ t, href, imported }: { t: number; href?: string; imported: boolean }) {
   const body = (
     <>
-      {imported && <ImportedMark />}
-      {fmtShortDate(new Date(t))}
-      <div className="font-normal">{fmtTime(new Date(t))}</div>
+      <div className="font-semibold text-ink-2">{fmtShortDate(new Date(t))}</div>
+      <div className="font-normal">
+        {imported && <ImportedMark />}
+        {fmtTime(new Date(t))}
+      </div>
     </>
   );
   return href ? (
-    <Link href={href} className="hover:text-accent">
+    <Link href={href} className="hover:text-accent" title="Open this report">
       {body}
     </Link>
   ) : (
@@ -307,44 +363,53 @@ function DateHead({ t, href, imported }: { t: number; href?: string; imported: b
   );
 }
 
-// Every blood sugar in one row: lab glucose of any timing and fingerstick readings, in mmol/L.
-function SugarTrendRow({ sugar, cols, base }: { sugar: NonNullable<Section["subs"][number]["sugar"]>; cols: number[]; base: string }) {
+const SUGAR_TAG = { fasting: "F", random: "R", post_meal: "2H" } as const;
+
+// Every blood sugar in one row, dates across: lab glucose of any timing and fingerstick
+// readings, in mmol/L. A small letter says when it was taken; a ring marks a fingerstick.
+function SugarTrendRow({ sugar, cols, base }: { sugar: Sugar; cols: number[]; base: string }) {
   const [first, ...others] = sugar.codes;
   return (
-    <tr id={first} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-      <td className="px-3 py-1.5 pl-5">
+    <tr id={first} className="group/row scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
+      <td className="sticky left-0 z-10 bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30">
         {others.map((c) => (
           <span key={c} id={c} className="scroll-mt-4" />
         ))}
         <Link href={`${base}?view=graph&codes=${SUGAR_CODE}`} className="font-medium hover:text-accent hover:underline" title="Graph every blood sugar">
           Blood sugar
         </Link>
-        <div className="text-[11px] text-ink-3">Lab and fingerstick, all timings</div>
+        <div className="text-[10.5px] leading-tight text-ink-3" title="F fasting, R random, 2H two hours after a meal. ° fingerstick (POC)">
+          F fasting · R random · 2H after meal
+          <br />° fingerstick (POC)
+        </div>
       </td>
       {cols.map((t) => {
         const cells = sugar.byTime.get(t);
         return (
-          <td key={t} className="tabular px-3 py-1.5 text-right align-top">
+          <td key={t} className="tabular whitespace-nowrap px-2 py-1.5 text-right">
             {cells ? (
-              cells.map((c) => (
-                <div key={c.obs.id} className={flagText(c.flag)} title={`${sugarLabel(c.timing)} · ${c.source === "fingerstick" ? "fingerstick (POC)" : "lab"} · ${fmtGlucose(c.mmol)}`}>
+              cells.map((c, i) => (
+                <span
+                  key={c.obs.id}
+                  className={`${i ? "ml-1.5" : ""} ${flagText(c.flag)}`}
+                  title={`${sugarLabel(c.timing)} (${sugarShort(c.timing)}), ${c.source === "fingerstick" ? "fingerstick" : "lab"}: ${fmtGlucose(c.mmol)}`}
+                >
                   {c.mmol.toFixed(1)}
+                  {c.source === "fingerstick" && <span className="text-ink-3">°</span>}
+                  <span className="ml-0.5 text-[10px] font-semibold text-ink-3">{SUGAR_TAG[c.timing]}</span>
                   <FlagBadge flag={c.flag} />
-                  <div className="text-[10.5px] font-normal text-ink-3">
-                    {sugarShort(c.timing)} · {c.source === "fingerstick" ? "POC" : "Lab"}
-                    {c.obs.correctedAt && <CorrectedMark obs={c.obs} />}
-                  </div>
-                </div>
+                  {c.obs.correctedAt && <CorrectedMark obs={c.obs} />}
+                </span>
               ))
             ) : (
-              <span className="text-ink-3">—</span>
+              <span className="text-ink-3/60">·</span>
             )}
           </td>
         );
       })}
-      <td className="tabular px-3 py-1.5 text-[11.5px] text-ink-2">
-        FBS 3.9–5.5
-        <div>RBS, 2HABF 3.9–7.8</div>
+      <td className="tabular px-3 py-1.5 text-ink-2" title="Fasting 3.9–5.5; random and 2 hours after a meal 3.9–7.8">
+        3.9–7.8
+        <span className="text-[10.5px] text-ink-3"> (F ≤5.5)</span>
       </td>
       <td className="px-3 py-1.5 text-ink-2">mmol/L</td>
       <td className="px-3 py-1.5">
@@ -354,7 +419,7 @@ function SugarTrendRow({ sugar, cols, base }: { sugar: NonNullable<Section["subs
   );
 }
 
-function SugarChart({ sugar, base, height, cutoff = 0 }: { sugar: NonNullable<Section["subs"][number]["sugar"]>; base: string; height?: number; cutoff?: number }) {
+function SugarChart({ sugar, base, height, cutoff = 0 }: { sugar: Sugar; base: string; height?: number; cutoff?: number }) {
   const series = SUGAR_TIMINGS.map((timing) => ({
     name: `${timing.label} (${timing.short})`,
     points: sugar.cells

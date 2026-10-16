@@ -6,7 +6,7 @@ import type { Flag } from "@prisma/client";
 import { pivot } from "../chart";
 import { ANALYTES } from "./catalog";
 import { GLUCOSE_TIMINGS, glucoseFlag } from "../glucose";
-import { groupLabel, groupOrder, LAB_GROUPS, placeResult, subLabel, subOrder, sugarReading, type GroupKey, type SugarReading } from "./groups";
+import { blocksOf, groupLabel, groupOrder, LAB_GROUPS, placeResult, subLabel, subOrder, sugarReading, type GroupKey, type SugarReading } from "./groups";
 
 type Obs = Parameters<typeof pivot>[0][number];
 export type TrendInput<O extends Obs = Obs> = { obs: O; panel?: string | null; reportId?: string | null; imported?: boolean };
@@ -15,11 +15,16 @@ export type TrendRow<O extends Obs = Obs> = Omit<ReturnType<typeof pivot>["rows"
 export type SugarCell<O extends Obs = Obs> = SugarReading & { obs: O; flag: Flag | null; reportId?: string | null; imported?: boolean };
 export type SugarRow<O extends Obs = Obs> = { byTime: Map<number, SugarCell<O>[]>; cells: SugarCell<O>[]; codes: string[] };
 
-export type TrendSub<O extends Obs = Obs> = { key: string; label: string; rows: TrendRow<O>[]; sugar?: SugarRow<O> };
+export type TrendSub<O extends Obs = Obs> = { key: string; label: string; rows: TrendRow<O>[]; sugar?: SugarRow<O>; times: number[]; abnormal: number };
+// Panels drawn together (CBC with its differential, the CMP's electrolytes, kidney and
+// liver tests) share one table and its date columns; a panel checked on other days
+// (fingerstick sugars vs HbA1c, troponin vs lipids) gets its own, so no row is mostly dashes.
+export type TrendBlock<O extends Obs = Obs> = { subs: TrendSub<O>[]; times: number[] };
 export type TrendSection<O extends Obs = Obs> = {
   key: GroupKey;
   label: string;
   subs: TrendSub<O>[];
+  blocks: TrendBlock<O>[];
   times: number[]; // every result time in this section, newest first
   reportAt: Map<number, string>; // a report to open from each date column
   imported: Set<number>;
@@ -51,7 +56,7 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
   const section = (key: GroupKey) => {
     let s = sections.get(key);
     if (!s) {
-      s = { key, label: groupLabel(key), subs: [], times: [], reportAt: new Map(), imported: new Set(), abnormal: 0, latestAt: 0 };
+      s = { key, label: groupLabel(key), subs: [], blocks: [], times: [], reportAt: new Map(), imported: new Set(), abnormal: 0, latestAt: 0 };
       sections.set(key, s);
     }
     return s;
@@ -59,7 +64,7 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
   const sub = (s: TrendSection<O>, key: string) => {
     let x = s.subs.find((y) => y.key === key);
     if (!x) {
-      x = { key, label: subLabel(s.key, key), rows: [] };
+      x = { key, label: subLabel(s.key, key), rows: [], times: [], abnormal: 0 };
       s.subs.push(x);
     }
     return x;
@@ -76,9 +81,16 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
   for (const row of rows as unknown as TrendRow<O>[]) {
     const place = placeResult(row.code, row.display, panelOf.get(row.code));
     const s = section(place.group);
-    sub(s, place.sub).rows.push(row);
-    for (const o of row.byTime.values()) addTime(s, o);
-    if (flagged(latestOf(row.byTime)?.flag)) s.abnormal++;
+    const x = sub(s, place.sub);
+    x.rows.push(row);
+    for (const o of row.byTime.values()) {
+      addTime(s, o);
+      x.times.push(o.effectiveAt.getTime());
+    }
+    if (flagged(latestOf(row.byTime)?.flag)) {
+      s.abnormal++;
+      x.abnormal++;
+    }
   }
 
   if (sugar.length) {
@@ -89,8 +101,13 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
       byTime.set(t, [...(byTime.get(t) ?? []), c]);
       addTime(s, c.obs);
     }
-    if (flagged(sugar.at(-1)?.flag)) s.abnormal++;
-    sub(s, "sugar").sugar = { byTime, cells: sugar, codes: [...new Set(sugar.map((c) => c.obs.code))] };
+    const x = sub(s, "sugar");
+    if (flagged(sugar.at(-1)?.flag)) {
+      s.abnormal++;
+      x.abnormal++;
+    }
+    x.sugar = { byTime, cells: sugar, codes: [...new Set(sugar.map((c) => c.obs.code))] };
+    x.times.push(...byTime.keys());
   }
 
   const out = [...sections.values()].sort((a, b) => groupOrder(a.key) - groupOrder(b.key));
@@ -101,7 +118,9 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
     for (const x of s.subs) {
       const at = (r: TrendRow<O>) => ANALYTE_ORDER.get(r.code) ?? 1000;
       x.rows = x.rows.map((r, i) => ({ r, i })).sort((a, b) => at(a.r) - at(b.r) || a.i - b.i).map(({ r }) => r);
+      x.times = [...new Set(x.times)].sort((a, b) => b - a);
     }
+    s.blocks = blocksOf(s.subs);
   }
   return out;
 }
