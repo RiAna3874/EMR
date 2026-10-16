@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { resultHref } from "@/lib/labs/groups";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/roles";
@@ -176,7 +177,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
               {latestAbnormal.map((o) => (
                 <tr key={o.id} className="border-t border-line first:border-t-0">
                   <td className="px-3 py-1.5">
-                    <Link href={`${base}/results#${o.code}`} className="hover:text-accent">
+                    <Link href={resultHref(base, o, o.report?.display)} className="hover:text-accent">
                       {o.display}
                     </Link>
                   </td>

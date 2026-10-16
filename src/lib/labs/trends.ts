@@ -6,7 +6,7 @@ import type { Flag } from "@prisma/client";
 import { pivot } from "../chart";
 import { ANALYTES } from "./catalog";
 import { GLUCOSE_TIMINGS, glucoseFlag } from "../glucose";
-import { blocksOf, groupLabel, groupOrder, LAB_GROUPS, placeResult, subLabel, subOrder, sugarReading, type GroupKey, type SugarReading } from "./groups";
+import { blocksOf, isBloodSugar, groupLabel, groupOrder, LAB_GROUPS, placeResult, subLabel, subOrder, sugarReading, type GroupKey, type SugarReading } from "./groups";
 
 type Obs = Parameters<typeof pivot>[0][number];
 export type TrendInput<O extends Obs = Obs> = { obs: O; panel?: string | null; reportId?: string | null; imported?: boolean };
@@ -36,7 +36,8 @@ const ANALYTE_ORDER = new Map(ANALYTES.map((a, i) => [a.loinc, i]));
 const latestOf = <T,>(m: Map<number, T>) => [...m.entries()].sort((a, b) => b[0] - a[0])[0]?.[1];
 const flagged = (f: Flag | null | undefined) => !!f && f !== "N";
 
-export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection<O>[] {
+// `sugar: false` leaves blood sugars out (the Results tab; they have their own Blood sugar tab).
+export function buildTrend<O extends Obs>(inputs: TrendInput<O>[], opts: { sugar?: boolean } = {}): TrendSection<O>[] {
   const panelOf = new Map<string, string | null | undefined>();
   const meta = new Map<O, TrendInput<O>>();
   const sugar: SugarCell<O>[] = [];
@@ -45,6 +46,7 @@ export function buildTrend<O extends Obs>(inputs: TrendInput<O>[]): TrendSection
     meta.set(i.obs, i);
     if (!panelOf.has(i.obs.code)) panelOf.set(i.obs.code, i.panel);
     const reading = sugarReading(i.obs, i.panel);
+    if (opts.sugar === false && (reading || isBloodSugar(i.obs, i.panel))) continue;
     if (reading) {
       // Fingerstick values carry their own flag; a lab glucose keeps the lab's flag.
       const flag = reading.source === "fingerstick" ? i.obs.flag ?? glucoseFlag(reading.mmol, GLUCOSE_TIMINGS.find((t) => t.key === reading.timing)!.range) : i.obs.flag;

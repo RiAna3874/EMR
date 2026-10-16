@@ -196,5 +196,18 @@ export function sugarReading(o: Obs, panelDisplay?: string | null): SugarReading
 }
 
 export const SUGAR_TIMINGS = GLUCOSE_TIMINGS;
+
+// A blood glucose of any timing, lab or fingerstick (not a urine sugar, not HbA1c).
+export function isBloodSugar(o: { code: string; display: string; category?: string }, panelDisplay?: string | null) {
+  if (isGlucoseCode(o.code)) return true;
+  if (o.category === "vital_signs") return false;
+  const p = placeResult(o.code, o.display, panelDisplay);
+  return p.group === "diabetes" && p.sub === "sugar";
+}
+
+// Where a result opens in the chart: blood sugars live on their own tab.
+export function resultHref(chartBase: string, o: { code: string; display: string; category?: string }, panelDisplay?: string | null) {
+  return isBloodSugar(o, panelDisplay) ? `${chartBase}/sugar` : `${chartBase}/results#${encodeURIComponent(o.code)}`;
+}
 export const sugarShort = (t: GlucoseTiming) => GLUCOSE_TIMINGS.find((x) => x.key === t)!.short;
 export const sugarLabel = (t: GlucoseTiming) => GLUCOSE_TIMINGS.find((x) => x.key === t)!.label;

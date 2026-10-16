@@ -1,8 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requirePhonePermission } from "@/lib/phone-session";
 import { logChartView } from "@/lib/audit/server";
-import { SUGAR_TIMINGS, sugarLabel, sugarShort } from "@/lib/labs/groups";
-import { mmolToMg } from "@/lib/glucose";
 import { fmtDate, fmtRange, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { FlagBadge, flagText } from "@/components/flag";
 import { TrendChart } from "@/components/trend-chart";
@@ -15,46 +13,11 @@ export const metadata = { title: "Result trend" };
 export default async function PhoneResultTrend({ params }: { params: Promise<{ id: string; code: string }> }) {
   const { id, code: rawCode } = await params;
   const code = safeDecode(rawCode);
+  // Blood sugar has its own tab now; older links land there.
+  if (code === "sugar") redirect(`/m/patients/${id}/sugar`);
   await requirePhonePermission("viewClinical");
   await logChartView(id, "Results (phone)");
   const subs = (await phoneTrend(id)).flatMap((s) => s.subs);
-
-  if (code === "sugar") {
-    const sugar = subs.find((x) => x.sugar)?.sugar;
-    if (!sugar) notFound();
-    const series = SUGAR_TIMINGS.map((t) => ({
-      name: `${t.label} (${t.short})`,
-      points: sugar.cells.filter((c) => c.timing === t.key).map((c) => ({ t: c.obs.effectiveAt.getTime(), v: c.mmol, flag: c.flag, imported: c.imported })),
-    })).filter((s) => s.points.length);
-    return (
-      <>
-        <Title name="Blood sugar" note="Lab and fingerstick (°) readings in mmol/L. Normal 3.9–7.8; fasting up to 5.5." />
-        <div className="border-y border-line bg-panel px-1 py-2">
-          <TrendChart series={series} unit="mmol/L" refLow={3.9} refHigh={7.8} height={220} />
-        </div>
-        <PhoneSection title="Readings">
-          {[...sugar.cells].reverse().map((c) => (
-            <div key={c.obs.id} className="flex items-baseline gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px]">
-                  {sugarLabel(c.timing)} <span className="text-ink-3">({sugarShort(c.timing)})</span>
-                </div>
-                <div className="text-[12.5px] text-ink-3">
-                  {fmtDate(c.obs.effectiveAt)} {fmtTime(c.obs.effectiveAt)} · {c.source === "fingerstick" ? "fingerstick" : "lab"}
-                </div>
-              </div>
-              <div className={`tabular text-right font-semibold ${flagText(c.flag)}`}>
-                {c.mmol.toFixed(1)}
-                {c.source === "fingerstick" && <span className="text-ink-3">°</span>}
-                <FlagBadge flag={c.flag} />
-                <div className="text-[11.5px] font-normal text-ink-3">{mmolToMg(c.mmol)} mg/dL</div>
-              </div>
-            </div>
-          ))}
-        </PhoneSection>
-      </>
-    );
-  }
 
   const row = subs.flatMap((x) => x.rows).find((r) => r.code === code);
   if (!row) notFound();

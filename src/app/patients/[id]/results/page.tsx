@@ -1,11 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Fragment } from "react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { buildTrend, type TrendSection } from "@/lib/labs/trends";
-import { blocksOf, SUGAR_TIMINGS, sugarLabel, sugarShort } from "@/lib/labs/groups";
-import { fmtGlucose, GLUCOSE_CODES } from "@/lib/glucose";
+import { blocksOf, isBloodSugar } from "@/lib/labs/groups";
+import { matchesTokens, obsHaystack, queryTokens } from "@/lib/labs/result-search";
+import { GLUCOSE_CODES } from "@/lib/glucose";
+import { ResultsSearchBox } from "@/components/results-search";
 import { fmtDate, fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { FlagBadge, flagText, flagTitle } from "@/components/flag";
@@ -24,7 +27,7 @@ import type { Flag, Sex } from "@prisma/client";
 
 const MAX_COLUMNS = 7;
 const MAX_ALL_COLUMNS = 40;
-// The one blood sugar trend, in links: ?view=graph&codes=sugar
+// Older links graph every blood sugar with ?view=graph&codes=sugar; that is the Blood sugar tab now.
 const SUGAR_CODE = "sugar";
 
 export default async function Results({
@@ -32,7 +35,7 @@ export default async function Results({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string; correct?: string; corrected?: string; group?: string; abn?: string; dates?: string }>;
+  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string; correct?: string; corrected?: string; group?: string; abn?: string; dates?: string; q?: string }>;
 }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
@@ -44,16 +47,28 @@ export default async function Results({
     orderBy: { effectiveAt: "desc" },
     include: REPORT_INCLUDE,
   });
-  const [patient, glucose] = await Promise.all([
+  const [patient, fingersticks] = await Promise.all([
     db.patient.findUniqueOrThrow({ where: { id }, select: { sex: true } }),
-    // Fingerstick glucose is filed with the vitals; it joins the lab glucose in one trend.
-    db.observation.findMany({ where: { patientId: id, category: "vital_signs", code: { in: GLUCOSE_CODES } }, include: REPORT_INCLUDE.observations.include }),
-  ]);
-  const sections = buildTrend([
-    ...reports.flatMap((r) => r.observations.map((o) => ({ obs: o, panel: r.display, reportId: r.id, imported: r.source === "imported" }))),
-    ...glucose.map((o) => ({ obs: o })),
+    db.observation.count({ where: { patientId: id, category: "vital_signs", code: { in: GLUCOSE_CODES } } }),
   ]);
   const view = sp.view === "reports" ? "reports" : sp.view === "graph" ? "graph" : "grid";
+  const reportOfObs = new Map(reports.flatMap((r) => r.observations.map((o) => [o.id, r] as const)));
+  const sugarCodes = new Set(reports.flatMap((r) => r.observations.filter((o) => isBloodSugar(o, r.display)).map((o) => o.code)));
+
+  // Blood sugars (lab and fingerstick) have their own tab; old graph links go there.
+  if (view === "graph" && sp.codes) {
+    const codes = sp.codes.split(",");
+    if (codes.every((c) => c === SUGAR_CODE || sugarCodes.has(c) || GLUCOSE_CODES.includes(c))) redirect(`/patients/${id}/sugar`);
+  }
+  const hasSugar = sugarCodes.size > 0 || fingersticks > 0;
+
+  const tokens = queryTokens(sp.q);
+  const all = buildTrend(
+    reports.flatMap((r) => r.observations.map((o) => ({ obs: o, panel: r.display, reportId: r.id, imported: r.source === "imported" }))),
+    { sugar: false },
+  );
+  const sections = tokens.length ? searchSections(all, tokens, (o) => reportOfObs.get(o.id)) : all;
+  const shownReports = tokens.length ? reports.filter((r) => matchesTokens(reportHaystack(r), tokens)) : reports;
 
   return (
     <div className="p-4">
@@ -76,19 +91,46 @@ export default async function Results({
             Graph
           </Link>
         </div>
+        <ResultsSearchBox initial={sp.q ?? ""} />
         <Legend />
       </div>
-      {(view === "reports" ? reports.length === 0 : sections.length === 0) ? (
+      {hasSugar && (
+        <p className="mb-2 text-[12px] text-ink-3">
+          Blood sugars (lab glucose and fingerstick readings) are on the{" "}
+          <Link href={`/patients/${id}/sugar`} className="font-medium text-accent hover:underline">
+            Blood sugar tab
+          </Link>
+          .
+        </p>
+      )}
+      {(view === "reports" ? shownReports.length === 0 : sections.length === 0) ? (
         <div className="rounded-md border border-line bg-panel">
-          <Empty>No lab results on file.</Empty>
+          <Empty>
+            {tokens.length ? (
+              <>
+                Nothing in the results matches “{sp.q}”.{" "}
+                <Link href={view === "grid" ? base : `${base}?view=${view}`} className="font-medium text-accent hover:underline">
+                  Clear search
+                </Link>
+              </>
+            ) : all.length === 0 && reports.length > 0 && view !== "reports" ? (
+              "Only blood sugars on file. See the Blood sugar tab."
+            ) : (
+              "No lab results on file."
+            )}
+          </Empty>
         </div>
       ) : view === "grid" ? (
-        <TrendGrid sections={sections} base={base} query={{ group: sp.group, abn: sp.abn, dates: sp.dates }} />
+        <>
+          {tokens.length > 0 && <SearchSummary sections={sections} q={sp.q!} clear={base} />}
+          <TrendGrid sections={sections} base={base} query={{ group: sp.group, abn: sp.abn, dates: sp.dates, q: sp.q }} tokens={tokens} />
+        </>
       ) : view === "graph" ? (
         <GraphView sections={sections} reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
         <ReportView
-          reports={reports}
+          tokens={tokens}
+          reports={shownReports}
           selected={sp.report}
           base={base}
           canReview={can(currentUser.role, "reviewResults")}
@@ -118,21 +160,21 @@ type ObsWithCorrections = ReportWithObs["observations"][number];
 
 type Section = TrendSection<ObsWithCorrections>;
 type Sub = Section["subs"][number];
-type Sugar = NonNullable<Sub["sugar"]>;
-type GridQuery = { group?: string; abn?: string; dates?: string };
+type GridQuery = { group?: string; abn?: string; dates?: string; q?: string };
 
 function trendHref(base: string, q: GridQuery, hash = "") {
   const p = new URLSearchParams();
   if (q.group) p.set("group", q.group);
   if (q.abn) p.set("abn", q.abn);
   if (q.dates) p.set("dates", q.dates);
+  if (q.q) p.set("q", q.q);
   const s = p.toString();
   return `${s ? `${base}?${s}` : base}${hash}`;
 }
 
 // Epic-style results review: a tree of sections and panels on the left, and on the
 // right one table per panel group with the newest results first.
-function TrendGrid({ sections, base, query }: { sections: Section[]; base: string; query: GridQuery }) {
+function TrendGrid({ sections, base, query, tokens }: { sections: Section[]; base: string; query: GridQuery; tokens: string[] }) {
   const abnormalOnly = query.abn === "1";
   const allDates = query.dates === "all";
   const shown = sections
@@ -205,7 +247,7 @@ function TrendGrid({ sections, base, query }: { sections: Section[]; base: strin
             </summary>
             <div className="divide-y divide-line">
               {s.blocks.map((b) => (
-                <PanelTable key={b.subs[0].key} section={s} block={b} base={base} query={query} allDates={allDates} />
+                <PanelTable key={b.subs[0].key} section={s} block={b} base={base} query={query} allDates={allDates} tokens={tokens} />
               ))}
             </div>
           </details>
@@ -223,7 +265,7 @@ function AbnCount({ n }: { n: number }) {
   );
 }
 
-function PanelTable({ section, block, base, query, allDates }: { section: Section; block: Section["blocks"][number]; base: string; query: GridQuery; allDates: boolean }) {
+function PanelTable({ section, block, base, query, allDates, tokens }: { section: Section; block: Section["blocks"][number]; base: string; query: GridQuery; allDates: boolean; tokens: string[] }) {
   const cols = block.times.slice(0, allDates ? MAX_ALL_COLUMNS : MAX_COLUMNS);
   const hidden = block.times.length - cols.length;
   const single = block.subs.length === 1;
@@ -274,12 +316,11 @@ function PanelTable({ section, block, base, query, allDates }: { section: Sectio
                     </th>
                   </tr>
                 )}
-                {x.sugar && <SugarTrendRow sugar={x.sugar} cols={cols} base={base} />}
                 {x.rows.map((r) => (
                   <tr key={r.code} id={r.code} className="group/row scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
                     <td className="sticky left-0 z-10 truncate bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30">
                       <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title={`Graph ${r.display}`}>
-                        {r.display}
+                        <Marked text={r.display} tokens={tokens} />
                       </Link>
                     </td>
                     {cols.map((t) => {
@@ -318,30 +359,20 @@ function PanelTable({ section, block, base, query, allDates }: { section: Sectio
           </tbody>
         </table>
       </div>
-      {block.subs[0].sugar && block.subs[0].sugar.cells.length > 1 && (
-        <details className="border-t border-line">
-          <summary className="cursor-pointer px-3 py-1.5 text-[12px] font-medium text-accent hover:underline">Show blood sugar graph</summary>
-          <div className="px-2 pb-2">
-            <SugarChart sugar={block.subs[0].sugar} base={base} height={180} />
-          </div>
-        </details>
-      )}
     </div>
   );
 }
 
-// Tests whose latest value is flagged; blood sugar stays when its latest reading is.
+// Tests whose latest value is flagged.
 function onlyAbnormal(s: Section): Section {
   const latestFlag = (m: Map<number, { flag: Flag | null }>) => [...m.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
   const subs = s.subs
     .map((x) => {
       const rows = x.rows.filter((r) => { const f = latestFlag(r.byTime); return f && f !== "N"; });
-      const sugar = x.sugar && x.sugar.cells.at(-1)?.flag && x.sugar.cells.at(-1)?.flag !== "N" ? x.sugar : undefined;
-      const times = [...new Set([...rows.flatMap((r) => [...r.byTime.keys()]), ...(sugar ? [...sugar.byTime.keys()] : [])])].sort((a, b) => b - a);
-      return { ...x, rows, sugar, times };
+      return { ...x, rows };
     })
-    .filter((x) => x.rows.length || x.sugar);
-  return { ...s, subs, blocks: blocksOf(subs), times: [...new Set(subs.flatMap((x) => x.times))].sort((a, b) => b - a) };
+    .filter((x) => x.rows.length);
+  return withSubs(s, subs);
 }
 
 function DateHead({ t, href, imported }: { t: number; href?: string; imported: boolean }) {
@@ -363,84 +394,76 @@ function DateHead({ t, href, imported }: { t: number; href?: string; imported: b
   );
 }
 
-const SUGAR_TAG = { fasting: "F", random: "R", post_meal: "2H" } as const;
+// A section with some of its panels, its dates and table groups worked out again.
+function withSubs(s: Section, subs: Sub[]): Section {
+  return { ...s, subs, blocks: blocksOf(subs), times: [...new Set(subs.flatMap((x) => x.times))].sort((a, b) => b - a), abnormal: subs.reduce((n, x) => n + x.abnormal, 0) };
+}
 
-// Every blood sugar in one row, dates across: lab glucose of any timing and fingerstick
-// readings, in mmol/L. A small letter says when it was taken; a ring marks a fingerstick.
-function SugarTrendRow({ sugar, cols, base }: { sugar: Sugar; cols: number[]; base: string }) {
-  const [first, ...others] = sugar.codes;
+// Results search: keep the tests whose name, aliases, values, flags, panel, section or
+// report (title, lab) contain every word typed.
+function searchSections(sections: Section[], tokens: string[], reportOf: (o: ObsWithCorrections) => ReportWithObs | undefined): Section[] {
+  const latestFlag = (m: Map<number, { flag: Flag | null }>) => [...m.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
+  return sections
+    .map((s) => {
+      const subs = s.subs
+        .map((x) => {
+          const rows = x.rows.filter((r) => {
+            const hay = [...r.byTime.values()]
+              .map((o) => {
+                const rep = reportOf(o);
+                return obsHaystack(o, [x.label, s.label, rep?.display, rep?.performer, fmtDate(o.effectiveAt)]);
+              })
+              .join(" | ");
+            return matchesTokens(hay, tokens);
+          });
+          const times = [...new Set(rows.flatMap((r) => [...r.byTime.keys()]))].sort((a, b) => b - a);
+          const abnormal = rows.filter((r) => { const f = latestFlag(r.byTime); return f && f !== "N"; }).length;
+          return { ...x, rows, times, abnormal };
+        })
+        .filter((x) => x.rows.length);
+      return withSubs(s, subs);
+    })
+    .filter((s) => s.subs.length);
+}
+
+function reportHaystack(r: ReportWithObs) {
+  return [r.display, r.performer, fmtDate(r.effectiveAt)].join(" | ").toLowerCase() + " | " + r.observations.map((o) => obsHaystack(o)).join(" | ");
+}
+
+function SearchSummary({ sections, q, clear }: { sections: Section[]; q: string; clear: string }) {
+  const n = sections.reduce((k, s) => k + s.subs.reduce((m, x) => m + x.rows.length, 0), 0);
   return (
-    <tr id={first} className="group/row scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-      <td className="sticky left-0 z-10 bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30">
-        {others.map((c) => (
-          <span key={c} id={c} className="scroll-mt-4" />
-        ))}
-        <Link href={`${base}?view=graph&codes=${SUGAR_CODE}`} className="font-medium hover:text-accent hover:underline" title="Graph every blood sugar">
-          Blood sugar
-        </Link>
-        <div className="text-[10.5px] leading-tight text-ink-3" title="F fasting, R random, 2H two hours after a meal. ° fingerstick (POC)">
-          F fasting · R random · 2H after meal
-          <br />° fingerstick (POC)
-        </div>
-      </td>
-      {cols.map((t) => {
-        const cells = sugar.byTime.get(t);
-        return (
-          <td key={t} className="tabular whitespace-nowrap px-2 py-1.5 text-right">
-            {cells ? (
-              cells.map((c, i) => (
-                <span
-                  key={c.obs.id}
-                  className={`${i ? "ml-1.5" : ""} ${flagText(c.flag)}`}
-                  title={`${sugarLabel(c.timing)} (${sugarShort(c.timing)}), ${c.source === "fingerstick" ? "fingerstick" : "lab"}: ${fmtGlucose(c.mmol)}`}
-                >
-                  {c.mmol.toFixed(1)}
-                  {c.source === "fingerstick" && <span className="text-ink-3">°</span>}
-                  <span className="ml-0.5 text-[10px] font-semibold text-ink-3">{SUGAR_TAG[c.timing]}</span>
-                  <FlagBadge flag={c.flag} />
-                  {c.obs.correctedAt && <CorrectedMark obs={c.obs} />}
-                </span>
-              ))
-            ) : (
-              <span className="text-ink-3/60">·</span>
-            )}
-          </td>
-        );
-      })}
-      <td className="tabular px-3 py-1.5 text-ink-2" title="Fasting 3.9–5.5; random and 2 hours after a meal 3.9–7.8">
-        3.9–7.8
-        <span className="text-[10.5px] text-ink-3"> (F ≤5.5)</span>
-      </td>
-      <td className="px-3 py-1.5 text-ink-2">mmol/L</td>
-      <td className="px-3 py-1.5">
-        <Sparkline values={sugar.cells.map((c) => c.mmol)} refLow={3.9} refHigh={7.8} />
-      </td>
-    </tr>
+    <p className="mb-2 text-[12.5px] text-ink-2">
+      {n} {n === 1 ? "test matches" : "tests match"} “{q}”.{" "}
+      <Link href={clear} className="font-medium text-accent hover:underline">
+        Clear search
+      </Link>
+    </p>
   );
 }
 
-function SugarChart({ sugar, base, height, cutoff = 0 }: { sugar: Sugar; base: string; height?: number; cutoff?: number }) {
-  const series = SUGAR_TIMINGS.map((timing) => ({
-    name: `${timing.label} (${timing.short})`,
-    points: sugar.cells
-      .filter((c) => c.timing === timing.key && c.obs.effectiveAt.getTime() >= cutoff)
-      .map((c) => ({
-        t: c.obs.effectiveAt.getTime(),
-        v: c.mmol,
-        flag: c.flag,
-        imported: c.imported,
-        href: c.reportId ? `${base}?view=reports&report=${c.reportId}` : `${base.replace(/\/results$/, "")}/vitals`,
-      })),
-  })).filter((s) => s.points.length > 0);
+// The typed words, highlighted where they appear in a name.
+function Marked({ text, tokens }: { text: string; tokens: string[] }) {
+  if (!tokens.length) return <>{text}</>;
+  const re = new RegExp(`(${tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  const parts = text.split(re);
   return (
     <>
-      <TrendChart series={series} unit="mmol/L" refLow={3.9} refHigh={7.8} height={height} />
-      <p className="pl-11 pt-1 text-[11px] text-ink-3">Shaded band is 3.9–7.8 mmol/L. Fasting is normal up to 5.5. Lab values in mg/dL are shown in mmol/L (÷ 18).</p>
+      {parts.map((part, i) =>
+        i % 2 ? (
+          <mark key={i} className="rounded-sm bg-warn-soft px-px text-ink">
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
     </>
   );
 }
 
 function ReportView({
+  tokens,
   reports,
   selected,
   base,
@@ -451,6 +474,7 @@ function ReportView({
   correcting,
   justCorrected,
 }: {
+  tokens: string[];
   reports: ReportWithObs[];
   selected?: string;
   base: string;
@@ -462,7 +486,9 @@ function ReportView({
   justCorrected?: string;
 }) {
   const current = reports.find((r) => r.id === selected) ?? reports[0];
-  const here = `${base}?view=reports&report=${current.id}`;
+  const qs = tokens.length ? `&q=${encodeURIComponent(tokens.join(" "))}` : "";
+  const here = `${base}?view=reports&report=${current.id}${qs}`;
+  const hit = (o: ObsWithCorrections) => tokens.length > 0 && matchesTokens(obsHaystack(o), tokens);
   const canCorrect = canCorrectResult(user, current);
   const corrections = current.observations.flatMap((o) => o.corrections.map((c, i) => ({ ...c, obs: o, after: o.corrections[i + 1] ?? o })));
   return (
@@ -473,13 +499,13 @@ function ReportView({
           return (
             <li key={r.id} className="border-t border-line first:border-t-0">
               <Link
-                href={`${base}?view=reports&report=${r.id}`}
+                href={`${base}?view=reports&report=${r.id}${qs}`}
                 className={`block border-l-[3px] px-3 py-2 ${r.id === current.id ? "border-accent bg-accent-soft" : "border-transparent hover:bg-panel-muted"}`}
               >
                 <div className="flex justify-between gap-2">
                   <span className="font-medium">
                     {r.source === "imported" && <ImportedMark />}
-                    {r.display}
+                    <Marked text={r.display} tokens={tokens} />
                   </span>
                   {abnormal > 0 && <span className="shrink-0 text-[11px] font-semibold text-high">{abnormal} abn</span>}
                 </div>
@@ -582,8 +608,10 @@ function ReportView({
                   </td>
                 </tr>
               ) : (
-                <tr key={o.id} id={o.id} className={`scroll-mt-4 border-t border-line ${justCorrected === o.id ? "bg-warn-soft/60" : ""}`}>
-                  <td className="px-4 py-1.5">{o.display}</td>
+                <tr key={o.id} id={o.id} className={`scroll-mt-4 border-t border-line ${justCorrected === o.id ? "bg-warn-soft/60" : hit(o) ? "bg-warn-soft/30" : ""}`}>
+                  <td className="px-4 py-1.5">
+                    <Marked text={o.display} tokens={tokens} />
+                  </td>
                   <td className={`tabular px-3 py-1.5 text-right font-medium ${flagText(o.flag)}`}>
                     {fmtValue(o)}
                     {o.correctedAt && <CorrectedMark obs={o} />}
@@ -715,23 +743,12 @@ function GraphView({ sections, reports, base, codes, range }: { sections: Sectio
   const cutoff = days ? Date.now() - days * 86_400_000 : 0;
 
   const allRows = sections.flatMap((s) => s.subs.flatMap((x) => x.rows));
-  const sugar = sections.flatMap((s) => s.subs).find((x) => x.sugar)?.sugar;
   const latestFlag = (row: (typeof allRows)[number]) => [...row.byTime.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
 
-  // Links from elsewhere name a glucose code; those now live in the one blood sugar graph.
-  let selected = [
-    ...new Set(
-      (codes ?? "")
-        .split(",")
-        .map((c) => (sugar && (c === SUGAR_CODE || sugar.codes.includes(c)) ? SUGAR_CODE : c))
-        .filter((c) => c === SUGAR_CODE || allRows.some((r) => r.code === c)),
-    ),
-  ];
+  let selected = [...new Set((codes ?? "").split(",").filter((c) => allRows.some((r) => r.code === c)))];
   if (!selected.length) {
     const abnormal = allRows.filter((r) => { const f = latestFlag(r); return f && f !== "N"; }).map((r) => r.code);
-    const sugarAbn = sugar?.cells.at(-1)?.flag && sugar.cells.at(-1)?.flag !== "N";
-    selected = [...(sugarAbn ? [SUGAR_CODE] : []), ...(abnormal.length ? abnormal : allRows.map((r) => r.code))].slice(0, 4);
-    if (!selected.length && sugar) selected = [SUGAR_CODE];
+    selected = (abnormal.length ? abnormal : allRows.map((r) => r.code)).slice(0, 4);
   }
   const reportOf = new Map(reports.flatMap((r) => r.observations.map((o) => [o.id, r] as const)));
   const href = (next: string[], r = range) => `${base}?view=graph&codes=${next.map(encodeURIComponent).join(",")}${r ? `&range=${r}` : ""}`;
@@ -760,16 +777,15 @@ function GraphView({ sections, reports, base, codes, range }: { sections: Sectio
           <span className="text-[11px] text-ink-3">{selected.length} shown</span>
         </div>
         <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
-          {sections.filter((s) => s.subs.some((x) => x.sugar || x.rows.some((r) => r.values.length > 0))).map((s) => (
+          {sections.filter((s) => s.subs.some((x) => x.rows.some((r) => r.values.length > 0))).map((s) => (
             <div key={s.key} className="border-b border-line last:border-b-0">
               <div className="bg-panel-muted px-3 py-1 text-[12px] font-semibold text-ink">{s.label}</div>
               {s.subs.map((x) => {
                 const rows = x.rows.filter((r) => r.values.length > 0);
-                if (!rows.length && !x.sugar) return null;
+                if (!rows.length) return null;
                 return (
                   <div key={x.key}>
                     {(s.subs.length > 1 || x.label !== s.label) && <div className="px-3 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-3">{x.label}</div>}
-                    {x.sugar && item(SUGAR_CODE, "Blood sugar (all)", x.sugar.cells.at(-1)?.flag, true)}
                     {rows.map((r) => item(r.code, r.display, latestFlag(r)))}
                   </div>
                 );
@@ -797,30 +813,6 @@ function GraphView({ sections, reports, base, codes, range }: { sections: Sectio
         </div>
         <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
           {selected.map((code) => {
-            if (code === SUGAR_CODE && sugar) {
-              const pts = sugar.cells.filter((c) => c.obs.effectiveAt.getTime() >= cutoff);
-              const last = pts.at(-1);
-              return (
-                <section key={code} className="rounded-md border border-line bg-panel">
-                  <header className="flex items-baseline gap-3 border-b border-line px-3 py-2">
-                    <h3 className="font-semibold">Blood sugar</h3>
-                    <span className="text-[11.5px] text-ink-3">mmol/L · lab and fingerstick · {pts.length} readings</span>
-                    {last && (
-                      <span className={`tabular ml-auto font-semibold ${flagText(last.flag)}`}>
-                        {last.mmol.toFixed(1)}
-                        <FlagBadge flag={last.flag} />
-                        <span className="ml-2 text-[11.5px] font-normal text-ink-3">
-                          {sugarShort(last.timing)} on {fmtDate(last.obs.effectiveAt)}
-                        </span>
-                      </span>
-                    )}
-                  </header>
-                  <div className="px-2 py-2">
-                    <SugarChart sugar={sugar} base={base} cutoff={cutoff} />
-                  </div>
-                </section>
-              );
-            }
             const row = allRows.find((r) => r.code === code)!;
             const points = [...row.byTime.values()]
               .filter((o) => o.valueNum !== null && o.unit === row.unit && o.effectiveAt.getTime() >= cutoff)

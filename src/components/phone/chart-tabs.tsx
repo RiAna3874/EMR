@@ -15,6 +15,7 @@ export function PhoneChartTabs({ patientId, clinical }: { patientId: string; cli
       ? [
           { href: `${base}/results`, label: "Results" },
           { href: `${base}/vitals`, label: "Vitals" },
+          { href: `${base}/sugar`, label: "Sugar" },
           { href: `${base}/meds`, label: "Meds" },
           { href: `${base}/notes`, label: "Notes" },
           { href: `${base}/media`, label: "Media" },

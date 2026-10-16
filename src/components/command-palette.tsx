@@ -24,6 +24,7 @@ const CHART: { slug: string; label: string; key?: string }[] = [
   { slug: "results", label: "Results", key: "r" },
   { slug: "results?view=graph", label: "Results graph" },
   { slug: "vitals", label: "Vitals", key: "v" },
+  { slug: "sugar", label: "Blood sugar (glucose trend)", key: "b" },
   { slug: "meds", label: "Medications", key: "m" },
   { slug: "problems", label: "Problems", key: "p" },
   { slug: "allergies", label: "Allergies", key: "a" },

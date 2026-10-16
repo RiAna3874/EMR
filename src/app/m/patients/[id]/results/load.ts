@@ -5,7 +5,7 @@ import { GLUCOSE_CODES } from "@/lib/glucose";
 
 // Every filed lab result for the phone's Results screens, sorted into the same sections and
 // panels as the full site's trend table (src/lib/labs/trends.ts), blood sugars merged into one.
-export async function phoneTrend(patientId: string) {
+export async function phoneTrend(patientId: string, opts: { sugar?: boolean } = {}) {
   const [reports, glucose] = await Promise.all([
     db.diagnosticReport.findMany({
       where: { patientId },
@@ -18,5 +18,5 @@ export async function phoneTrend(patientId: string) {
   return buildTrend([
     ...reports.flatMap((r) => r.observations.map((o) => ({ obs: o, panel: r.display, reportId: r.id, imported: r.source === "imported" }))),
     ...glucose.map((o) => ({ obs: o })),
-  ]);
+  ], opts);
 }

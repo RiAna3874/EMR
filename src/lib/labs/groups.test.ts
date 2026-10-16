@@ -60,3 +60,14 @@ test("panels drawn together share a table; blood sugar and panels from other day
   assert.deepEqual(keys([{ key: "cbc", times: d(1, 5, 9) }, { key: "diff", times: d(1, 5) }, { key: "esr", times: d(5) }]), ["cbc+diff+esr"]);
   assert.deepEqual(keys([{ key: "lipid", times: d(1, 5, 9) }, { key: "cardiac", times: d(3) }]), ["lipid", "cardiac"]);
 });
+
+test("results search finds tests by any name, value, flag or panel", async () => {
+  const { obsHaystack, queryTokens, matchesTokens } = await import("./result-search");
+  const alt = obsHaystack({ code: "1742-6", display: "ALT", valueNum: 88, valueText: null, unit: "U/L", flag: "H" }, ["Liver function", "Popular Diagnostic"]);
+  assert.ok(matchesTokens(alt, queryTokens("sgpt")));
+  assert.ok(matchesTokens(alt, queryTokens("liver high")));
+  assert.ok(matchesTokens(alt, queryTokens("Popular")));
+  assert.ok(!matchesTokens(alt, queryTokens("creatinine")));
+  const ns1 = obsHaystack({ code: "local:dengue-ns1", display: "Dengue NS1 antigen", valueNum: null, valueText: "Positive", unit: null, flag: "A" });
+  assert.ok(matchesTokens(ns1, queryTokens("dengue positive")));
+});

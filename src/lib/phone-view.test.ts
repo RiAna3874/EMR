@@ -14,6 +14,7 @@ test("full-site pages open their phone screen", () => {
   assert.equal(to("/patients/new"), "/m/patients");
   assert.equal(to("/patients/abc123"), "/m/patients/abc123");
   assert.equal(to("/patients/abc123/results?view=graph&codes=2345-7"), "/m/patients/abc123/results");
+  assert.equal(to("/patients/abc123/sugar"), "/m/patients/abc123/sugar");
   assert.equal(to("/patients/abc123/meds"), "/m/patients/abc123/meds");
   assert.equal(to("/patients/abc123/notes?note=n9"), "/m/patients/abc123/notes/n9");
   assert.equal(to("/patients/abc123/media?item=m1"), "/m/patients/abc123/media/m1");
