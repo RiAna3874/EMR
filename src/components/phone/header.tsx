@@ -1,18 +1,16 @@
 import Link from "next/link";
 import { dataNotice } from "@/lib/deployment";
+import { BackButton } from "./back-button";
 
 // The phone view's top bar: a back arrow, the screen's title and an optional action.
 // Pads for the notch when the view is installed to the home screen.
-export function PhoneHeader({ title, sub, back, action }: { title: React.ReactNode; sub?: React.ReactNode; back?: string; action?: React.ReactNode }) {
+// sticky: false when a parent keeps it on screen together with something below it (the chart tabs).
+export function PhoneHeader({ title, sub, back, action, sticky = true }: { title: React.ReactNode; sub?: React.ReactNode; back?: string; action?: React.ReactNode; sticky?: boolean }) {
   return (
-    <header className="sticky top-0 z-30 bg-chrome pt-[env(safe-area-inset-top)] text-white">
+    <header className={`${sticky ? "sticky top-0 z-30" : ""} bg-chrome pt-[env(safe-area-inset-top)] text-white`}>
       <div className="flex min-h-12 items-center gap-1 px-2 py-1.5">
         {back ? (
-          <Link href={back} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:bg-white/10" aria-label="Back">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-              <path d="m15 5-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Link>
+          <BackButton href={back} />
         ) : (
           <span className="w-2" />
         )}
@@ -50,7 +48,7 @@ export function PhoneEmpty({ children }: { children: React.ReactNode }) {
 // A tappable row with a chevron.
 export function RowLink({ href, children, className = "" }: { href: string; children: React.ReactNode; className?: string }) {
   return (
-    <Link href={href} className={`flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 active:bg-accent-soft/60 ${className}`}>
+    <Link href={href} className={`flex items-center gap-3 border-b border-line px-4 py-3 transition-colors last:border-b-0 active:bg-accent-soft/60 ${className}`}>
       <div className="min-w-0 flex-1">{children}</div>
       <Chevron />
     </Link>

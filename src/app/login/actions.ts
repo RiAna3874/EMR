@@ -6,6 +6,7 @@ import { verifyPassword } from "@/lib/password";
 import { hashRecoveryCode, looksLikeRecoveryCode, verifyTotp } from "@/lib/totp";
 import { logEvent } from "@/lib/audit/server";
 import { clearFailures, lockedOut, recordFailure } from "@/lib/sign-in-lockout";
+import { landingPath } from "@/lib/phone-session";
 import { CHALLENGE_TRIES, currentChallenge, endChallenge, endSession, getCurrentUser, safeNext, startChallenge, startSession } from "@/lib/session";
 
 
@@ -42,7 +43,7 @@ export async function signIn(_prev: SignInState, form: FormData): Promise<SignIn
   }
   await startSession(user.id);
   await logEvent({ action: "sign_in", subject: "Sign-in", actor: { id: user.id, username: user.username }, detail: "Password only" });
-  redirect(next);
+  redirect(await landingPath(next));
 }
 
 type VerifyState = { error?: string } | undefined;
@@ -98,7 +99,7 @@ export async function verifyTwoStep(_prev: VerifyState, form: FormData): Promise
   await endChallenge();
   await startSession(user.id);
   await logEvent({ action: "sign_in", subject: "Sign-in", actor, detail });
-  redirect(safeNext(next));
+  redirect(await landingPath(safeNext(next)));
 }
 
 export async function cancelTwoStep() {

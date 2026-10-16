@@ -30,7 +30,18 @@ export default async function PhoneToday({ searchParams }: { searchParams: Promi
 
   return (
     <>
-      <PhoneHeader title={`Hello, ${name}`} sub={`${fmtDayShort(now)} · ${roleLabel[user.role]}`} />
+      <PhoneHeader
+        title={`Hello, ${name}`}
+        sub={`${fmtDayShort(now)} · ${roleLabel[user.role]}`}
+        action={
+          <Link href="/m/patients?find=1" className="flex h-10 w-10 items-center justify-center rounded-full transition-colors active:bg-white/15" aria-label="Find a patient">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="m16 16 4.5 4.5" />
+            </svg>
+          </Link>
+        }
+      />
       <RefreshWhile active intervalMs={30_000} />
 
       {denied && (

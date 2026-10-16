@@ -33,7 +33,7 @@ export function RememberPatient({ patient }: { patient: Recent }) {
 
 // Search by name, MRN, date of birth or phone number (the same lookup as Ctrl+K on the full site),
 // and below it the charts recently opened on this phone.
-export function PatientSearch() {
+export function PatientSearch({ autoFocus = false }: { autoFocus?: boolean }) {
   const [q, setQ] = useState("");
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [recent, setRecent] = useState<Recent[]>([]);
@@ -70,6 +70,7 @@ export function PatientSearch() {
           aria-label="Find a patient"
           enterKeyHint="search"
           autoComplete="off"
+          autoFocus={autoFocus}
           className="w-full rounded-lg border border-line bg-panel px-3 py-2.5 text-[16px] outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
         />
       </div>
