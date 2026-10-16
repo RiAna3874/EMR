@@ -17,12 +17,24 @@ export function TabBar({ chatUnread, chatUrgent, showChat }: { chatUnread: numbe
     { href: "/m/more", label: "More", icon: <MoreIcon /> },
   ];
   const active = (href: string) => (href === "/m" ? pathname === "/m" : pathname.startsWith(href));
+  // An open conversation gives the bottom of the screen to its reply box, as messaging apps do.
+  if (/^\/m\/chat\/(?!new$)[^/]+$/.test(pathname)) return null;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="Phone view">
       <ul className="flex">
         {tabs.map((t) => (
           <li key={t.href} className="flex-1">
-            <Link href={t.href} className={`relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${active(t.href) ? "text-accent" : "text-ink-3"}`}>
+            <Link
+              href={t.href}
+              // Tapping the tab you're on scrolls back to the top, as in phone apps.
+              onClick={(e) => {
+                if (pathname !== t.href) return;
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              aria-current={active(t.href) ? "page" : undefined}
+              className={`relative flex h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors active:scale-95 ${active(t.href) ? "text-accent" : "text-ink-3"}`}
+            >
               {t.icon}
               {t.label}
               {!!t.badge && (

@@ -87,3 +87,50 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* The phone view (src/app/m): feels like an app, not a web page. No grey flash or 300 ms wait on
+   taps, no sideways wobble, and 16px form text so iPhones don't zoom in when typing. */
+.phone {
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overflow-wrap: anywhere;
+}
+.phone a,
+.phone button,
+.phone label,
+.phone summary {
+  touch-action: manipulation;
+}
+.phone input:not([type="checkbox"]):not([type="radio"]),
+.phone select,
+.phone textarea {
+  font-size: 16px;
+}
+html:has(.phone) {
+  overscroll-behavior-x: none;
+  scroll-padding-top: 7rem;
+}
+
+/* Each screen settles in as it opens (src/app/m/template.tsx); skipped for people who turn motion off. */
+@keyframes phone-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes phone-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .phone-in {
+    animation: phone-in 0.18s ease-out both;
+  }
+}
+.phone-skeleton {
+  background: linear-gradient(90deg, var(--line) 25%, var(--panel-muted) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: phone-shimmer 1.2s linear infinite;
+  border-radius: 6px;
+}

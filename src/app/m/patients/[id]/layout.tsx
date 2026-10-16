@@ -24,7 +24,11 @@ export default async function PhoneChartLayout({ children, params }: { children:
 
   return (
     <>
-      <PhoneHeader title={fullName(patient)} sub={detail} back="/m/patients" />
+      {/* The patient's name and the section tabs stay on screen while the chart scrolls. */}
+      <div className="sticky top-0 z-30 shadow-sm">
+        <PhoneHeader title={fullName(patient)} sub={detail} back="/m/patients" sticky={false} />
+        <PhoneChartTabs patientId={id} clinical={clinical} />
+      </div>
       <RememberPatient patient={{ id: patient.id, name: fullName(patient), detail }} />
       {clinical && (
         <div className={`border-b px-4 py-1.5 text-[13px] ${patient.allergies.length ? "border-crit/20 bg-crit-soft text-crit" : "border-line bg-panel-muted text-ink-2"}`}>
@@ -40,7 +44,6 @@ export default async function PhoneChartLayout({ children, params }: { children:
           )}
         </div>
       )}
-      <PhoneChartTabs patientId={id} clinical={clinical} />
       {children}
     </>
   );

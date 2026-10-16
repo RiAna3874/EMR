@@ -6,6 +6,7 @@ import { verifyPassword } from "@/lib/password";
 import { logEvent } from "@/lib/audit/server";
 import { endSession, getCurrentUser, safeNext, setSessionLocked } from "@/lib/session";
 import { clearFailures, lockedOut, recordFailure } from "@/lib/sign-in-lockout";
+import { landingPath } from "@/lib/phone-session";
 
 // Called by the idle timer in the browser.
 export async function lockScreen(next: string) {
@@ -39,5 +40,5 @@ export async function unlockScreen(_prev: UnlockState, form: FormData): Promise<
   await clearFailures(user.id);
   await setSessionLocked(false);
   await logEvent({ action: "screen_unlocked", subject: "Sign-in", actor });
-  redirect(next);
+  redirect(await landingPath(next));
 }

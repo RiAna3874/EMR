@@ -26,7 +26,7 @@ export function PhoneComposer({ conversationId, awayNote }: { conversationId: st
     <form
       ref={form}
       action={action}
-      className={`fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t bg-panel px-3 py-2 ${urgent ? "border-crit" : "border-line"}`}
+      className={`fixed inset-x-0 bottom-0 z-30 border-t bg-panel px-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 ${urgent ? "border-crit" : "border-line"}`}
     >
       {awayNote && <p className="mb-1 text-[12.5px] text-warn">{awayNote}</p>}
       {state?.error && (

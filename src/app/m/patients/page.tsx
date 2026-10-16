@@ -12,7 +12,7 @@ export const metadata = { title: "Patients" };
 const LISTS = { today: "Clinic today", mine: "My patients" } as const;
 
 // Haiku's patient lists: search on top, then today's clinic or the provider's own panel.
-export default async function PhonePatients({ searchParams }: { searchParams: Promise<{ list?: string }> }) {
+export default async function PhonePatients({ searchParams }: { searchParams: Promise<{ list?: string; find?: string }> }) {
   const sp = await searchParams;
   const user = await requireUser();
   const lists = (Object.keys(LISTS) as (keyof typeof LISTS)[]).filter((k) => k !== "mine" || isProvider(user.role));
@@ -29,7 +29,7 @@ export default async function PhonePatients({ searchParams }: { searchParams: Pr
   return (
     <>
       <PhoneHeader title="Patients" />
-      <PatientSearch />
+      <PatientSearch autoFocus={sp.find === "1"} />
       {lists.length > 1 && (
         <div className="flex gap-2 px-4 pt-4">
           {lists.map((l) => (

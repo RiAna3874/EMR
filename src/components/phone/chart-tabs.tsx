@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
-// The chart's sections, as a row of tabs that scrolls sideways.
+// The chart's sections, as a row of tabs that scrolls sideways; the open one is kept in view.
 export function PhoneChartTabs({ patientId, clinical }: { patientId: string; clinical: boolean }) {
   const pathname = usePathname();
+  const row = useRef<HTMLElement>(null);
   const base = `/m/patients/${patientId}`;
   const tabs = [
     { href: base, label: "Summary" },
@@ -19,14 +21,21 @@ export function PhoneChartTabs({ patientId, clinical }: { patientId: string; cli
         ]
       : []),
   ];
-  const active = (href: string) => (href === base ? pathname === base : pathname.startsWith(href));
+  const active = (href: string) => (href === base ? pathname === base || pathname === `${base}/import` : pathname.startsWith(href));
+
+  useEffect(() => {
+    const el = row.current?.querySelector<HTMLElement>("[aria-current=page]");
+    el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [pathname]);
+
   return (
-    <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line bg-panel px-2" aria-label="Chart sections">
+    <nav ref={row} className="no-scrollbar flex overflow-x-auto border-b border-line bg-panel" aria-label="Chart sections">
       {tabs.map((t) => (
         <Link
           key={t.href}
           href={t.href}
-          className={`shrink-0 border-b-2 px-3 py-2.5 text-[14px] font-medium ${active(t.href) ? "border-accent text-accent" : "border-transparent text-ink-2"}`}
+          aria-current={active(t.href) ? "page" : undefined}
+          className={`flex-1 shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-center text-[14px] font-medium transition-colors ${active(t.href) ? "border-accent text-accent" : "border-transparent text-ink-2 active:text-ink"}`}
         >
           {t.label}
         </Link>
