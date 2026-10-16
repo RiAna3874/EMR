@@ -8,6 +8,8 @@ import { logEvent } from "@/lib/audit/server";
 import { ALLERGY_REMOVAL_REASONS } from "@/components/entered-in-error";
 import { requirePermission } from "@/lib/session";
 import { planVitalsEdit, VITALS_CHANGE_REASONS, vitalObservations } from "@/lib/vitals";
+import { checkIcd10, codeForTitle } from "@/lib/icd10/codes";
+import { diagnosisByDisplay } from "@/lib/visits/diagnoses";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
@@ -110,17 +112,30 @@ export async function markNoKnownAllergies(patientId: string) {
   revalidatePath(`/patients/${patientId}`, "layout");
 }
 
+// A problem's ICD-10-CM code: a complete code that, when the name is some code's official
+// description, is that code. Blank gets the name's code if it is one, else R69 (illness,
+// unspecified). Returns an error key for the Problems tab.
+function problemCode(display: string, typed: string): { code: string } | { error: "code" | "mismatch" } {
+  const check = typed ? checkIcd10(typed) : null;
+  if (check && check.status !== "ok") return { error: "code" };
+  const named = diagnosisByDisplay.get(display.toLowerCase())?.code ?? codeForTitle(display);
+  if (check && named && named !== check.code) return { error: "mismatch" };
+  return { code: check?.code ?? named ?? "R69" };
+}
+
 export async function addProblem(patientId: string, form: FormData) {
   await requirePermission("editProblems");
-  const display = str(form, "display");
+  const display = str(form, "display").slice(0, 200);
   if (!display) return;
+  const coded = problemCode(display, str(form, "code"));
+  if ("error" in coded) redirect(`/patients/${patientId}/problems?error=${coded.error}`);
   const max = await db.condition.aggregate({ where: { patientId, status: "active" }, _max: { priority: true } });
   const onset = str(form, "onset");
   await db.condition.create({
     data: {
       patientId,
       display,
-      code: str(form, "code").toUpperCase() || "R69",
+      code: coded.code,
       status: "active",
       onset: onset ? new Date(onset) : null,
       priority: (max._max.priority ?? 0) + 1,
@@ -128,6 +143,21 @@ export async function addProblem(patientId: string, form: FormData) {
     },
   });
   revalidatePath(`/patients/${patientId}`, "layout");
+}
+
+// Corrects a problem's name, code or comment. Past visit diagnoses keep what they were billed as.
+export async function updateProblem(patientId: string, conditionId: string, form: FormData) {
+  await requirePermission("editProblems");
+  const display = str(form, "display").slice(0, 200);
+  if (!display) return;
+  const coded = problemCode(display, str(form, "code"));
+  if ("error" in coded) redirect(`/patients/${patientId}/problems?edit=${conditionId}&error=${coded.error}`);
+  await db.condition.update({
+    where: { id: conditionId, patientId },
+    data: { display, code: coded.code, comment: str(form, "comment") || null },
+  });
+  revalidatePath(`/patients/${patientId}`, "layout");
+  redirect(`/patients/${patientId}/problems`);
 }
 
 export async function resolveProblem(patientId: string, conditionId: string) {

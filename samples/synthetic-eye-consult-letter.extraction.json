@@ -67,7 +67,7 @@
     {
       "text": "Moderate nonproliferative diabetic retinopathy without macular edema, both eyes.",
       "kind": "finding",
-      "icd10": "E11.3293",
+      "icd10": "E11.3393",
       "box": {
         "x0": 52,
         "y0": 511,

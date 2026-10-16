@@ -3,13 +3,22 @@ import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { fmtDateOnly } from "@/lib/format";
 import { Empty } from "@/components/panel";
-import { Button, Field, inputCls } from "@/components/form";
-import { addProblem, linkToProblem, reactivateProblem, resolveProblem } from "../actions";
+import { Button, inputCls } from "@/components/form";
+import Link from "next/link";
+import { addProblem, linkToProblem, reactivateProblem, resolveProblem, updateProblem } from "../actions";
+import { ProblemForm } from "@/components/problems/problem-form";
+import { checkIcd10 } from "@/lib/icd10/codes";
 import { medLine, orderLine } from "@/lib/notes/problem-ap";
 import { logChartView } from "@/lib/audit/server";
 
-export default async function Problems({ params }: { params: Promise<{ id: string }> }) {
+const ERRORS: Record<string, string> = {
+  code: "That isn't a complete ICD-10-CM code. Pick the problem from the list, or leave the code blank.",
+  mismatch: "The problem's name is the official description of a different ICD-10-CM code. Pick it again, or change the name or the code.",
+};
+
+export default async function Problems({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ edit?: string; error?: string }> }) {
   const { id } = await params;
+  const sp = await searchParams;
   const currentUser = await requirePermission("viewClinical");
   await logChartView(id, "Problems");
   const canEdit = can(currentUser.role, "editProblems");
@@ -30,6 +39,11 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="space-y-4 p-4">
+      {sp.error && ERRORS[sp.error] && (
+        <p role="alert" className="rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-crit">
+          {ERRORS[sp.error]}
+        </p>
+      )}
       <section className="rounded-md border border-line bg-panel">
         <header className="border-b border-line px-3 py-2">
           <h2 className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">
@@ -44,13 +58,25 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
               <tr>
                 <th className="w-10 px-3 py-1.5 font-medium">#</th>
                 <th className="px-3 py-1.5 font-medium">Problem</th>
-                <th className="px-3 py-1.5 font-medium">ICD-10</th>
+                <th className="px-3 py-1.5 font-medium">ICD-10-CM</th>
                 <th className="px-3 py-1.5 font-medium">Onset</th>
                 <th className="px-3 py-1.5" />
               </tr>
             </thead>
             <tbody>
-              {active.map((c, i) => (
+              {active.map((c, i) =>
+                canEdit && sp.edit === c.id ? (
+                  <tr key={c.id} className="border-t border-line bg-accent-soft/40 align-top">
+                    <td className="tabular px-3 py-1.5 text-ink-3">{i + 1}</td>
+                    <td colSpan={4} className="px-3 py-2">
+                      <ProblemForm
+                        action={updateProblem.bind(null, id, c.id)}
+                        initial={{ display: c.display, code: c.code, comment: c.comment ?? "" }}
+                        cancelHref={`/patients/${id}/problems`}
+                      />
+                    </td>
+                  </tr>
+                ) : (
                 <tr key={c.id} className="border-t border-line align-top">
                   <td className="tabular px-3 py-1.5 text-ink-3">{i + 1}</td>
                   <td className="px-3 py-1.5">
@@ -58,17 +84,25 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
                     {c.comment && <div className="text-ink-2">{c.comment}</div>}
                     <LinkedItems patientId={id} problem={c} items={items} canEdit={canEdit} />
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[12px]">{c.code}</td>
+                  <td className="px-3 py-1.5">
+                    <CodeCell code={c.code} />
+                  </td>
                   <td className="tabular px-3 py-1.5 text-ink-2">{fmtDateOnly(c.onset)}</td>
                   <td className="px-3 py-1.5 text-right">
                     {canEdit && (
-                      <form action={resolveProblem.bind(null, id, c.id)}>
-                        <Button variant="ghost">Resolve</Button>
-                      </form>
+                      <span className="inline-flex gap-1">
+                        <Link href={`/patients/${id}/problems?edit=${c.id}`} className="rounded px-2.5 py-1 text-[12.5px] font-medium text-ink-2 hover:bg-panel-muted hover:text-ink">
+                          Edit
+                        </Link>
+                        <form action={resolveProblem.bind(null, id, c.id)}>
+                          <Button variant="ghost">Resolve</Button>
+                        </form>
+                      </span>
                     )}
                   </td>
                 </tr>
-              ))}
+                ),
+              )}
             </tbody>
           </table>
         )}
@@ -94,24 +128,10 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
       )}
 
       {canEdit && (
-        <form action={addProblem.bind(null, id)} className="rounded-md border border-line bg-panel p-3">
+        <section className="rounded-md border border-line bg-panel p-3">
           <h2 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-2">Add problem</h2>
-          <div className="flex flex-wrap items-end gap-2">
-            <Field label="Problem" className="min-w-64 flex-1">
-              <input name="display" required placeholder="e.g. Essential hypertension" className={inputCls} />
-            </Field>
-            <Field label="ICD-10">
-              <input name="code" placeholder="I10" className={`${inputCls} w-24 font-mono`} />
-            </Field>
-            <Field label="Onset">
-              <input name="onset" type="date" className={inputCls} />
-            </Field>
-            <Field label="Comment">
-              <input name="comment" className={`${inputCls} w-56`} />
-            </Field>
-            <Button type="submit">Add</Button>
-          </div>
-        </form>
+          <ProblemForm action={addProblem.bind(null, id)} />
+        </section>
       )}
 
       <section className="rounded-md border border-line bg-panel">
@@ -128,7 +148,9 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
               {resolved.map((c) => (
                 <tr key={c.id} className="border-t border-line first:border-t-0">
                   <td className="px-3 py-1.5">{c.display}</td>
-                  <td className="px-3 py-1.5 font-mono text-[12px]">{c.code}</td>
+                  <td className="px-3 py-1.5">
+                    <CodeCell code={c.code} />
+                  </td>
                   <td className="tabular px-3 py-1.5">
                     {fmtDateOnly(c.onset)} – {fmtDateOnly(c.resolvedAt)}
                   </td>
@@ -145,6 +167,22 @@ export default async function Problems({ params }: { params: Promise<{ id: strin
           </table>
         )}
       </section>
+    </div>
+  );
+}
+
+// The code with its official ICD-10-CM description, or a flag when it isn't a complete code
+// (entered before codes were checked); Edit fixes it.
+function CodeCell({ code }: { code: string }) {
+  const check = checkIcd10(code, 0);
+  return (
+    <div className="max-w-64">
+      <div className="font-mono text-[12px]">{code}</div>
+      {check.status === "ok" ? (
+        <div className="text-[11px] text-ink-3">{code === "R69" ? "No code given (illness, unspecified)" : check.title}</div>
+      ) : (
+        <div className="text-[11px] text-warn">▲ {check.status === "partial" ? "Not a complete ICD-10-CM code" : "Not an ICD-10-CM code"}</div>
+      )}
     </div>
   );
 }

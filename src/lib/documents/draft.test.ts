@@ -22,8 +22,8 @@ const sample = (name: string) => JSON.parse(readFileSync(`samples/${name}.extrac
 const marcus: PatientFacts = { firstName: "Marcus", lastName: "Okonkwo-Hale", dob: "1959-03-21", sex: "male", mrn: "M1011748" };
 const chart: ChartFacts = {
   problems: [
-    { code: "I48.91", display: "Atrial fibrillation, unspecified" },
-    { code: "N18.3", display: "Chronic kidney disease, stage 3" },
+    { code: "I48.91", display: "Unspecified atrial fibrillation" },
+    { code: "N18.30", display: "Chronic kidney disease, stage 3 unspecified" },
     { code: "I50.9", display: "Heart failure, unspecified" },
   ],
   meds: [{ drug: "Apixaban 5 mg tablet" }, { drug: "Metoprolol succinate ER 50 mg tablet" }, { drug: "Furosemide 40 mg tablet" }],

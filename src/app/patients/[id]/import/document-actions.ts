@@ -10,6 +10,8 @@ import { fmtDate, toUrlDate } from "@/lib/format";
 import { productFor } from "@/lib/meds/formulary";
 import { assessDocDraft, docContent, DocDraftSchema, docTypeLabel } from "@/lib/documents/draft";
 import { chartFacts } from "@/lib/documents/server";
+import { checkIcd10 } from "@/lib/icd10/codes";
+import { ICD10_SHAPE, icd10Problem, normalizeIcd10 } from "@/lib/icd10/format";
 
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 
@@ -42,6 +44,14 @@ export async function fileDocument(patientId: string, jobId: string, draftJson: 
   const { blockers } = assessDocDraft(draft, facts, chart);
   const problems = draft.diagnoses.filter((d) => d.addToProblems);
   const meds = draft.meds.filter((m) => m.addToList);
+  // Problems get complete ICD-10-CM codes only.
+  for (const d of problems) {
+    if (!ICD10_SHAPE.test(normalizeIcd10(d.icd10))) continue; // blank, or already a blocker
+    const check = checkIcd10(d.icd10);
+    const problem = icd10Problem(check);
+    if (problem) blockers.push(`${problem} (${d.text})`);
+    else d.icd10 = check.code;
+  }
   if (problems.length && !can(currentUser.role, "editProblems")) blockers.push("Your role can't add to the problem list.");
   if (meds.length && !can(currentUser.role, "reviewMeds")) blockers.push("Your role can't add to the medication list.");
   if (blockers.length) return { errors: blockers };

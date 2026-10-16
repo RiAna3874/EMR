@@ -444,7 +444,7 @@ model EncounterDiagnosis {
   encounter   Encounter    @relation(fields: [encounterId], references: [id], onDelete: Cascade)
   patientId   String
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  code        String? // ICD-10; blank when typed without one
+  code        String? // ICD-10-CM, complete (src/lib/icd10); blank when typed without one
   display     String
   rank        Int
   conditionId String?

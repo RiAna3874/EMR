@@ -124,10 +124,12 @@ export default async function Visit({ params, searchParams }: { params: Promise<
         {sp.error && (
           <p role="alert" className="rounded-md border border-crit/30 bg-crit-soft px-3 py-2 text-crit">
             {sp.error === "code"
-              ? "That ICD-10 code doesn't look right (for example I10 or E11.9). Leave it blank if you're not sure."
-              : sp.error === "followup"
-                ? "Pick a follow-up date on or after the visit."
-                : "The visit can't be closed yet. See the checklist."}
+              ? "That isn't a complete ICD-10-CM code. Pick the diagnosis from the list, or leave the code blank if you're not sure."
+              : sp.error === "mismatch"
+                ? "The diagnosis name is the official description of a different ICD-10-CM code. Pick the diagnosis again, or change the name or the code."
+                : sp.error === "followup"
+                  ? "Pick a follow-up date on or after the visit."
+                  : "The visit can't be closed yet. See the checklist."}
           </p>
         )}
 
