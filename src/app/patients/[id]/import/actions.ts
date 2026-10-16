@@ -68,6 +68,8 @@ export async function uploadReport(patientId: string, form: FormData): Promise<{
   // Reading a report takes a while; the review page polls until it's ready.
   after(() => runExtraction(job.id));
   revalidatePath(`/patients/${patientId}`, "layout");
+  // From the phone view: back to the chart there; the report is verified on a computer.
+  if (form.get("from") === "phone") redirect(`/m/patients/${patientId}?imported=1`);
   redirect(`/patients/${patientId}/import/${job.id}`);
 }
 

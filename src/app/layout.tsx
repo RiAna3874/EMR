@@ -9,6 +9,8 @@ import { chatBadge } from "@/lib/chat/server";
 import { dataNotice } from "@/lib/deployment";
 import { brand, brandStyle } from "@/lib/brand";
 import { BrandMark } from "@/components/brand-mark";
+import { headers } from "next/headers";
+import { PHONE_VIEW_HEADER } from "@/lib/phone-view";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,12 +26,24 @@ export const dynamic = "force-dynamic";
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // Signed out, only the sign-in page renders (the middleware sends everything else there).
   const user = await getCurrentUser();
+  // The phone view (/m) has its own header and tab bar (src/app/m/layout.tsx); it keeps the idle lock.
+  if ((await headers()).get(PHONE_VIEW_HEADER)) {
+    return (
+      <html lang="en" style={brandStyle()}>
+        <body className="antialiased">
+          {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
+          {children}
+        </body>
+      </html>
+    );
+  }
   return (
     <html lang="en" style={brandStyle()}>
       <body className="flex h-screen flex-col antialiased print:block print:h-auto">
         {/* Part-way through sign-in (temporary password, two-step not set up): no chart data, just a way out. */}
+        {/* data-desktop-chrome: hidden by the phone view if this layout was rendered for another page (src/app/m/layout.tsx). */}
         {user && !signInComplete(user) && (
-          <header className="flex h-11 shrink-0 items-center justify-between bg-chrome px-4 text-[12.5px] text-white/80 print:hidden">
+          <header data-desktop-chrome className="flex h-11 shrink-0 items-center justify-between bg-chrome px-4 text-[12.5px] text-white/80 print:hidden">
             <span className="flex items-center gap-2 font-semibold tracking-wide text-white">
               <BrandMark name={brand.shortName} logoUrl={brand.logoUrl} />
             </span>
@@ -42,13 +56,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         )}
         {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
         {user && signInComplete(user) && (
-          <TopBar
-            user={user}
-            brand={{ name: brand.shortName, logoUrl: brand.logoUrl }}
-            dataLabel={dataNotice?.label ?? null}
-            inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
-            chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
-          />
+          <div data-desktop-chrome className="contents">
+            <TopBar
+              user={user}
+              brand={{ name: brand.shortName, logoUrl: brand.logoUrl }}
+              dataLabel={dataNotice?.label ?? null}
+              inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
+              chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
+            />
+          </div>
         )}
         <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
       </body>

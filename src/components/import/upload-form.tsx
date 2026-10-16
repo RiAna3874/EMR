@@ -12,7 +12,8 @@ const MAX_EDGE = 2000;
 
 export type ImportKindChoice = "auto" | "lab" | "document";
 
-export function UploadForm({ patientId, initialKind = "auto" }: { patientId: string; initialKind?: ImportKindChoice }) {
+// phone: sent from the phone view, which returns to its chart instead of opening the review screen.
+export function UploadForm({ patientId, initialKind = "auto", phone = false }: { patientId: string; initialKind?: ImportKindChoice; phone?: boolean }) {
   const [kind, setKind] = useState<ImportKindChoice>(initialKind);
   const [picked, setPicked] = useState<Picked[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export function UploadForm({ patientId, initialKind = "auto" }: { patientId: str
         }
         fd.append("sizes", JSON.stringify(sizes));
         fd.append("kind", kind);
+        if (phone) fd.append("from", "phone");
         setStage("Uploading…");
         const res = await uploadReport(patientId, fd);
         if (res?.error) setError(res.error);

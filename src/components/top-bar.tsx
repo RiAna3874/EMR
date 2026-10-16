@@ -120,6 +120,10 @@ export function TopBar({
         {dataLabel && (
           <span className="rounded bg-warn px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">{dataLabel}</span>
         )}
+        {/* Only on a narrow screen; the desktop top bar is unchanged. */}
+        <a href="/view/phone" className="rounded px-1.5 py-0.5 text-[12px] hover:bg-white/10 hover:text-white md:hidden">
+          Phone view
+        </a>
         {user.isAdmin && (
           <Link href="/admin/users" className={`rounded px-1.5 py-0.5 text-[12px] hover:bg-white/10 hover:text-white ${pathname.startsWith("/admin") ? "bg-white/10 text-white" : ""}`}>
             Admin
