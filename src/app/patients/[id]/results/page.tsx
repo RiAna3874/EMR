@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
-import { pivot } from "@/lib/chart";
-import { fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
+import { buildTrend, type TrendSection } from "@/lib/labs/trends";
+import { SUGAR_TIMINGS, sugarLabel, sugarShort } from "@/lib/labs/groups";
+import { fmtGlucose, GLUCOSE_CODES } from "@/lib/glucose";
+import { fmtDate, fmtDateTime, fmtRange, fmtShortDate, fmtTime, fmtValue, unitLabel } from "@/lib/format";
 import { Empty } from "@/components/panel";
 import { FlagBadge, flagText, flagTitle } from "@/components/flag";
 import { Sparkline } from "@/components/sparkline";
@@ -19,14 +22,17 @@ import { correctLabResult } from "./actions";
 import { displayName, type SessionUser } from "@/lib/roles";
 import type { Flag, Sex } from "@prisma/client";
 
-const MAX_COLUMNS = 6;
+const MAX_COLUMNS = 8;
+const MAX_ALL_COLUMNS = 40;
+// The one blood sugar trend, in links: ?view=graph&codes=sugar
+const SUGAR_CODE = "sugar";
 
 export default async function Results({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string; correct?: string; corrected?: string }>;
+  searchParams: Promise<{ view?: string; report?: string; codes?: string; range?: string; correct?: string; corrected?: string; group?: string; abn?: string; dates?: string }>;
 }) {
   const { id } = await params;
   const currentUser = await requirePermission("viewClinical");
@@ -38,7 +44,15 @@ export default async function Results({
     orderBy: { effectiveAt: "desc" },
     include: REPORT_INCLUDE,
   });
-  const patient = await db.patient.findUniqueOrThrow({ where: { id }, select: { sex: true } });
+  const [patient, glucose] = await Promise.all([
+    db.patient.findUniqueOrThrow({ where: { id }, select: { sex: true } }),
+    // Fingerstick glucose is filed with the vitals; it joins the lab glucose in one trend.
+    db.observation.findMany({ where: { patientId: id, category: "vital_signs", code: { in: GLUCOSE_CODES } }, include: REPORT_INCLUDE.observations.include }),
+  ]);
+  const sections = buildTrend([
+    ...reports.flatMap((r) => r.observations.map((o) => ({ obs: o, panel: r.display, reportId: r.id, imported: r.source === "imported" }))),
+    ...glucose.map((o) => ({ obs: o })),
+  ]);
   const view = sp.view === "reports" ? "reports" : sp.view === "graph" ? "graph" : "grid";
 
   return (
@@ -64,14 +78,14 @@ export default async function Results({
         </div>
         <Legend />
       </div>
-      {reports.length === 0 ? (
+      {(view === "reports" ? reports.length === 0 : sections.length === 0) ? (
         <div className="rounded-md border border-line bg-panel">
           <Empty>No lab results on file.</Empty>
         </div>
       ) : view === "grid" ? (
-        <TrendGrid reports={reports} base={base} />
+        <TrendGrid sections={sections} base={base} query={{ group: sp.group, abn: sp.abn, dates: sp.dates }} />
       ) : view === "graph" ? (
-        <GraphView reports={reports} base={base} codes={sp.codes} range={sp.range} />
+        <GraphView sections={sections} reports={reports} base={base} codes={sp.codes} range={sp.range} />
       ) : (
         <ReportView
           reports={reports}
@@ -102,97 +116,262 @@ const REPORT_INCLUDE = {
 type ReportWithObs = Awaited<ReturnType<typeof db.diagnosticReport.findMany<{ include: typeof REPORT_INCLUDE }>>>[number];
 type ObsWithCorrections = ReportWithObs["observations"][number];
 
-function TrendGrid({ reports, base }: { reports: ReportWithObs[]; base: string }) {
-  // One section per panel type, newest results on the left.
-  const panels = new Map<string, ReportWithObs[]>();
-  for (const r of reports) panels.set(r.code, [...(panels.get(r.code) ?? []), r]);
-  // Every panel shares the same date columns so values line up down the page.
-  const cols = [...new Set(reports.map((r) => r.effectiveAt.getTime()))].sort((a, b) => b - a).slice(0, MAX_COLUMNS);
+type Section = TrendSection<ObsWithCorrections>;
+type GridQuery = { group?: string; abn?: string; dates?: string };
+
+function trendHref(base: string, q: GridQuery) {
+  const p = new URLSearchParams();
+  if (q.group) p.set("group", q.group);
+  if (q.abn) p.set("abn", q.abn);
+  if (q.dates) p.set("dates", q.dates);
+  const s = p.toString();
+  return s ? `${base}?${s}` : base;
+}
+
+function TrendGrid({ sections, base, query }: { sections: Section[]; base: string; query: GridQuery }) {
+  const abnormalOnly = query.abn === "1";
+  const allDates = query.dates === "all";
+  const shown = sections
+    .filter((s) => !query.group || s.key === query.group)
+    .map((s) => (abnormalOnly ? onlyAbnormal(s) : s))
+    .filter((s) => s.subs.length > 0);
+  const chip = (active: boolean) =>
+    `rounded-full border px-2.5 py-0.5 ${active ? "border-chrome bg-chrome text-white" : "border-line bg-panel text-ink-2 hover:border-accent hover:text-accent"}`;
 
   return (
     <div className="space-y-4">
-      {[...panels.values()].map((group) => {
-        const obs = group.flatMap((r) => r.observations);
-        const { rows } = pivot(obs);
-        const reportAt = new Map(group.map((r) => [r.effectiveAt.getTime(), r.id]));
-        const imported = new Set(group.filter((r) => r.source === "imported").map((r) => r.effectiveAt.getTime()));
+      <nav className="flex flex-wrap items-center gap-1.5 text-[12px]" aria-label="Result sections">
+        <Link href={trendHref(base, { ...query, group: undefined })} className={chip(!query.group)}>
+          All sections
+        </Link>
+        {sections.map((s) => (
+          <Link key={s.key} href={trendHref(base, { ...query, group: s.key })} className={chip(query.group === s.key)}>
+            {s.label}
+            {s.abnormal > 0 && (
+              <span className={`ml-1.5 rounded-full px-1.5 text-[10.5px] font-semibold ${query.group === s.key ? "bg-white/20" : "bg-high-soft text-high"}`} title="Tests whose latest result is out of range">
+                {s.abnormal}
+              </span>
+            )}
+          </Link>
+        ))}
+        <span className="ml-auto flex gap-1.5">
+          <Link href={trendHref(base, { ...query, abn: abnormalOnly ? undefined : "1" })} className={chip(abnormalOnly)} title="Only tests whose latest result is out of range">
+            Abnormal only
+          </Link>
+          <Link href={trendHref(base, { ...query, dates: allDates ? undefined : "all" })} className={chip(allDates)}>
+            All dates
+          </Link>
+        </span>
+      </nav>
+
+      {shown.length === 0 && (
+        <div className="rounded-md border border-line bg-panel">
+          <Empty>{abnormalOnly ? "No tests with an out-of-range latest result." : "No results in this section."}</Empty>
+        </div>
+      )}
+
+      {shown.map((s) => {
+        const cols = allDates ? s.times.slice(0, MAX_ALL_COLUMNS) : s.times.slice(0, MAX_COLUMNS);
+        const hidden = s.times.length - cols.length;
+        const span = cols.length + 4;
+        const sugar = s.subs.find((x) => x.sugar)?.sugar;
         return (
-          <section key={group[0].code} className="overflow-x-auto rounded-md border border-line bg-panel">
-            <table className="w-full min-w-[860px] table-fixed">
-              <colgroup>
-                <col className="w-60" />
-                {cols.map((t) => (
-                  <col key={t} />
-                ))}
-                <col className="w-28" />
-                <col className="w-28" />
-                <col className="w-28" />
-              </colgroup>
-              <thead>
-                <tr className="bg-panel-muted text-[11.5px] text-ink-3">
-                  <th className="px-3 py-2 text-left text-[12.5px] font-semibold text-ink">{group[0].display}</th>
+          <section key={s.key} id={`section-${s.key}`} className="scroll-mt-4 overflow-hidden rounded-md border border-line bg-panel">
+            <header className="flex items-baseline gap-3 border-b border-line bg-panel-muted px-3 py-2">
+              <h2 className="text-[13.5px] font-semibold">{s.label}</h2>
+              <span className="text-[11.5px] text-ink-3">Latest {fmtDate(new Date(s.latestAt))}</span>
+              {s.abnormal > 0 && <span className="text-[11.5px] font-semibold text-high">{s.abnormal} out of range</span>}
+              {hidden > 0 && (
+                <Link href={trendHref(base, { ...query, dates: "all" })} className="ml-auto text-[11.5px] font-medium text-accent hover:underline">
+                  {hidden} older {hidden === 1 ? "date" : "dates"} not shown
+                </Link>
+              )}
+            </header>
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed" style={{ minWidth: 224 + cols.length * 84 + 288 }}>
+                <colgroup>
+                  <col className="w-56" />
                   {cols.map((t) => (
-                    <th key={t} className="tabular px-3 py-2 text-right font-medium">
-                      {reportAt.has(t) ? (
-                        <Link href={`${base}?view=reports&report=${reportAt.get(t)}`} className="hover:text-accent">
-                          {imported.has(t) && <ImportedMark />}
-                          {fmtShortDate(new Date(t))}
-                          <div className="font-normal">{fmtTime(new Date(t))}</div>
-                        </Link>
-                      ) : (
-                        <>
-                          {fmtShortDate(new Date(t))}
-                          <div className="font-normal">{fmtTime(new Date(t))}</div>
-                        </>
-                      )}
-                    </th>
+                    <col key={t} />
                   ))}
-                  <th className="px-3 py-2 text-left font-medium">Range</th>
-                  <th className="px-3 py-2 text-left font-medium">Units</th>
-                  <th className="px-3 py-2 text-left font-medium">Trend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.code} id={r.code} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-                    <td className="px-3 py-1.5">
-                      <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title="Graph this result">
-                        {r.display}
-                      </Link>
-                    </td>
-                    {cols.map((t) => {
-                      const o = r.byTime.get(t);
-                      return (
-                        <td
-                          key={t}
-                          className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
-                          title={o?.flag && o.flag !== "N" ? flagTitle(o.flag) : undefined}
-                        >
-                          {o ? (
-                            <>
-                              {fmtValue(o)}
-                              <FlagBadge flag={o.flag} />
-                              {o.correctedAt && <CorrectedMark />}
-                            </>
-                          ) : (
-                            <span className="text-ink-3">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className="tabular px-3 py-1.5 text-ink-2">{fmtRange(r)}</td>
-                    <td className="px-3 py-1.5 text-ink-2">{unitLabel(r.unit)}</td>
-                    <td className="px-3 py-1.5">
-                      <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
-                    </td>
+                  <col className="w-28" />
+                  <col className="w-20" />
+                  <col className="w-24" />
+                </colgroup>
+                <thead>
+                  <tr className="text-[11.5px] text-ink-3">
+                    <th className="px-3 py-1.5 text-left font-medium">Test</th>
+                    {cols.map((t) => (
+                      <th key={t} className="tabular px-3 py-1.5 text-right font-medium">
+                        <DateHead t={t} href={s.reportAt.has(t) ? `${base}?view=reports&report=${s.reportAt.get(t)}` : undefined} imported={s.imported.has(t)} />
+                      </th>
+                    ))}
+                    <th className="px-3 py-1.5 text-left font-medium">Range</th>
+                    <th className="px-3 py-1.5 text-left font-medium">Units</th>
+                    <th className="px-3 py-1.5 text-left font-medium">Trend</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {s.subs.map((x) => (
+                    <Fragment key={x.key}>
+                      {(s.subs.length > 1 || x.label !== s.label) && (
+                        <tr className="border-t border-line bg-accent-soft/25">
+                          <th colSpan={span} className="px-3 py-1 text-left text-[11.5px] font-semibold uppercase tracking-wide text-ink-2">
+                            {x.label}
+                          </th>
+                        </tr>
+                      )}
+                      {x.sugar && <SugarTrendRow sugar={x.sugar} cols={cols} base={base} />}
+                      {x.rows.map((r) => (
+                        <tr key={r.code} id={r.code} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
+                          <td className="truncate px-3 py-1.5 pl-5">
+                            <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title="Graph this result">
+                              {r.display}
+                            </Link>
+                          </td>
+                          {cols.map((t) => {
+                            const o = r.byTime.get(t);
+                            return (
+                              <td
+                                key={t}
+                                className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
+                                title={o?.flag && o.flag !== "N" ? flagTitle(o.flag) : undefined}
+                              >
+                                {o ? (
+                                  <>
+                                    {fmtValue(o)}
+                                    <FlagBadge flag={o.flag} />
+                                    {o.correctedAt && <CorrectedMark obs={o} />}
+                                  </>
+                                ) : (
+                                  <span className="text-ink-3">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="tabular truncate px-3 py-1.5 text-ink-2">{fmtRange(r)}</td>
+                          <td className="truncate px-3 py-1.5 text-ink-2">{unitLabel(r.unit)}</td>
+                          <td className="px-3 py-1.5">
+                            <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {sugar && sugar.cells.length > 1 && (
+              <details open className="border-t border-line">
+                <summary className="cursor-pointer px-3 py-1.5 text-[12px] font-medium text-ink-2 hover:text-accent">Blood sugar graph</summary>
+                <div className="px-2 pb-2">
+                  <SugarChart sugar={sugar} base={base} height={180} />
+                </div>
+              </details>
+            )}
           </section>
         );
       })}
     </div>
+  );
+}
+
+// Tests whose latest value is flagged; blood sugar stays when its latest reading is.
+function onlyAbnormal(s: Section): Section {
+  const latestFlag = (m: Map<number, { flag: Flag | null }>) => [...m.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
+  const subs = s.subs
+    .map((x) => ({
+      ...x,
+      rows: x.rows.filter((r) => { const f = latestFlag(r.byTime); return f && f !== "N"; }),
+      sugar: x.sugar && x.sugar.cells.at(-1)?.flag && x.sugar.cells.at(-1)?.flag !== "N" ? x.sugar : undefined,
+    }))
+    .filter((x) => x.rows.length || x.sugar);
+  const times = new Set(subs.flatMap((x) => [...x.rows.flatMap((r) => [...r.byTime.keys()]), ...(x.sugar ? [...x.sugar.byTime.keys()] : [])]));
+  return { ...s, subs, times: s.times.filter((t) => times.has(t)) };
+}
+
+function DateHead({ t, href, imported }: { t: number; href?: string; imported: boolean }) {
+  const body = (
+    <>
+      {imported && <ImportedMark />}
+      {fmtShortDate(new Date(t))}
+      <div className="font-normal">{fmtTime(new Date(t))}</div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="hover:text-accent">
+      {body}
+    </Link>
+  ) : (
+    body
+  );
+}
+
+// Every blood sugar in one row: lab glucose of any timing and fingerstick readings, in mmol/L.
+function SugarTrendRow({ sugar, cols, base }: { sugar: NonNullable<Section["subs"][number]["sugar"]>; cols: number[]; base: string }) {
+  const [first, ...others] = sugar.codes;
+  return (
+    <tr id={first} className="scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
+      <td className="px-3 py-1.5 pl-5">
+        {others.map((c) => (
+          <span key={c} id={c} className="scroll-mt-4" />
+        ))}
+        <Link href={`${base}?view=graph&codes=${SUGAR_CODE}`} className="font-medium hover:text-accent hover:underline" title="Graph every blood sugar">
+          Blood sugar
+        </Link>
+        <div className="text-[11px] text-ink-3">Lab and fingerstick, all timings</div>
+      </td>
+      {cols.map((t) => {
+        const cells = sugar.byTime.get(t);
+        return (
+          <td key={t} className="tabular px-3 py-1.5 text-right align-top">
+            {cells ? (
+              cells.map((c) => (
+                <div key={c.obs.id} className={flagText(c.flag)} title={`${sugarLabel(c.timing)} · ${c.source === "fingerstick" ? "fingerstick (POC)" : "lab"} · ${fmtGlucose(c.mmol)}`}>
+                  {c.mmol.toFixed(1)}
+                  <FlagBadge flag={c.flag} />
+                  <div className="text-[10.5px] font-normal text-ink-3">
+                    {sugarShort(c.timing)} · {c.source === "fingerstick" ? "POC" : "Lab"}
+                    {c.obs.correctedAt && <CorrectedMark obs={c.obs} />}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <span className="text-ink-3">—</span>
+            )}
+          </td>
+        );
+      })}
+      <td className="tabular px-3 py-1.5 text-[11.5px] text-ink-2">
+        FBS 3.9–5.5
+        <div>RBS, 2HABF 3.9–7.8</div>
+      </td>
+      <td className="px-3 py-1.5 text-ink-2">mmol/L</td>
+      <td className="px-3 py-1.5">
+        <Sparkline values={sugar.cells.map((c) => c.mmol)} refLow={3.9} refHigh={7.8} />
+      </td>
+    </tr>
+  );
+}
+
+function SugarChart({ sugar, base, height, cutoff = 0 }: { sugar: NonNullable<Section["subs"][number]["sugar"]>; base: string; height?: number; cutoff?: number }) {
+  const series = SUGAR_TIMINGS.map((timing) => ({
+    name: `${timing.label} (${timing.short})`,
+    points: sugar.cells
+      .filter((c) => c.timing === timing.key && c.obs.effectiveAt.getTime() >= cutoff)
+      .map((c) => ({
+        t: c.obs.effectiveAt.getTime(),
+        v: c.mmol,
+        flag: c.flag,
+        imported: c.imported,
+        href: c.reportId ? `${base}?view=reports&report=${c.reportId}` : `${base.replace(/\/results$/, "")}/vitals`,
+      })),
+  })).filter((s) => s.points.length > 0);
+  return (
+    <>
+      <TrendChart series={series} unit="mmol/L" refLow={3.9} refHigh={7.8} height={height} />
+      <p className="pl-11 pt-1 text-[11px] text-ink-3">Shaded band is 3.9–7.8 mmol/L. Fasting is normal up to 5.5. Lab values in mg/dL are shown in mmol/L (÷ 18).</p>
+    </>
   );
 }
 
@@ -466,55 +645,68 @@ function ReviewLine({ report, next, canReview }: { report: ReportWithObs; next: 
 
 const RANGES = { "1y": 365, "2y": 730, all: 0 } as const;
 
-function GraphView({ reports, base, codes, range }: { reports: ReportWithObs[]; base: string; codes?: string; range?: string }) {
+function GraphView({ sections, reports, base, codes, range }: { sections: Section[]; reports: ReportWithObs[]; base: string; codes?: string; range?: string }) {
   const days = range && range in RANGES ? RANGES[range as keyof typeof RANGES] : 0;
   const cutoff = days ? Date.now() - days * 86_400_000 : 0;
 
-  // Components grouped by panel, in the order the trend table shows them.
-  const panels = new Map<string, { display: string; rows: ReturnType<typeof pivot>["rows"] }>();
-  const byPanel = new Map<string, ReportWithObs[]>();
-  for (const r of reports) byPanel.set(r.code, [...(byPanel.get(r.code) ?? []), r]);
-  for (const [code, group] of byPanel) {
-    const rows = pivot(group.flatMap((r) => r.observations)).rows.filter((row) => row.values.length > 0);
-    if (rows.length) panels.set(code, { display: group[0].display, rows });
-  }
-  const allRows = [...panels.values()].flatMap((p) => p.rows);
+  const allRows = sections.flatMap((s) => s.subs.flatMap((x) => x.rows));
+  const sugar = sections.flatMap((s) => s.subs).find((x) => x.sugar)?.sugar;
   const latestFlag = (row: (typeof allRows)[number]) => [...row.byTime.entries()].sort((a, b) => b[0] - a[0])[0]?.[1].flag;
 
-  let selected = (codes ?? "").split(",").filter((c) => allRows.some((r) => r.code === c));
+  // Links from elsewhere name a glucose code; those now live in the one blood sugar graph.
+  let selected = [
+    ...new Set(
+      (codes ?? "")
+        .split(",")
+        .map((c) => (sugar && (c === SUGAR_CODE || sugar.codes.includes(c)) ? SUGAR_CODE : c))
+        .filter((c) => c === SUGAR_CODE || allRows.some((r) => r.code === c)),
+    ),
+  ];
   if (!selected.length) {
     const abnormal = allRows.filter((r) => { const f = latestFlag(r); return f && f !== "N"; }).map((r) => r.code);
-    selected = (abnormal.length ? abnormal : allRows.map((r) => r.code)).slice(0, 4);
+    const sugarAbn = sugar?.cells.at(-1)?.flag && sugar.cells.at(-1)?.flag !== "N";
+    selected = [...(sugarAbn ? [SUGAR_CODE] : []), ...(abnormal.length ? abnormal : allRows.map((r) => r.code))].slice(0, 4);
+    if (!selected.length && sugar) selected = [SUGAR_CODE];
   }
   const reportOf = new Map(reports.flatMap((r) => r.observations.map((o) => [o.id, r] as const)));
   const href = (next: string[], r = range) => `${base}?view=graph&codes=${next.map(encodeURIComponent).join(",")}${r ? `&range=${r}` : ""}`;
+  const item = (code: string, label: string, f: Flag | null | undefined, strong = false) => {
+    const on = selected.includes(code);
+    return (
+      <Link
+        key={code}
+        href={href(on ? selected.filter((c) => c !== code) : [...selected, code])}
+        className={`flex items-center gap-2 px-3 py-1 pl-4 ${on ? "bg-accent-soft" : "hover:bg-panel-muted"}`}
+      >
+        <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none ${on ? "border-accent bg-accent text-white" : "border-line"}`}>
+          {on ? "✓" : ""}
+        </span>
+        <span className={`flex-1 truncate ${strong ? "font-medium" : ""}`}>{label}</span>
+        {f && f !== "N" && <FlagBadge flag={f} />}
+      </Link>
+    );
+  };
 
   return (
     <div className="flex gap-3">
       <nav className="w-64 shrink-0 self-start overflow-hidden rounded-md border border-line bg-panel">
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Components</span>
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-2">Tests</span>
           <span className="text-[11px] text-ink-3">{selected.length} shown</span>
         </div>
         <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
-          {[...panels.entries()].map(([code, p]) => (
-            <div key={code} className="border-b border-line last:border-b-0">
-              <div className="bg-panel-muted px-3 py-1 text-[11.5px] font-semibold text-ink-2">{p.display}</div>
-              {p.rows.map((r) => {
-                const on = selected.includes(r.code);
-                const f = latestFlag(r);
+          {sections.filter((s) => s.subs.some((x) => x.sugar || x.rows.some((r) => r.values.length > 0))).map((s) => (
+            <div key={s.key} className="border-b border-line last:border-b-0">
+              <div className="bg-panel-muted px-3 py-1 text-[12px] font-semibold text-ink">{s.label}</div>
+              {s.subs.map((x) => {
+                const rows = x.rows.filter((r) => r.values.length > 0);
+                if (!rows.length && !x.sugar) return null;
                 return (
-                  <Link
-                    key={r.code}
-                    href={href(on ? selected.filter((c) => c !== r.code) : [...selected, r.code])}
-                    className={`flex items-center gap-2 px-3 py-1 ${on ? "bg-accent-soft" : "hover:bg-panel-muted"}`}
-                  >
-                    <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none ${on ? "border-accent bg-accent text-white" : "border-line"}`}>
-                      {on ? "✓" : ""}
-                    </span>
-                    <span className="flex-1 truncate">{r.display}</span>
-                    {f && f !== "N" && <FlagBadge flag={f} />}
-                  </Link>
+                  <div key={x.key}>
+                    {(s.subs.length > 1 || x.label !== s.label) && <div className="px-3 pt-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-3">{x.label}</div>}
+                    {x.sugar && item(SUGAR_CODE, "Blood sugar (all)", x.sugar.cells.at(-1)?.flag, true)}
+                    {rows.map((r) => item(r.code, r.display, latestFlag(r)))}
+                  </div>
                 );
               })}
             </div>
@@ -540,6 +732,30 @@ function GraphView({ reports, base, codes, range }: { reports: ReportWithObs[]; 
         </div>
         <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
           {selected.map((code) => {
+            if (code === SUGAR_CODE && sugar) {
+              const pts = sugar.cells.filter((c) => c.obs.effectiveAt.getTime() >= cutoff);
+              const last = pts.at(-1);
+              return (
+                <section key={code} className="rounded-md border border-line bg-panel">
+                  <header className="flex items-baseline gap-3 border-b border-line px-3 py-2">
+                    <h3 className="font-semibold">Blood sugar</h3>
+                    <span className="text-[11.5px] text-ink-3">mmol/L · lab and fingerstick · {pts.length} readings</span>
+                    {last && (
+                      <span className={`tabular ml-auto font-semibold ${flagText(last.flag)}`}>
+                        {last.mmol.toFixed(1)}
+                        <FlagBadge flag={last.flag} />
+                        <span className="ml-2 text-[11.5px] font-normal text-ink-3">
+                          {sugarShort(last.timing)} on {fmtDate(last.obs.effectiveAt)}
+                        </span>
+                      </span>
+                    )}
+                  </header>
+                  <div className="px-2 py-2">
+                    <SugarChart sugar={sugar} base={base} cutoff={cutoff} />
+                  </div>
+                </section>
+              );
+            }
             const row = allRows.find((r) => r.code === code)!;
             const points = [...row.byTime.values()]
               .filter((o) => o.valueNum !== null && o.unit === row.unit && o.effectiveAt.getTime() >= cutoff)
@@ -583,7 +799,7 @@ function GraphView({ reports, base, codes, range }: { reports: ReportWithObs[]; 
           })}
           {selected.length === 0 && (
             <div className="rounded-md border border-line bg-panel">
-              <Empty>Pick components on the left to graph them.</Empty>
+              <Empty>Pick tests on the left to graph them.</Empty>
             </div>
           )}
         </div>
