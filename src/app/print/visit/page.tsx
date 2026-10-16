@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
-import { age, fmtDate, sexShort } from "@/lib/format";
+import { age, fmtDate, fmtDateOnly, sexShort } from "@/lib/format";
 import { logChartView } from "@/lib/audit/server";
 import { visitDetails } from "@/lib/visits/server";
 import { vitalsSummary } from "@/lib/visits/vitals-line";
@@ -138,7 +138,7 @@ export default async function PrintVisit({ searchParams }: { searchParams: Promi
             ) : (
               <ol className="mt-2 space-y-2.5">
                 {meds.map((m, i) => {
-                  const { steps, stop } = doseSchedules({ ...m, start: m.authoredAt }, lang, productFor(m));
+                  const { steps, stop } = doseSchedules({ ...m, start: m.courseStart ?? m.authoredAt }, lang, productFor(m));
                   const s = steps[0];
                   const words = stepWords(lang);
                   const outside = m.rxClass === "historical";
@@ -166,6 +166,11 @@ export default async function PrintVisit({ searchParams }: { searchParams: Promi
                           </div>
                         ))}
                         {stop && <div className="text-[13px] italic">{words.stop}</div>}
+                        {m.courseStart && m.courseStart > m.authoredAt && (
+                          <div className="text-[12px] font-semibold">
+                            {lang === "bn" ? "শুরু করবেন" : "Start on"} {fmtDateOnly(m.courseStart)}
+                          </div>
+                        )}
                         {m.patientInstructions && <div className="text-[11.5px]">{m.patientInstructions}</div>}
                       </div>
                     </li>

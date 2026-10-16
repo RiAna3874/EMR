@@ -5,6 +5,8 @@ import { maxRefills } from "./checks";
 import { daysSupplyFor, sigText } from "./sig";
 import { parseSteps, stepsDaysSupply, stepsQuantity, type DoseStep } from "./steps";
 import type { Product } from "./formulary";
+import { isYmd, relativeDayLabel } from "@/lib/orders/dates";
+import { toLocalDate } from "@/lib/format";
 
 export type RxDetails = {
   dose: string;
@@ -13,6 +15,8 @@ export type RxDetails = {
   prn?: boolean;
   prnReason?: string | null;
   durationDays?: number | null;
+  // YYYY-MM-DD the course begins, when not the day it is signed (Epic's start date).
+  startDate?: string | null;
   // A taper or "followed by" sig. dose and frequency then hold the first step.
   steps?: DoseStep[] | null;
   quantity: string;
@@ -52,6 +56,12 @@ const int = (f: FormData, k: string) => {
   return Number.isFinite(n) && str(f, k) !== "" ? Math.round(n) : null;
 };
 
+// A start date of today or earlier is no start date: the course begins when it is signed.
+function startDateFrom(form: FormData) {
+  const s = str(form, "startDate");
+  return isYmd(s) && s > toLocalDate(new Date()) ? s : null;
+}
+
 // Reads the composer's fields, falling back to the product's defaults, and keeps
 // refills within what the drug's schedule allows.
 export function rxFromForm(form: FormData, product: Product): RxDetails {
@@ -69,6 +79,7 @@ export function rxFromForm(form: FormData, product: Product): RxDetails {
     prn,
     prnReason: prn ? str(form, "prnReason") || product.prnReason || null : null,
     durationDays: int(form, "durationDays"),
+    startDate: startDateFrom(form),
     quantity,
     daysSupply: int(form, "daysSupply") ?? daysSupplyFor(product, { dose, frequency }, quantity),
     refills: Math.max(0, Math.min(maxRefills(product.display), int(form, "refills") ?? 0)),
@@ -94,6 +105,7 @@ function stepsFromForm(form: FormData, product: Product, steps: DoseStep[]): RxD
     prn,
     prnReason: prn ? str(form, "prnReason") || product.prnReason || null : null,
     durationDays: null,
+    startDate: startDateFrom(form),
     quantity: str(form, "quantity") || stepsQuantity(product, steps, open) || product.quantity,
     daysSupply: int(form, "daysSupply") ?? stepsDaysSupply(steps, open),
     refills: Math.max(0, Math.min(maxRefills(product.display), int(form, "refills") ?? 0)),
@@ -110,5 +122,6 @@ export function rxSummary(d: Partial<RxDetails> | null | undefined) {
   if (!d?.dose) return "";
   const sig = sigText({ dose: d.dose, route: d.route ?? "", frequency: d.frequency ?? "", prn: d.prn, prnReason: d.prnReason, durationDays: d.durationDays, steps: d.steps });
   const refills = d.refills ?? 0;
-  return `${sig}. Dispense ${d.quantity ?? "?"}${d.daysSupply ? ` (${d.daysSupply}-day supply)` : ""}, ${refills} refill${refills === 1 ? "" : "s"}${d.daw ? ", dispense as written" : ""}.`;
+  const starts = d.startDate ? ` Start ${relativeDayLabel(d.startDate, toLocalDate(new Date())).replace(/^T/, "t")}.` : "";
+  return `${sig}.${starts} Dispense ${d.quantity ?? "?"}${d.daysSupply ? ` (${d.daysSupply}-day supply)` : ""}, ${refills} refill${refills === 1 ? "" : "s"}${d.daw ? ", dispense as written" : ""}.`;
 }

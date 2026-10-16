@@ -7,7 +7,7 @@ import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { fillStatus, interactionsAmong, isControlled } from "@/lib/meds/checks";
 import { rxClassLabel, type RxDetails } from "@/lib/meds/rx";
 import { sigText } from "@/lib/meds/sig";
-import { StepNow } from "@/components/meds/step-now";
+import { CourseDates, StepNow } from "@/components/meds/step-now";
 import { Empty } from "@/components/panel";
 import { Button, inputCls } from "@/components/form";
 import { ActionButton } from "@/components/action-button";
@@ -271,7 +271,8 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                           {pendingRx && <Chip tone="warn">{(pendingRx.details as Partial<RxDetails> | null)?.refill ? "REFILL IN BASKET" : "CHANGE IN BASKET"}</Chip>}
                         </div>
                         <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</div>
-                        <StepNow steps={m.steps} written={m.authoredAt} />
+                        <StepNow steps={m.steps} written={m.courseStart ?? m.authoredAt} />
+                        <CourseDates med={m} />
                         {m.indication && <div className="text-[12px] text-ink-3">For {m.indication}</div>}
                         {m.continuedAt && (
                           <div className="text-[12px] text-ok">

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
-import { fmtDate, fmtDateOnly } from "@/lib/format";
+import { fmtDate, fmtDateOnly, toLocalDate } from "@/lib/format";
 import { orderableFor, typeLabels } from "@/lib/orders/catalog";
 import { orderContext, pendingOrderWarnings } from "@/lib/orders/server";
 import { needsCosign } from "@/lib/roles";
@@ -153,7 +153,12 @@ function OrderTable({ orders, patientId, showActions }: { orders: OrderRow[]; pa
             <td className="whitespace-nowrap px-3 py-1.5 text-ink-2">
               <div className="tabular">{fmtDate(o.signedAt ?? o.createdAt)}</div>
               <div className="text-[11.5px] text-ink-3">{o.orderedBy.name}</div>
-              {o.expectedAt && o.status === "signed" && <div className="text-[11.5px] text-ink-3">Due {fmtDateOnly(o.expectedAt)}</div>}
+              {o.expectedAt && o.status === "signed" && <div className="text-[11.5px] text-ink-3">Start {fmtDateOnly(o.expectedAt)}</div>}
+              {o.expiresAt && o.status === "signed" && (
+                <div className={`text-[11.5px] ${o.expiresAt.toISOString().slice(0, 10) < toLocalDate(new Date()) ? "font-medium text-crit" : "text-ink-3"}`}>
+                  {o.expiresAt.toISOString().slice(0, 10) < toLocalDate(new Date()) ? "Expired" : "Ends"} {fmtDateOnly(o.expiresAt)}
+                </div>
+              )}
             </td>
             <td className="whitespace-nowrap px-3 py-1.5">
               <OrderStatusChip status={o.status} />

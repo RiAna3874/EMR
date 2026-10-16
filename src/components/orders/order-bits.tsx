@@ -1,7 +1,9 @@
 import type { OrderPriority, OrderStatus, OrderType } from "@prisma/client";
 import type { OrderWarning } from "@/lib/orders/checks";
 import { rxSummary, type RxDetails } from "@/lib/meds/rx";
-import { takesDueDate } from "@/lib/orders/defaults";
+import { courseEnd } from "@/lib/orders/dates";
+import { toLocalDate } from "@/lib/format";
+import { parseSteps, totalDays } from "@/lib/meds/steps";
 
 const typeStyles: Record<OrderType, [string, string]> = {
   lab: ["LAB", "bg-accent-soft text-accent"],
@@ -74,6 +76,7 @@ type BasketSource = {
   indication: string | null;
   conditionId: string | null;
   expectedAt: Date | null;
+  expiresAt: Date | null;
   instructions: string | null;
   details: unknown;
   orderSet: string | null;
@@ -83,6 +86,14 @@ type BasketSource = {
 
 // A pending order as the order basket shows it.
 export function basketRow(o: BasketSource, viewerId: string, warnings: OrderWarning[] = []): BasketRow {
+  const ymd = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+  const rx = o.type === "medication" ? ((o.details ?? {}) as Partial<RxDetails>) : null;
+  const steps = parseSteps(rx?.steps);
+  const stepsDays = steps ? totalDays(steps) : null;
+  const rxDays = steps ? stepsDays : (rx?.durationDays ?? null);
+  // A prescription's start date that has come and gone starts it the day it is signed.
+  const today = toLocalDate(new Date());
+  const rxStart = rx?.startDate && rx.startDate > today ? rx.startDate : null;
   return {
     id: o.id,
     type: o.type,
@@ -90,8 +101,11 @@ export function basketRow(o: BasketSource, viewerId: string, warnings: OrderWarn
     priority: o.priority,
     indication: o.indication,
     conditionId: o.conditionId,
-    expectedAt: o.expectedAt ? o.expectedAt.toISOString().slice(0, 10) : null,
-    takesDate: takesDueDate(o),
+    // A prescription starts on its own start date (empty = the day it is signed) and
+    // ends with its course; other orders have a start (due) date and an end (expiry) date.
+    expectedAt: rx ? rxStart : ymd(o.expectedAt),
+    expiresAt: rx ? (rxDays ? courseEnd(rxStart ?? today, rxDays) : null) : ymd(o.expiresAt),
+    endFromSteps: !!steps,
     instructions: o.instructions,
     sig: medSig(o.details),
     orderSet: o.orderSet,
@@ -109,9 +123,11 @@ export type BasketRow = {
   priority: OrderPriority;
   indication: string | null;
   conditionId: string | null;
-  // YYYY-MM-DD
+  // Start and end dates, YYYY-MM-DD. A prescription's end follows its course length.
   expectedAt: string | null;
-  takesDate: boolean;
+  expiresAt: string | null;
+  // A taper's end is set by its steps; change it with Modify.
+  endFromSteps: boolean;
   instructions: string | null;
   sig: string;
   editHref: string | null;

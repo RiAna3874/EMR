@@ -14,6 +14,8 @@ import { parseSteps, stepsDaysSupply, stepsProblem, stepsQuantity, type DoseStep
 import { DoseInput, FrequencyInput, RouteInput } from "./dose-fields";
 import { StepsEditor } from "./steps-editor";
 import { DrugInfo } from "./drug-info";
+import { DatePicks, todayYmd } from "@/components/orders/date-picks";
+import { courseDays, courseEnd, relativeDayLabel, RX_END_PICKS, START_PICKS } from "@/lib/orders/dates";
 
 export type PharmacyOption = { id: string; name: string; address: string; mailOrder: boolean };
 
@@ -74,6 +76,11 @@ export function RxForm({
     setSteps(null);
   };
 
+  // Epic's start and end dates. The end date and the duration are the same thing said two ways.
+  const today = todayYmd();
+  const [startDate, setStartDate] = useState(initial?.startDate && initial.startDate > today ? initial.startDate : today);
+  const stepsDays = steps && steps.every((s) => s.days) ? steps.reduce((t, s) => t + (s.days ?? 0), 0) : null;
+
   const doseOptions = useMemo(() => doseSuggestions(product.display, product), [product]);
   const days = Number(duration) || 0;
   // Keep the quantity in step with the sig until the prescriber types their own.
@@ -97,8 +104,8 @@ export function RxForm({
 
   const stepsIssue = steps && stepsProblem(steps);
   const summary = steps
-    ? (stepsIssue ?? rxSummary({ dose: steps[0].dose, route, frequency: steps[0].frequency, steps, prn, prnReason, quantity: shownQty, daysSupply, refills }))
-    : rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills });
+    ? (stepsIssue ?? rxSummary({ dose: steps[0].dose, route, frequency: steps[0].frequency, steps, prn, prnReason, quantity: shownQty, daysSupply, refills, startDate: startDate > today ? startDate : null }))
+    : rxSummary({ dose, route, frequency, prn, prnReason, durationDays: days || null, quantity: shownQty, daysSupply, refills, startDate: startDate > today ? startDate : null });
   const pharmacy = pharmacies.find((p) => p.id === pharmacyId);
   // An off-list, DGDA-registry or generic-list medication has no defaults, so the prescriber writes the whole sig.
   const incomplete = !!stepsIssue || (writesOwnSig(product) && (!(steps?.[0].dose ?? dose).trim() || !(steps?.[0].frequency ?? frequency).trim() || !shownQty.trim()));
@@ -109,6 +116,7 @@ export function RxForm({
       <input type="hidden" name="quantity" value={shownQty} />
       <input type="hidden" name="daysSupply" value={daysSupply || ""} />
       <input type="hidden" name="rxClass" value={rxClass} />
+      <input type="hidden" name="startDate" value={startDate > today ? startDate : ""} />
       {steps && <input type="hidden" name="steps" value={JSON.stringify(steps)} />}
       {replaces && <input type="hidden" name="replacesId" value={replaces.id} />}
       {refillRequestId && <input type="hidden" name="refillRequestId" value={refillRequestId} />}
@@ -184,6 +192,26 @@ export function RxForm({
           <Field label="As needed for">
             <input name="prnReason" value={prnReason} onChange={(e) => setPrnReason(e.target.value)} className={`${inputCls} w-44`} placeholder="e.g. pain" />
           </Field>
+        )}
+      </div>
+
+      <div className="space-y-1 rounded border border-line bg-panel px-2.5 py-2">
+        <DatePicks label="Start" value={startDate} from={today} min={today} picks={START_PICKS} onChange={(v) => setStartDate(v && v > today ? v : today)} />
+        {steps ? (
+          <p className="text-[11.5px] text-ink-3">
+            <span className="inline-block w-9">End</span>
+            {stepsDays ? `${relativeDayLabel(courseEnd(startDate, stepsDays), today)}, when the last step finishes` : "Ongoing: the last step has no end"}
+          </p>
+        ) : (
+          <DatePicks
+            label="End"
+            value={days ? courseEnd(startDate, days) : ""}
+            from={startDate}
+            min={startDate}
+            none="Ongoing"
+            picks={RX_END_PICKS.map((p) => ({ label: p.label, days: p.days - 1 }))}
+            onChange={(v) => setDuration(v ? String(courseDays(startDate, v)) : "")}
+          />
         )}
       </div>
 

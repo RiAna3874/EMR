@@ -88,7 +88,8 @@ export default async function PrintOrders({ searchParams }: { searchParams: Prom
                       <td className="py-1 pr-2">{o.indication ?? "—"}</td>
                       <td className="py-1">
                         {s.types.includes("lab") ? def?.specimen ?? "—" : o.expectedAt ? fmtDateOnly(o.expectedAt) : "—"}
-                        {s.types.includes("lab") && o.expectedAt && <div className="text-[11px]">Collect by {fmtDateOnly(o.expectedAt)}</div>}
+                        {s.types.includes("lab") && o.expectedAt && <div className="text-[11px]">Collect from {fmtDateOnly(o.expectedAt)}</div>}
+                        {o.expiresAt && <div className="text-[11px]">Valid until {fmtDateOnly(o.expiresAt)}</div>}
                       </td>
                     </tr>
                   );
