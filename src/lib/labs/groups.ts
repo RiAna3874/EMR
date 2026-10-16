@@ -146,6 +146,26 @@ export function placeResult(code: string, display: string, panelDisplay?: string
   return { group: "other", sub: "other" };
 }
 
+// Blood sugar is always its own table. Another panel joins the table before it when
+// most of their dates are shared (judged on the newest dates, which are what's shown).
+export function blocksOf<S extends { key: string; times: number[] }>(subs: S[], recent = 8): { subs: S[]; times: number[] }[] {
+  const blocks: { subs: S[]; times: number[] }[] = [];
+  for (const x of subs) {
+    const last = blocks.at(-1);
+    if (last && x.key !== "sugar" && last.subs[0].key !== "sugar" && overlaps(last.times.slice(0, recent), x.times.slice(0, recent))) {
+      last.subs.push(x);
+      last.times = [...new Set([...last.times, ...x.times])].sort((a, b) => b - a);
+    } else blocks.push({ subs: [x], times: [...x.times] });
+  }
+  return blocks;
+}
+
+function overlaps(a: number[], b: number[]) {
+  const set = new Set(a);
+  const shared = b.filter((t) => set.has(t)).length;
+  return shared > 0 && shared * 2 >= Math.min(a.length, b.length);
+}
+
 // ---------- one blood sugar trend ----------
 
 export type SugarSource = "lab" | "fingerstick";

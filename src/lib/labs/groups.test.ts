@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placeResult, sugarReading } from "./groups";
+import { blocksOf, placeResult, sugarReading } from "./groups";
 
 test("known tests go to their specialty and panel", () => {
   assert.deepEqual(placeResult("718-7", "Hemoglobin"), { group: "hematology", sub: "cbc" });
@@ -51,4 +51,12 @@ test("every blood sugar becomes mmol/L with its timing", () => {
   assert.equal(sugarReading({ code: "4548-4", display: "Hemoglobin A1c", valueNum: 7.1, unit: "%" }), null);
   assert.equal(sugarReading({ code: "local:urine-glucose", display: "Urine glucose", valueNum: 1, unit: "mg/dL" }), null);
   assert.equal(sugarReading({ code: "8867-4", display: "Heart rate", valueNum: 80, unit: "/min", category: "vital_signs" }), null);
+});
+
+test("panels drawn together share a table; blood sugar and panels from other days get their own", () => {
+  const d = (...days: number[]) => days.map((n) => n * 86_400_000).sort((a, b) => b - a);
+  const keys = (subs: { key: string; times: number[] }[]) => blocksOf(subs).map((b) => b.subs.map((x) => x.key).join("+"));
+  assert.deepEqual(keys([{ key: "sugar", times: d(1, 2, 3, 9) }, { key: "a1c", times: d(9) }]), ["sugar", "a1c"]);
+  assert.deepEqual(keys([{ key: "cbc", times: d(1, 5, 9) }, { key: "diff", times: d(1, 5) }, { key: "esr", times: d(5) }]), ["cbc+diff+esr"]);
+  assert.deepEqual(keys([{ key: "lipid", times: d(1, 5, 9) }, { key: "cardiac", times: d(3) }]), ["lipid", "cardiac"]);
 });
