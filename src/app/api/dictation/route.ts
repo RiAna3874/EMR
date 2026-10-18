@@ -28,6 +28,17 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "No recording was received." }, { status: 400 });
   }
+  // The free browser engine recognizes speech in the browser; it only reports here for the access log.
+  if (form.get("log") === "browser") {
+    await logEvent({
+      action: "dictate",
+      subject: "Dictation",
+      actor: { id: user.id, username: user.username },
+      patientId: String(form.get("patientId") ?? "").slice(0, 40) || null,
+      detail: `Browser speech recognition, ${form.get("language") === "bn" ? "Bangla" : "English"}`,
+    });
+    return NextResponse.json({ ok: true });
+  }
   const audio = form.get("audio");
   if (!(audio instanceof Blob) || audio.size === 0) return NextResponse.json({ error: "No recording was received." }, { status: 400 });
   if (audio.size > MAX_BYTES) return NextResponse.json({ error: "That recording is too long. Pause now and then while dictating." }, { status: 413 });

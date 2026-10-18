@@ -1,7 +1,7 @@
 // An optional second pass by Claude over each dictated piece: fixes misheard medicine and
 // test names, numbers and units, and punctuation, without changing what was said.
-// On by default when the Claude key is set (it already reads lab reports); turn off with
-// MERIDIAN_DICTATION_POLISH=0. Any failure falls back to the engine's own text.
+// Off unless MERIDIAN_DICTATION_POLISH=1 and the Claude key is set (it costs per pause).
+// Applies to the paid engines only. Any failure falls back to the engine's own text.
 // MERIDIAN_DICTATION_POLISH_MODEL picks another Claude model (e.g. claude-haiku-5-5, much cheaper).
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
@@ -21,7 +21,7 @@ Rules:
 - Never add, remove or reorder clinical content. Never add a diagnosis, dose, finding or word the doctor didn't say. If unsure about a word, leave it as it is.
 - Return only the corrected dictation.`;
 
-export const polishEnabled = () => process.env.MERIDIAN_DICTATION_POLISH !== "0" && !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+export const polishEnabled = () => process.env.MERIDIAN_DICTATION_POLISH === "1" && !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
 
 export async function polish(text: string, opts: { terms: string[]; before: string }): Promise<string> {
   if (!polishEnabled() || !text.trim()) return text;

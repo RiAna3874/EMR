@@ -12,7 +12,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { headers } from "next/headers";
 import { PHONE_VIEW_HEADER } from "@/lib/phone-view";
 import { Dictation } from "@/components/dictation";
-import { dictationReady } from "@/lib/dictation/engine";
+import { dictationMode } from "@/lib/dictation/engine";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <body className="antialiased">
           {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
           {children}
-          {user && signInComplete(user) && dictationReady() && <Dictation />}
+          {user && signInComplete(user) && dictationMode() && <Dictation engine={dictationMode()!} />}
         </body>
       </html>
     );
@@ -71,7 +71,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         )}
         <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
         {/* A microphone on whichever text box has the cursor (docs/DICTATION.md). */}
-        {user && signInComplete(user) && dictationReady() && <Dictation />}
+        {user && signInComplete(user) && dictationMode() && <Dictation engine={dictationMode()!} />}
       </body>
     </html>
   );

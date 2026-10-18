@@ -1,12 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { joinPiece } from "@/lib/dictation/commands";
+import { applyCommands, isUndo, joinPiece } from "@/lib/dictation/commands";
 
 // Dictation into any text box, in English or Bangla, on the full site and the phone view.
 // Click into a box and a microphone appears in its corner (or press F9 / Ctrl+Shift+Space).
-// Speech is recorded in pieces, cut at each pause; each piece goes to /api/dictation and
-// its text is typed in at the cursor, in order, while the next piece is being recorded.
+// Two engines (docs/DICTATION.md):
+// - "browser" (free, the default): the browser's own speech recognition (Chrome, Edge,
+//   Safari), which types each phrase as it is recognized.
+// - "server": when a speech key is set on the server. Speech is recorded in pieces, cut at
+//   each pause; each piece goes to /api/dictation and its text is typed in at the cursor, in
+//   order, while the next piece is being recorded.
 // Saying "new line", "full stop", "নতুন লাইন" or "দাঁড়ি" types those; "scratch that" or
 // "মুছে ফেলো" removes the last piece. Nothing is recorded until the microphone is pressed.
 
@@ -20,6 +24,27 @@ const LANGS: { id: Lang; label: string; title: string }[] = [
   { id: "bn", label: "বাংলা", title: "Bangla (medicine names still come out in English)" },
 ];
 const LANG_KEY = "meridian_dictation_lang";
+// The browser engine needs one language at a time. South Asian English suits the clinic's accent.
+const BROWSER_LOCALE: Record<Lang, string> = { auto: "en-IN", en: "en-IN", bn: "bn-BD" };
+
+export type DictationEngine = "browser" | "server";
+
+// The browser's speech recognition, where it has one (not Firefox).
+type Recognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: { resultIndex: number; results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+function recognitionClass(): (new () => Recognition) | null {
+  const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
 
 // Speech detection, in 50 ms steps.
 const STEP_MS = 50;
@@ -74,7 +99,9 @@ function removeTyped(el: Field, last: { start: number; text: string }): boolean 
   return true;
 }
 
-export function Dictation() {
+export function Dictation({ engine: wanted }: { engine: DictationEngine }) {
+  // Without a speech key, and in a browser with no speech recognition, there's no microphone.
+  const [engine, setEngine] = useState<DictationEngine | null>(wanted === "server" ? "server" : null);
   const [field, setField] = useState<Field | null>(null);
   const [pos, setPos] = useState<Pos | null>(null);
   const [listening, setListening] = useState(false);
@@ -87,6 +114,7 @@ export function Dictation() {
   const [error, setError] = useState<string | null>(null);
   const [lost, setLost] = useState<string | null>(null);
   const [phone, setPhone] = useState(false);
+  const [interim, setInterim] = useState("");
 
   // Live recording state, kept out of React so the 50 ms loop doesn't re-render.
   const rec = useRef<{
@@ -107,6 +135,13 @@ export function Dictation() {
   const queue = useRef<{ n: number; target: Field; done: boolean; text?: string; undo?: boolean }[]>([]);
   const lastTyped = useRef<{ el: Field; start: number; text: string } | null>(null);
   const langRef = useRef<Lang>("auto");
+  // The browser engine's live state.
+  const sr = useRef<{ recognition: Recognition; target: Field; began: number; lastHeard: number; timer: number; stopping: boolean } | null>(null);
+  const current = () => rec.current ?? sr.current;
+
+  useEffect(() => {
+    if (wanted === "browser" && recognitionClass()) setEngine("browser");
+  }, [wanted]);
 
   useEffect(() => {
     try {
@@ -125,6 +160,8 @@ export function Dictation() {
     try {
       localStorage.setItem(LANG_KEY, l);
     } catch {}
+    // The browser engine restarts in the new language (see onend).
+    sr.current?.recognition.stop();
   };
 
   // Follow the text box that has the cursor.
@@ -133,13 +170,14 @@ export function Dictation() {
       if (!dictatable(e.target as Element)) return;
       setField(e.target as Field);
       // Moving to another box mid-dictation carries on in that box.
-      if (rec.current) rec.current.target = e.target as Field;
+      const now = current();
+      if (now) now.target = e.target as Field;
     };
     const onOut = () => {
       window.setTimeout(() => {
         const active = document.activeElement;
         if (dictatable(active)) setField(active);
-        else if (!rec.current) setField(null);
+        else if (!current()) setField(null);
       }, 150);
     };
     document.addEventListener("focusin", onIn);
@@ -152,7 +190,7 @@ export function Dictation() {
   }, []);
 
   // Keep the microphone in the box's corner as the page scrolls or the box grows.
-  const shown = field ?? (listening ? (rec.current?.target ?? null) : null);
+  const shown = field ?? (listening ? (current()?.target ?? null) : null);
   useEffect(() => {
     if (!shown) {
       setPos(null);
@@ -346,28 +384,137 @@ export function Dictation() {
     setListening(true);
   }, [field, starting, startPiece, endPiece, stop]);
 
-  const toggle = useCallback((target?: Field) => (rec.current ? stop() : void start(target)), [start, stop]);
+  // The free engine: the browser recognizes speech itself and hands back each phrase.
+  const stopBrowser = useCallback(() => {
+    const s = sr.current;
+    if (!s) return;
+    s.stopping = true;
+    window.clearInterval(s.timer);
+    s.recognition.stop();
+    sr.current = null;
+    setListening(false);
+    setSpeaking(false);
+    setInterim("");
+  }, []);
+
+  const startBrowser = useCallback(
+    (target: Field | null = field) => {
+      const Recognition = recognitionClass();
+      if (!target || !Recognition || current()) return;
+      setError(null);
+      setLost(null);
+      const recognition = new Recognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = BROWSER_LOCALE[langRef.current];
+      const now = Date.now();
+      const s = { recognition, target, began: now, lastHeard: now, timer: 0, stopping: false };
+      recognition.onresult = (e) => {
+        let live = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const result = e.results[i];
+          const said = result[0].transcript.trim();
+          if (!result.isFinal) {
+            live += ` ${said}`;
+            continue;
+          }
+          if (!said) continue;
+          const undo = isUndo(said);
+          queue.current.push({ n: ++seq.current, target: s.target, done: true, undo, text: undo ? undefined : applyCommands(said) });
+        }
+        s.lastHeard = Date.now();
+        setInterim(live.trim());
+        setSpeaking(!!live.trim());
+        flush();
+      };
+      recognition.onerror = (e) => {
+        if (e.error === "no-speech" || e.error === "aborted") return;
+        const message =
+          e.error === "not-allowed" || e.error === "service-not-allowed"
+            ? "The microphone is blocked. Allow it for this site in the browser (the icon by the address), then try again."
+            : e.error === "network"
+              ? "The browser's speech service couldn't be reached. Check the internet connection."
+              : e.error === "language-not-supported"
+                ? "This browser can't recognize that language. Try Chrome, or switch language."
+                : "Speech recognition stopped. Press the microphone to start again.";
+        setError(message);
+        stopBrowser();
+      };
+      // The browser ends recognition on its own after a silence; carry on until Stop is pressed.
+      recognition.onend = () => {
+        if (sr.current !== s || s.stopping) return;
+        recognition.lang = BROWSER_LOCALE[langRef.current];
+        try {
+          recognition.start();
+        } catch {
+          stopBrowser();
+        }
+      };
+      try {
+        recognition.start();
+      } catch {
+        setError("Speech recognition couldn't start. Try again.");
+        return;
+      }
+      sr.current = s;
+      s.timer = window.setInterval(() => {
+        const t = Date.now();
+        setSeconds(Math.floor((t - s.began) / 1000));
+        if (t - s.lastHeard >= IDLE_STOP_MS) stopBrowser();
+      }, 1000);
+      setSeconds(0);
+      setListening(true);
+      // One access-log line per dictation, like the server engine (no words, no audio).
+      const form = new FormData();
+      form.set("log", "browser");
+      form.set("language", langRef.current === "bn" ? "bn" : "en");
+      const patientId = patientInPath();
+      if (patientId) form.set("patientId", patientId);
+      void fetch("/api/dictation", { method: "POST", body: form }).catch(() => {});
+    },
+    [field, flush, stopBrowser],
+  );
+
+  const toggle = useCallback(
+    (target?: Field) => {
+      if (rec.current) stop();
+      else if (sr.current) stopBrowser();
+      else if (engine === "browser") startBrowser(target);
+      else void start(target);
+    },
+    [engine, start, stop, startBrowser, stopBrowser],
+  );
 
   // F9 or Ctrl+Shift+Space starts and stops dictation in the box with the cursor.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const hit = e.key === "F9" || (e.ctrlKey && e.shiftKey && e.code === "Space");
-      if (!hit || (!rec.current && !dictatable(document.activeElement))) return;
+      if (!hit || !engine || (!current() && !dictatable(document.activeElement))) return;
       e.preventDefault();
       const active = document.activeElement;
       toggle(dictatable(active) ? active : undefined);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggle]);
+  }, [toggle, engine]);
 
   // Stop recording if the page goes away mid-dictation.
-  useEffect(() => () => stop(), [stop]);
+  useEffect(
+    () => () => {
+      stop();
+      stopBrowser();
+    },
+    [stop, stopBrowser],
+  );
 
   // Clicks on the controls must not take the cursor out of the text box.
   const keepFocus = (e: React.MouseEvent | React.PointerEvent) => e.preventDefault();
   const busy = listening || starting;
   const showPanel = busy || pending > 0 || !!error || !!lost;
+  // The browser engine takes one language at a time; Auto is for the server engines.
+  const langs = engine === "browser" ? LANGS.filter((l) => l.id !== "auto") : LANGS;
+  const shownLang = engine === "browser" && lang === "auto" ? "en" : lang;
+  if (!engine) return null;
 
   return (
     <>
@@ -408,30 +555,32 @@ export function Dictation() {
                   {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
                 </span>
               </span>
+              {engine === "server" && (
               <span className="flex h-4 items-end gap-[2px]" aria-hidden>
                 {[0.25, 0.5, 0.75, 1, 0.75].map((f, i) => (
                   <span key={i} className="w-[3px] rounded-sm bg-accent transition-[height] duration-75" style={{ height: `${Math.max(15, Math.min(100, level * 140 * f))}%` }} />
                 ))}
               </span>
+              )}
             </>
           )}
           {pending > 0 && <span className="text-ink-3">Writing…</span>}
           <span className="flex overflow-hidden rounded border border-line" role="group" aria-label="Dictation language">
-            {LANGS.map((l) => (
+            {langs.map((l) => (
               <button
                 key={l.id}
                 type="button"
                 title={l.title}
-                aria-pressed={lang === l.id}
+                aria-pressed={shownLang === l.id}
                 onClick={() => chooseLang(l.id)}
-                className={`px-2 py-0.5 text-[12px] ${lang === l.id ? "bg-accent text-white" : "hover:bg-panel-muted"}`}
+                className={`px-2 py-0.5 text-[12px] ${shownLang === l.id ? "bg-accent text-white" : "hover:bg-panel-muted"}`}
               >
                 {l.label}
               </button>
             ))}
           </span>
           {busy ? (
-            <button type="button" onClick={stop} className="rounded bg-crit px-2.5 py-0.5 font-medium text-white hover:opacity-90">
+            <button type="button" onClick={() => toggle()} className="rounded bg-crit px-2.5 py-0.5 font-medium text-white hover:opacity-90">
               Stop
             </button>
           ) : (
@@ -439,6 +588,7 @@ export function Dictation() {
               ✕
             </button>
           )}
+          {busy && engine === "browser" && interim && <span className="basis-full max-w-full truncate text-ink-2 italic">{interim}</span>}
           {error && <span className="basis-full text-crit">{error}</span>}
           {lost && (
             <span className="basis-full">
@@ -449,7 +599,7 @@ export function Dictation() {
               <span className="mt-1 block max-h-24 overflow-auto whitespace-pre-wrap rounded bg-panel-muted p-1.5 text-ink-2">{lost}</span>
             </span>
           )}
-          {busy && !phone && <span className="basis-full text-[11.5px] text-ink-3">Pause to see words appear. Say “new line”, “full stop”, “scratch that” (or নতুন লাইন, দাঁড়ি, মুছে ফেলো). F9 to stop.</span>}
+          {busy && !phone && <span className="basis-full text-[11.5px] text-ink-3">{engine === "browser" ? "Words appear as each phrase is recognized." : "Pause to see words appear."} Say “new line”, “full stop”, “scratch that” (or নতুন লাইন, দাঁড়ি, মুছে ফেলো). F9 to stop.</span>}
         </div>
       )}
     </>

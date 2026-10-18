@@ -2,7 +2,7 @@
 
 An outpatient electronic medical record that follows the workflows clinicians know from large EMRs (one chart per patient with activity tabs, results review, flowsheets, notes) with an original design. **All patient data is synthetic.** Do not enter real patient information.
 
-**Putting it online:** [docs/DEPLOY.md](docs/DEPLOY.md) deploys an empty copy with no demo data. [docs/GO-LIVE.md](docs/GO-LIVE.md) lists what must be done before it may hold real patient information. [docs/BACKUPS.md](docs/BACKUPS.md) sets up backups and the restore drills. [docs/DICTATION.md](docs/DICTATION.md) turns on dictation in English and Bangla.
+**Putting it online:** [docs/DEPLOY.md](docs/DEPLOY.md) deploys an empty copy with no demo data. [docs/GO-LIVE.md](docs/GO-LIVE.md) lists what must be done before it may hold real patient information. [docs/BACKUPS.md](docs/BACKUPS.md) sets up backups and the restore drills. [docs/DICTATION.md](docs/DICTATION.md) covers dictation in English and Bangla (free in the browser, or a stronger paid engine).
 
 ## What's here
 

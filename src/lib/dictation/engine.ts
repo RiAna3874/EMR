@@ -27,6 +27,14 @@ export function dictationEngine(): { provider: Provider; model: string; label: s
 const fixture = () => (process.env.NODE_ENV !== "production" ? process.env.MERIDIAN_DICTATION_FIXTURE : undefined);
 export const dictationReady = () => !!(dictationEngine() || fixture());
 
+// Which engine the microphone uses: a paid one when its key is set, else the browser's own
+// free speech recognition (audio goes to the browser maker, e.g. Google for Chrome), unless
+// MERIDIAN_DICTATION_BROWSER=0 turns that off. null: no microphone.
+export function dictationMode(): "server" | "browser" | null {
+  if (dictationReady()) return "server";
+  return process.env.MERIDIAN_DICTATION_BROWSER === "0" ? null : "browser";
+}
+
 export type TranscribeInput = {
   audio: Blob;
   language: DictationLanguage;
