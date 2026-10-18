@@ -7,7 +7,8 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "same-origin" },
-  { key: "Permissions-Policy", value: "geolocation=(), microphone=(), payment=()" },
+  // The microphone is for dictation (src/components/dictation.tsx), on this site only.
+  { key: "Permissions-Policy", value: "geolocation=(), microphone=(self), payment=()" },
 ];
 
 const nextConfig: NextConfig = {

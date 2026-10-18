@@ -19,6 +19,7 @@ export const AUDIT_ACTIONS = {
   account: "Staff account change",
   setup: "Set up the site",
   export: "Exported",
+  dictate: "Dictated",
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;
