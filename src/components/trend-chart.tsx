@@ -35,12 +35,15 @@ export function TrendChart({
   refLow,
   refHigh,
   height = 200,
+  marks = [],
 }: {
   series: TrendSeries[];
   unit: string;
   refLow?: number | null;
   refHigh?: number | null;
   height?: number;
+  // Extra dashed lines, e.g. the fasting sugar limit inside a wider band.
+  marks?: { v: number; label: string }[];
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
@@ -63,7 +66,7 @@ export function TrendChart({
     t0 -= 15 * 86_400_000;
     t1 += 15 * 86_400_000;
   }
-  const vals = [...all.map((p) => p.v), ...(refLow != null ? [refLow] : []), ...(refHigh != null ? [refHigh] : [])];
+  const vals = [...all.map((p) => p.v), ...marks.map((m) => m.v), ...(refLow != null ? [refLow] : []), ...(refHigh != null ? [refHigh] : [])];
   let v0 = Math.min(...vals);
   let v1 = Math.max(...vals);
   const pad = (v1 - v0 || Math.abs(v1) || 1) * 0.12;
@@ -117,6 +120,14 @@ export function TrendChart({
         {[refLow, refHigh].map((r, i) =>
           r != null && r >= v0 && r <= v1 ? <line key={i} x1={M.left} x2={M.left + iw} y1={y(r)} y2={y(r)} stroke="var(--accent)" strokeOpacity={0.5} /> : null,
         )}
+        {marks.map((m) => (
+          <g key={m.label}>
+            <line x1={M.left} x2={M.left + iw} y1={y(m.v)} y2={y(m.v)} stroke="var(--accent)" strokeDasharray="5 4" />
+            <text x={M.left + 4} y={y(m.v) + 12} fontSize={10.5} fill="var(--accent)">
+              {m.label}
+            </text>
+          </g>
+        ))}
         {xTicks.map((t, i) => (
           <text key={i} x={x(t)} y={height - 8} textAnchor={i === 0 ? "start" : i === nX - 1 ? "end" : "middle"} fontSize={10.5} fill="var(--ink-3)">
             {fmtTick(t, t1 - t0)}
