@@ -12,6 +12,7 @@ import { conversationName } from "@/lib/chat/chat";
 import { Suspense } from "react";
 import { SearchHighlighter } from "@/components/search/search-highlighter";
 import { getViewPrefs } from "@/lib/view-prefs-server";
+import { movableOrder } from "@/lib/view-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -64,9 +65,9 @@ export default async function ChartLayout({ children, params }: { children: Reac
 
   return (
     <div className="flex h-full">
-      <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} chats={allowed.includes("useChat") ? chats : null} admin={currentUser.isAdmin} hidden={prefs.hidden} />
+      <PatientRail patient={patient} vitals={vitals} clinical={allowed.includes("viewClinical")} chats={allowed.includes("useChat") ? chats : null} admin={currentUser.isAdmin} hidden={prefs.hidden} order={movableOrder(prefs, "rail")} drag={prefs.drag} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, meds: refillRequests, notes: drafts, orders: unsignedOrders, documents: docsToReview, import: toVerify }} allowed={allowed} hidden={prefs.hidden} />
+        <ChartTabs patientId={id} label={fullName(patient)} counts={{ results: abnormal, meds: refillRequests, notes: drafts, orders: unsignedOrders, documents: docsToReview, import: toVerify }} allowed={allowed} hidden={prefs.hidden} order={movableOrder(prefs, "tab")} drag={prefs.drag} />
         <div id="chart-content" className="min-h-0 flex-1 overflow-auto">
           {children}
         </div>

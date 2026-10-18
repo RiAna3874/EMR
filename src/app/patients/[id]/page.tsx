@@ -22,16 +22,27 @@ import { AllergyCard, MedCard, NoteCard, ProblemCard, ResultCard, VisitCard } fr
 import { HoverHint } from "@/components/hover/card-parts";
 import { ViewMenu } from "@/components/view-menu";
 import { getViewPrefs } from "@/lib/view-prefs-server";
-import { shownIn, viewArea } from "@/lib/view-prefs";
+import { movableOrder, shownIn, viewArea } from "@/lib/view-prefs";
+import { Arrange } from "@/components/arrange";
+import { SummaryGrid } from "@/components/chart/summary-grid";
+import { chartTabs } from "@/lib/chart-tabs";
+import { redirect } from "next/navigation";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5", ...GLUCOSE_CODES];
 
-export default async function Summary({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ registered?: string }> }) {
+export default async function Summary({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ registered?: string; tab?: string }> }) {
   const { id } = await params;
   const base = `/patients/${id}`;
   const currentUser = await requireUser();
+  const sp = await searchParams;
+  // Charts open on the tab this person chose (View options); the Summary tab itself links with ?tab=summary.
+  if (!sp.tab && !sp.registered) {
+    const startTab = (await getViewPrefs()).startTab;
+    const start = chartTabs.find((t) => t.slug && t.slug === startTab);
+    if (start && (!start.needs || can(currentUser.role, start.needs))) redirect(`${base}/${start.slug}`);
+  }
   await logChartView(id, "Summary");
-  const registered = (await searchParams).registered === "1" && <Registered patientId={id} canBook={can(currentUser.role, "bookAppointments")} />;
+  const registered = sp.registered === "1" && <Registered patientId={id} canBook={can(currentUser.role, "bookAppointments")} />;
   if (!can(currentUser.role, "viewClinical"))
     return (
       <>
@@ -66,14 +77,9 @@ export default async function Summary({ params, searchParams }: { params: Promis
   const seen = new Set<string>();
   const latestAbnormal = abnormal.filter((o) => (seen.has(o.code) ? false : (seen.add(o.code), true)));
 
-  return (
-    <>
-    {registered}
-    <div className="flex justify-end px-4 pt-3">
-      <ViewMenu label="Summary panels" items={viewArea("summary").items} hidden={prefs.hidden} />
-    </div>
-    <div className="grid grid-cols-1 gap-3 p-4 pt-2 xl:grid-cols-3">
-      {show("problems") && (
+  // Each panel, keyed for the person's order (dragged by the grip, or the View menu's arrows).
+  const panels: Record<string, React.ReactNode> = {
+    problems: show("problems") && (
       <Panel title="Active problems" href={`${base}/problems`}>
         {conditions.length === 0 ? (
           <Empty>No active problems.</Empty>
@@ -88,9 +94,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
           </ul>
         )}
       </Panel>
-      )}
-
-      {show("meds") && (
+    ),
+    meds: show("meds") && (
       <Panel
         title="Active medications"
         href={`${base}/meds`}
@@ -117,11 +122,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
           </ul>
         )}
       </Panel>
-      )}
-
-      {(show("allergies") || show("upcoming")) && (
-      <div className="flex flex-col gap-3">
-        {show("allergies") && (
+    ),
+    allergies: show("allergies") && (
         <Panel title="Allergies" href={`${base}/allergies`}>
           {allergies.length === 0 ? (
             <Empty>See allergy review status in the sidebar.</Empty>
@@ -138,9 +140,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
             </ul>
           )}
         </Panel>
-        )}
-
-        {show("upcoming") && (
+    ),
+    upcoming: show("upcoming") && (
         <Panel title="Upcoming">
           {upcoming.length === 0 ? (
             <Empty>No upcoming appointments.</Empty>
@@ -159,11 +160,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
             </ul>
           )}
         </Panel>
-        )}
-      </div>
-      )}
-
-      {show("vitals") && (
+    ),
+    vitals: show("vitals") && (
       <Panel title="Vitals trend" href={`${base}/vitals`}>
         {vitalRows.length === 0 ? (
           <Empty>No vitals recorded.</Empty>
@@ -196,9 +194,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
           </table>
         )}
       </Panel>
-      )}
-
-      {show("abnormal") && (
+    ),
+    abnormal: show("abnormal") && (
       <Panel title="Recent abnormal results" href={`${base}/results`}>
         {latestAbnormal.length === 0 ? (
           <Empty>No abnormal results in the last 4 months.</Empty>
@@ -224,9 +221,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
           </table>
         )}
       </Panel>
-      )}
-
-      {show("notes") && (
+    ),
+    notes: show("notes") && (
       <Panel title="Recent notes" href={`${base}/notes`}>
         {notes.length === 0 ? (
           <Empty>No notes.</Empty>
@@ -255,9 +251,8 @@ export default async function Summary({ params, searchParams }: { params: Promis
           </ul>
         )}
       </Panel>
-      )}
-
-      {show("outside") && outside.length > 0 && (
+    ),
+    outside: show("outside") && outside.length > 0 && (
         <Panel title="Outside records" href={`${base}/documents`}>
           <ul>
             {outside.map((d) => {
@@ -300,8 +295,18 @@ export default async function Summary({ params, searchParams }: { params: Promis
             })}
           </ul>
         </Panel>
-      )}
+    ),
+  };
+
+  return (
+    <>
+    {registered}
+    <Arrange area="summary" order={movableOrder(prefs, "summary")} drag={prefs.drag} wide={prefs.wide}>
+    <div className="flex justify-end px-4 pt-3">
+      <ViewMenu label="Summary panels" area="summary" items={viewArea("summary").items} hidden={prefs.hidden} />
     </div>
+    <SummaryGrid panels={Object.entries(panels).flatMap(([k, node]) => (node ? [{ key: `summary:${k}`, node }] : []))} />
+    </Arrange>
     </>
   );
 }

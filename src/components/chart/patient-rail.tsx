@@ -8,6 +8,7 @@ import { HoverHint } from "@/components/hover/card-parts";
 import { AllergyCard, ProblemCard, ResultCard, VisitCard } from "@/components/hover/cards";
 import { ViewMenu } from "@/components/view-menu";
 import { viewArea } from "@/lib/view-prefs";
+import { Arrange, Sortable, type SortItem } from "@/components/arrange";
 
 type RailPatient = Patient & {
   pcp: Practitioner | null;
@@ -20,7 +21,8 @@ type RailChat = { id: string; name: string; at: Date };
 
 // `clinical` false (front desk) keeps demographics, allergies and the next visit only.
 // `chats` is null for a role without secure chat. `hidden` holds sections this person hid
-// (View menu at the bottom); allergies and code status always show.
+// (View menu at the bottom); allergies and code status always show. The sections below
+// allergies are dragged into `order` (unless `drag` is off); the header and allergies stay on top.
 export function PatientRail({
   patient: p,
   vitals,
@@ -28,6 +30,8 @@ export function PatientRail({
   chats,
   admin = false,
   hidden = [],
+  order,
+  drag,
 }: {
   patient: RailPatient;
   vitals: Observation[];
@@ -35,6 +39,8 @@ export function PatientRail({
   chats: RailChat[] | null;
   admin?: boolean;
   hidden?: string[];
+  order: string[];
+  drag: boolean;
 }) {
   const show = (k: string) => !hidden.includes(`rail:${k}`);
   const railItems = viewArea("rail").items.filter((i) => (clinical || !["rail:problems", "rail:vitals"].includes(i.key)) && (chats || i.key !== "rail:chat"));
@@ -44,7 +50,15 @@ export function PatientRail({
   const next = p.encounters[0];
   const severe = p.allergies.some((a) => a.severity === "severe");
 
+  const sections: SortItem[] = [];
+  // Collects a section for the sortable list; renders nothing where it's called.
+  const add = (key: string, node: React.ReactNode) => {
+    if (node) sections.push({ key: `rail:${key}`, node });
+    return null;
+  };
+
   return (
+    <Arrange area="rail" order={order} drag={drag}>
     <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-line bg-panel text-[12.5px]">
       <div className="border-b border-line p-4">
         <div className="flex items-center gap-3">
@@ -114,7 +128,7 @@ export function PatientRail({
         )}
       </RailSection>
 
-      {clinical && show("problems") && (
+      {add("problems", clinical && show("problems") && (
         <RailSection title="Active problems" href={`${base}/problems`}>
           {p.conditions.length === 0 ? (
             <div className="text-ink-3">None recorded</div>
@@ -145,9 +159,9 @@ export function PatientRail({
             </ul>
           )}
         </RailSection>
-      )}
+      ))}
 
-      {clinical && show("vitals") && (
+      {add("vitals", clinical && show("vitals") && (
         <RailSection title={vitals[0] ? `Last vitals · ${fmtShortDate(vitals[0].effectiveAt)}` : "Last vitals"} href={`${base}/vitals`}>
           {vitals.length === 0 ? (
             <div className="text-ink-3">None recorded</div>
@@ -185,9 +199,9 @@ export function PatientRail({
             </dl>
           )}
         </RailSection>
-      )}
+      ))}
 
-      {show("next") && (
+      {add("next", show("next") && (
       <RailSection title="Next appointment">
         {next ? (
           <Hover as="div" card={<VisitCard e={next} />}>
@@ -200,9 +214,9 @@ export function PatientRail({
           <div className="text-ink-3">None scheduled</div>
         )}
       </RailSection>
-      )}
+      ))}
 
-      {chats && show("chat") && (
+      {add("chat", chats && show("chat") && (
         <RailSection title="Secure chat">
           {chats.length > 0 && (
             <ul className="mb-1.5 space-y-0.5">
@@ -223,7 +237,8 @@ export function PatientRail({
             Message about this patient
           </Link>
         </RailSection>
-      )}
+      ))}
+      <Sortable area="rail" label="Patient sidebar" items={sections} vertical grip="left" />
       {admin && (
         <div className="px-3 py-2 text-[12px]">
           <Link href={`/admin/access-log?patient=${p.id}`} className="text-ink-3 hover:text-accent hover:underline">
@@ -232,9 +247,10 @@ export function PatientRail({
         </div>
       )}
       <div className="mt-auto flex justify-end px-3 py-2">
-        <ViewMenu label="Patient sidebar" items={railItems} hidden={hidden} tone="subtle" align="left" />
+        <ViewMenu label="Patient sidebar" area="rail" items={railItems} hidden={hidden} tone="subtle" align="left" />
       </div>
     </aside>
+    </Arrange>
   );
 }
 
