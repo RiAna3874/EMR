@@ -24,6 +24,12 @@ import { canCorrectResult } from "@/lib/labs/correction";
 import { correctLabResult } from "./actions";
 import { displayName, type SessionUser } from "@/lib/roles";
 import type { Flag, Sex } from "@prisma/client";
+import { Hover } from "@/components/hover/hover-card";
+import { ResultCard } from "@/components/hover/cards";
+import { HoverHint } from "@/components/hover/card-parts";
+import { ViewMenu } from "@/components/view-menu";
+import { getViewPrefs } from "@/lib/view-prefs-server";
+import { shownIn, viewArea } from "@/lib/view-prefs";
 
 const MAX_COLUMNS = 7;
 const MAX_ALL_COLUMNS = 40;
@@ -63,6 +69,7 @@ export default async function Results({
   const hasSugar = sugarCodes.size > 0 || fingersticks > 0;
 
   const tokens = queryTokens(sp.q);
+  const prefs = await getViewPrefs();
   const all = buildTrend(
     reports.flatMap((r) => r.observations.map((o) => ({ obs: o, panel: r.display, reportId: r.id, imported: r.source === "imported" }))),
     { sugar: false },
@@ -123,7 +130,15 @@ export default async function Results({
       ) : view === "grid" ? (
         <>
           {tokens.length > 0 && <SearchSummary sections={sections} q={sp.q!} clear={base} />}
-          <TrendGrid sections={sections} base={base} query={{ group: sp.group, abn: sp.abn, dates: sp.dates, q: sp.q }} tokens={tokens} />
+          <TrendGrid
+            sections={sections}
+            base={base}
+            query={{ group: sp.group, abn: sp.abn, dates: sp.dates, q: sp.q }}
+            tokens={tokens}
+            show={shownIn(prefs, "results")}
+            reportName={(o) => reportOfObs.get(o.id)?.display}
+            viewMenu={<ViewMenu label="Results table columns" items={viewArea("results").items} hidden={prefs.hidden} />}
+          />
         </>
       ) : view === "graph" ? (
         <GraphView sections={sections} reports={reports} base={base} codes={sp.codes} range={sp.range} />
@@ -174,7 +189,17 @@ function trendHref(base: string, q: GridQuery, hash = "") {
 
 // Epic-style results review: a tree of sections and panels on the left, and on the
 // right one table per panel group with the newest results first.
-function TrendGrid({ sections, base, query, tokens }: { sections: Section[]; base: string; query: GridQuery; tokens: string[] }) {
+type Cell = { show: (column: string) => boolean; reportName: (o: ObsWithCorrections) => string | undefined };
+
+function TrendGrid({
+  sections,
+  base,
+  query,
+  tokens,
+  show,
+  reportName,
+  viewMenu,
+}: { sections: Section[]; base: string; query: GridQuery; tokens: string[]; viewMenu: React.ReactNode } & Cell) {
   const abnormalOnly = query.abn === "1";
   const allDates = query.dates === "all";
   const shown = sections
@@ -228,6 +253,7 @@ function TrendGrid({ sections, base, query, tokens }: { sections: Section[]; bas
             <Link href={trendHref(base, { ...query, dates: allDates ? undefined : "all" })} className={toggle(allDates)} title="Show every date, not just the newest">
               All dates
             </Link>
+            {viewMenu}
           </span>
         </div>
 
@@ -247,7 +273,7 @@ function TrendGrid({ sections, base, query, tokens }: { sections: Section[]; bas
             </summary>
             <div className="divide-y divide-line">
               {s.blocks.map((b) => (
-                <PanelTable key={b.subs[0].key} section={s} block={b} base={base} query={query} allDates={allDates} tokens={tokens} />
+                <PanelTable key={b.subs[0].key} section={s} block={b} base={base} query={query} allDates={allDates} tokens={tokens} show={show} reportName={reportName} />
               ))}
             </div>
           </details>
@@ -265,8 +291,20 @@ function AbnCount({ n }: { n: number }) {
   );
 }
 
-function PanelTable({ section, block, base, query, allDates, tokens }: { section: Section; block: Section["blocks"][number]; base: string; query: GridQuery; allDates: boolean; tokens: string[] }) {
+function PanelTable({
+  section,
+  block,
+  base,
+  query,
+  allDates,
+  tokens,
+  show,
+  reportName,
+}: { section: Section; block: Section["blocks"][number]; base: string; query: GridQuery; allDates: boolean; tokens: string[] } & Cell) {
   const cols = block.times.slice(0, allDates ? MAX_ALL_COLUMNS : MAX_COLUMNS);
+  // Range, units and trend can each be hidden (View menu).
+  const extra = [show("range") && "range", show("units") && "units", show("trend") && "trend"].filter(Boolean) as string[];
+  const extraWidth = (show("range") ? 96 : 0) + (show("units") ? 80 : 0) + (show("trend") ? 80 : 0);
   const hidden = block.times.length - cols.length;
   const single = block.subs.length === 1;
   const title = single ? block.subs[0].label : block.subs.map((x) => x.label).join(", ");
@@ -276,15 +314,15 @@ function PanelTable({ section, block, base, query, allDates, tokens }: { section
         <span key={x.key} id={`panel-${section.key}-${x.key}`} className="block scroll-mt-3" />
       ))}
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed" style={{ minWidth: 192 + cols.length * 76 + 256 }}>
+        <table className="w-full table-fixed" style={{ minWidth: 192 + cols.length * 76 + extraWidth }}>
           <colgroup>
             <col className="w-48" />
             {cols.map((t) => (
               <col key={t} />
             ))}
-            <col className="w-24" />
-            <col className="w-20" />
-            <col className="w-20" />
+            {show("range") && <col className="w-24" />}
+            {show("units") && <col className="w-20" />}
+            {show("trend") && <col className="w-20" />}
           </colgroup>
           <thead>
             <tr className="bg-panel-muted text-[11.5px] text-ink-3">
@@ -301,9 +339,9 @@ function PanelTable({ section, block, base, query, allDates, tokens }: { section
                   <DateHead t={t} href={section.reportAt.has(t) ? `${base}?view=reports&report=${section.reportAt.get(t)}` : undefined} imported={section.imported.has(t)} />
                 </th>
               ))}
-              <th className="px-3 py-1.5 text-left font-medium">Range</th>
-              <th className="px-3 py-1.5 text-left font-medium">Units</th>
-              <th className="px-3 py-1.5 text-left font-medium">Trend</th>
+              {show("range") && <th className="px-3 py-1.5 text-left font-medium">Range</th>}
+              {show("units") && <th className="px-3 py-1.5 text-left font-medium">Units</th>}
+              {show("trend") && <th className="px-3 py-1.5 text-left font-medium">Trend</th>}
             </tr>
           </thead>
           <tbody>
@@ -311,49 +349,81 @@ function PanelTable({ section, block, base, query, allDates, tokens }: { section
               <Fragment key={x.key}>
                 {!single && (
                   <tr className="border-t border-line">
-                    <th colSpan={cols.length + 4} className="bg-accent-soft/30 px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-2">
+                    <th colSpan={cols.length + 1 + extra.length} className="bg-accent-soft/30 px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-2">
                       {x.label}
                     </th>
                   </tr>
                 )}
-                {x.rows.map((r) => (
+                {x.rows.map((r) => {
+                  const times = [...r.byTime.keys()].sort((a, b) => b - a);
+                  return (
                   <tr key={r.code} id={r.code} className="group/row scroll-mt-4 border-t border-line hover:bg-accent-soft/30 target:bg-warn-soft">
-                    <td className="sticky left-0 z-10 truncate bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30">
-                      <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline" title={`Graph ${r.display}`}>
+                    <Hover
+                      as="td"
+                      className="sticky left-0 z-10 truncate bg-panel px-3 py-1.5 group-hover/row:bg-accent-soft/30"
+                      card={
+                        <HoverHint title={r.display}>
+                          {times.length} {times.length === 1 ? "result" : "results"}
+                          {fmtRange(r) && `, range ${fmtRange(r)}`}
+                          {r.unit && ` ${unitLabel(r.unit)}`}. Click to graph it.
+                          <span className="mt-1 block font-mono text-[11px] text-ink-3">{r.code}</span>
+                        </HoverHint>
+                      }
+                    >
+                      <Link href={`${base}?view=graph&codes=${encodeURIComponent(r.code)}`} className="hover:text-accent hover:underline">
                         <Marked text={r.display} tokens={tokens} />
                       </Link>
-                    </td>
+                    </Hover>
                     {cols.map((t) => {
                       const o = r.byTime.get(t);
-                      return (
-                        <td
-                          key={t}
-                          className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
-                          title={o?.flag && o.flag !== "N" ? flagTitle(o.flag) : undefined}
-                        >
-                          {o ? (
-                            <>
-                              {fmtValue(o)}
-                              <FlagBadge flag={o.flag} />
-                              {o.correctedAt && <CorrectedMark obs={o} />}
-                            </>
-                          ) : (
+                      const older = times[times.indexOf(t) + 1];
+                      const cls = `tabular whitespace-nowrap px-2 py-1.5 text-right ${o ? flagText(o.flag) : ""}`;
+                      if (!o)
+                        return (
+                          <td key={t} className={cls}>
                             <span className="text-ink-3/60">·</span>
-                          )}
-                        </td>
+                          </td>
+                        );
+                      const first = o.corrections[0];
+                      return (
+                        <Hover
+                          as="td"
+                          key={t}
+                          className={cls}
+                          card={
+                            <ResultCard
+                              o={o}
+                              report={{ display: reportName(o) ?? section.label }}
+                              previous={older !== undefined ? r.byTime.get(older) : null}
+                              imported={section.imported.has(t)}
+                              note={first ? `Originally filed as ${resultWords(first)}.` : undefined}
+                            />
+                          }
+                        >
+                          {fmtValue(o)}
+                          <FlagBadge flag={o.flag} />
+                          {o.correctedAt && <CorrectedMark obs={o} />}
+                        </Hover>
                       );
                     })}
-                    <td className="tabular truncate px-3 py-1.5 text-ink-2" title={fmtRange(r)}>
-                      {fmtRange(r)}
-                    </td>
-                    <td className="truncate px-3 py-1.5 text-ink-2" title={unitLabel(r.unit)}>
-                      {unitLabel(r.unit)}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
-                    </td>
+                    {show("range") && (
+                      <td className="tabular truncate px-3 py-1.5 text-ink-2" title={fmtRange(r)}>
+                        {fmtRange(r)}
+                      </td>
+                    )}
+                    {show("units") && (
+                      <td className="truncate px-3 py-1.5 text-ink-2" title={unitLabel(r.unit)}>
+                        {unitLabel(r.unit)}
+                      </td>
+                    )}
+                    {show("trend") && (
+                      <td className="px-3 py-1.5">
+                        <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
+                      </td>
+                    )}
                   </tr>
-                ))}
+                  );
+                })}
               </Fragment>
             ))}
           </tbody>

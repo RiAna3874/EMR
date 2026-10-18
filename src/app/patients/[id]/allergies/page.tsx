@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { Hover } from "@/components/hover/hover-card";
+import { AllergyCard } from "@/components/hover/cards";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
@@ -59,7 +61,9 @@ export default async function Allergies({ params }: { params: Promise<{ id: stri
             <tbody>
               {allergies.map((a) => (
                 <tr key={a.id} className="border-t border-line">
-                  <td className="px-3 py-1.5 font-semibold text-crit">{a.substance}</td>
+                  <Hover as="td" className="px-3 py-1.5 font-semibold text-crit" card={<AllergyCard a={a} />}>
+                    {a.substance}
+                  </Hover>
                   <td className="px-3 py-1.5 capitalize text-ink-2">{a.type}</td>
                   <td className="px-3 py-1.5">{a.reaction}</td>
                   <td className="px-3 py-1.5">

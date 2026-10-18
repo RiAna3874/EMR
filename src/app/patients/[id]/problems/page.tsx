@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { Hover } from "@/components/hover/hover-card";
+import { ProblemCard } from "@/components/hover/cards";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
 import { fmtDateOnly } from "@/lib/format";
@@ -80,7 +82,9 @@ export default async function Problems({ params, searchParams }: { params: Promi
                 <tr key={c.id} className="border-t border-line align-top">
                   <td className="tabular px-3 py-1.5 text-ink-3">{i + 1}</td>
                   <td className="px-3 py-1.5">
-                    <div className="font-medium">{c.display}</div>
+                    <Hover as="div" className="font-medium" card={<ProblemCard c={c} />}>
+                      {c.display}
+                    </Hover>
                     {c.comment && <div className="text-ink-2">{c.comment}</div>}
                     <LinkedItems patientId={id} problem={c} items={items} canEdit={canEdit} />
                   </td>
@@ -147,7 +151,9 @@ export default async function Problems({ params, searchParams }: { params: Promi
             <tbody>
               {resolved.map((c) => (
                 <tr key={c.id} className="border-t border-line first:border-t-0">
-                  <td className="px-3 py-1.5">{c.display}</td>
+                  <Hover as="td" className="px-3 py-1.5" card={<ProblemCard c={c} />}>
+                    {c.display}
+                  </Hover>
                   <td className="px-3 py-1.5">
                     <CodeCell code={c.code} />
                   </td>

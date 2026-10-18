@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Hover } from "@/components/hover/hover-card";
+import { NoteCard } from "@/components/hover/cards";
 import type { NoteStatus, NoteType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
@@ -73,7 +75,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
       ...(q ? { OR: [{ body: { contains: q, mode: "insensitive" } }, { title: { contains: q, mode: "insensitive" } }] } : {}),
     },
     orderBy: [{ serviceAt: "desc" }, { createdAt: "desc" }],
-    include: { author: true, _count: { select: { addenda: true } } },
+    include: { author: true, cosigner: true, _count: { select: { addenda: true } } },
   });
 
   const creating = sp.new === "1" && canWrite;
@@ -237,7 +239,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {notes.length === 0 && <Empty>No notes match.</Empty>}
           {notes.map((n) => (
-            <li key={n.id} className="border-b border-line">
+            <Hover as="li" key={n.id} className="border-b border-line" card={<NoteCard n={n} />} width={360}>
               <Link
                 href={withFilters({ note: n.id })}
                 className={`block border-l-[3px] px-3 py-2 ${n.id === selected?.id && !creating ? "border-accent bg-accent-soft" : "border-transparent hover:bg-panel-muted"}`}
@@ -254,7 +256,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
                   <NoteStatusChip status={n.status} addenda={n._count.addenda} />
                 </div>
               </Link>
-            </li>
+            </Hover>
           ))}
         </ul>
       </aside>

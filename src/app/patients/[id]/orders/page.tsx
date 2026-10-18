@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Hover } from "@/components/hover/hover-card";
+import { OrderCard } from "@/components/hover/cards";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
@@ -25,7 +27,7 @@ export default async function Orders({ params, searchParams }: { params: Promise
     db.serviceRequest.findMany({
       where: { patientId: id },
       orderBy: { createdAt: "desc" },
-      include: { orderedBy: true, reports: { select: { id: true }, take: 1 } },
+      include: { orderedBy: true, condition: { select: { display: true } }, reports: { select: { id: true }, take: 1 } },
     }),
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" }, select: { id: true, display: true } }),
     orderContext(id),
@@ -123,7 +125,7 @@ async function frequentOrderCodes(practitionerId: string): Promise<string[]> {
   return codes.filter((c) => orderableFor(c)).slice(0, 10);
 }
 
-type OrderRow = Awaited<ReturnType<typeof db.serviceRequest.findMany<{ include: { orderedBy: true; reports: { select: { id: true } } } }>>>[number];
+type OrderRow = Awaited<ReturnType<typeof db.serviceRequest.findMany<{ include: { orderedBy: true; condition: { select: { display: true } }; reports: { select: { id: true } } } }>>>[number];
 
 function OrderTable({ orders, patientId, showActions }: { orders: OrderRow[]; patientId: string; showActions?: boolean }) {
   return (
@@ -143,7 +145,9 @@ function OrderTable({ orders, patientId, showActions }: { orders: OrderRow[]; pa
             <td className="px-3 py-1.5">
               <div className="flex items-center gap-2">
                 <OrderTypeIcon type={o.type} />
-                <span className="font-medium">{o.display}</span>
+                <Hover className="font-medium" card={<OrderCard o={o} />}>
+                  {o.display}
+                </Hover>
                 <PriorityChip priority={o.priority} />
               </div>
               {o.type === "medication" && <div className="pl-10 text-[12px] text-ink-2">{medSig(o.details)}</div>}

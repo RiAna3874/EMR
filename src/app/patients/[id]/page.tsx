@@ -17,6 +17,12 @@ import { logChartView } from "@/lib/audit/server";
 import { MedRowActions } from "@/components/meds/med-row-actions";
 import { pendingReplacements } from "@/lib/meds/pending";
 import { GLUCOSE_CODES, isGlucoseCode, mmolToMg } from "@/lib/glucose";
+import { Hover } from "@/components/hover/hover-card";
+import { AllergyCard, MedCard, NoteCard, ProblemCard, ResultCard, VisitCard } from "@/components/hover/cards";
+import { HoverHint } from "@/components/hover/card-parts";
+import { ViewMenu } from "@/components/view-menu";
+import { getViewPrefs } from "@/lib/view-prefs-server";
+import { shownIn, viewArea } from "@/lib/view-prefs";
 
 const vitalCodes = ["8480-6", "8462-4", "8867-4", "59408-5", "29463-7", "39156-5", ...GLUCOSE_CODES];
 
@@ -35,13 +41,15 @@ export default async function Summary({ params, searchParams }: { params: Promis
     );
   const canPend = can(currentUser.role, "pendOrders");
   const canReview = can(currentUser.role, "reviewMeds");
+  const prefs = await getViewPrefs();
+  const show = shownIn(prefs, "summary");
   const [conditions, meds, allergies, vitals, abnormal, notes, upcoming, outside, inBasket] = await Promise.all([
     db.condition.findMany({ where: { patientId: id, status: "active" }, orderBy: { priority: "asc" } }),
-    db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" } }),
+    db.medicationRequest.findMany({ where: { patientId: id, status: { in: ["active", "on_hold"] } }, orderBy: { drug: "asc" }, include: { prescriber: true, condition: { select: { display: true } } } }),
     db.allergyIntolerance.findMany({ where: { patientId: id } }),
     db.observation.findMany({ where: { patientId: id, category: "vital_signs", code: { in: vitalCodes } } }),
     recentAbnormalLabs(120, id),
-    db.note.findMany({ where: { patientId: id }, orderBy: { serviceAt: "desc" }, take: 5, include: { author: true } }),
+    db.note.findMany({ where: { patientId: id }, orderBy: { serviceAt: "desc" }, take: 5, include: { author: true, cosigner: true } }),
     db.encounter.findMany({
       where: { patientId: id, start: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }, status: { not: "cancelled" } },
       orderBy: { start: "asc" },
@@ -61,22 +69,28 @@ export default async function Summary({ params, searchParams }: { params: Promis
   return (
     <>
     {registered}
-    <div className="grid grid-cols-1 gap-3 p-4 xl:grid-cols-3">
+    <div className="flex justify-end px-4 pt-3">
+      <ViewMenu label="Summary panels" items={viewArea("summary").items} hidden={prefs.hidden} />
+    </div>
+    <div className="grid grid-cols-1 gap-3 p-4 pt-2 xl:grid-cols-3">
+      {show("problems") && (
       <Panel title="Active problems" href={`${base}/problems`}>
         {conditions.length === 0 ? (
           <Empty>No active problems.</Empty>
         ) : (
           <ul>
             {conditions.map((c) => (
-              <li key={c.id} className="flex justify-between gap-3 border-t border-line px-3 py-1.5 first:border-t-0">
+              <Hover as="li" key={c.id} className="flex justify-between gap-3 border-t border-line px-3 py-1.5 first:border-t-0" card={<ProblemCard c={c} />}>
                 <span>{c.display}</span>
                 <span className="shrink-0 font-mono text-[11.5px] text-ink-3">{c.code}</span>
-              </li>
+              </Hover>
             ))}
           </ul>
         )}
       </Panel>
+      )}
 
+      {show("meds") && (
       <Panel
         title="Active medications"
         href={`${base}/meds`}
@@ -88,7 +102,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
           <ul>
             {meds.map((m) => (
               <li key={m.id} className="flex flex-wrap items-start gap-2 border-t border-line px-3 py-1.5 first:border-t-0">
-                <div className="min-w-0 flex-1">
+                <Hover as="div" className="min-w-0 flex-1" card={<MedCard m={m} />}>
                   <div className="font-medium">
                     {m.drug}
                     {m.status === "on_hold" && <span className="ml-1.5 rounded bg-warn-soft px-1 text-[10.5px] font-semibold text-warn">ON HOLD</span>}
@@ -96,52 +110,60 @@ export default async function Summary({ params, searchParams }: { params: Promis
                   <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</div>
                   <StepNow steps={m.steps} written={m.courseStart ?? m.authoredAt} />
                   <CourseDates med={m} />
-                </div>
+                </Hover>
                 {(canPend || canReview) && <MedRowActions patientId={id} med={m} inBasket={inBasket.has(m.id)} canPend={canPend} canReview={canReview} />}
               </li>
             ))}
           </ul>
         )}
       </Panel>
+      )}
 
+      {(show("allergies") || show("upcoming")) && (
       <div className="flex flex-col gap-3">
+        {show("allergies") && (
         <Panel title="Allergies" href={`${base}/allergies`}>
           {allergies.length === 0 ? (
             <Empty>See allergy review status in the sidebar.</Empty>
           ) : (
             <ul>
               {allergies.map((a) => (
-                <li key={a.id} className="flex justify-between border-t border-line px-3 py-1.5 first:border-t-0">
+                <Hover as="li" key={a.id} className="flex justify-between border-t border-line px-3 py-1.5 first:border-t-0" card={<AllergyCard a={a} />}>
                   <span className="font-medium text-crit">{a.substance}</span>
                   <span className="text-ink-2">
                     {a.reaction} · <span className="capitalize">{a.severity}</span>
                   </span>
-                </li>
+                </Hover>
               ))}
             </ul>
           )}
         </Panel>
+        )}
 
+        {show("upcoming") && (
         <Panel title="Upcoming">
           {upcoming.length === 0 ? (
             <Empty>No upcoming appointments.</Empty>
           ) : (
             <ul>
               {upcoming.map((e) => (
-                <li key={e.id} className="border-t border-line px-3 py-1.5 first:border-t-0">
+                <Hover as="li" key={e.id} className="border-t border-line px-3 py-1.5 first:border-t-0" card={<VisitCard e={e} />}>
                   <div className="font-medium">
                     {fmtDate(e.start)} {fmtTime(e.start)}
                   </div>
                   <div className="text-ink-2">
                     {e.reason} · {e.provider?.name}
                   </div>
-                </li>
+                </Hover>
               ))}
             </ul>
           )}
         </Panel>
+        )}
       </div>
+      )}
 
+      {show("vitals") && (
       <Panel title="Vitals trend" href={`${base}/vitals`}>
         {vitalRows.length === 0 ? (
           <Empty>No vitals recorded.</Empty>
@@ -149,9 +171,16 @@ export default async function Summary({ params, searchParams }: { params: Promis
           <table className="w-full">
             <tbody>
               {vitalRows.map((r) => {
-                const latest = r.byTime.get(Math.max(...r.byTime.keys()))!;
+                const times = [...r.byTime.keys()].sort((a, b) => b - a);
+                const latest = r.byTime.get(times[0])!;
+                const before = times[1] !== undefined ? r.byTime.get(times[1]) : null;
                 return (
-                  <tr key={r.code} className="border-t border-line first:border-t-0">
+                  <Hover
+                    as="tr"
+                    key={r.code}
+                    className="border-t border-line first:border-t-0"
+                    card={<ResultCard o={latest} previous={before} note={`${r.values.length} readings. Open Vitals for the full flowsheet.`} />}
+                  >
                     <td className="px-3 py-1.5 text-ink-2">{r.display}</td>
                     <td className={`tabular px-2 py-1.5 text-right font-medium ${flagText(latest.flag)}`}>
                       {isGlucoseCode(r.code) && latest.valueNum !== null ? latest.valueNum.toFixed(1) : fmtValue(latest)} <span className="font-normal text-ink-3">{unitLabel(r.unit)}</span>
@@ -160,14 +189,16 @@ export default async function Summary({ params, searchParams }: { params: Promis
                     <td className="px-3 py-1.5 text-right">
                       <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
                     </td>
-                  </tr>
+                  </Hover>
                 );
               })}
             </tbody>
           </table>
         )}
       </Panel>
+      )}
 
+      {show("abnormal") && (
       <Panel title="Recent abnormal results" href={`${base}/results`}>
         {latestAbnormal.length === 0 ? (
           <Empty>No abnormal results in the last 4 months.</Empty>
@@ -175,7 +206,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
           <table className="w-full">
             <tbody>
               {latestAbnormal.map((o) => (
-                <tr key={o.id} className="border-t border-line first:border-t-0">
+                <Hover as="tr" key={o.id} className="border-t border-line first:border-t-0" card={<ResultCard o={o} report={o.report} imported={o.report?.source === "imported"} />}>
                   <td className="px-3 py-1.5">
                     <Link href={resultHref(base, o, o.report?.display)} className="hover:text-accent">
                       {o.display}
@@ -187,20 +218,22 @@ export default async function Summary({ params, searchParams }: { params: Promis
                   </td>
                   <td className="tabular px-2 py-1.5 text-ink-3">{fmtRange(o)}</td>
                   <td className="tabular px-3 py-1.5 text-right text-ink-3">{fmtShortDate(o.effectiveAt)}</td>
-                </tr>
+                </Hover>
               ))}
             </tbody>
           </table>
         )}
       </Panel>
+      )}
 
+      {show("notes") && (
       <Panel title="Recent notes" href={`${base}/notes`}>
         {notes.length === 0 ? (
           <Empty>No notes.</Empty>
         ) : (
           <ul>
             {notes.map((n) => (
-              <li key={n.id} className="border-t border-line first:border-t-0">
+              <Hover as="li" key={n.id} className="border-t border-line first:border-t-0" card={<NoteCard n={n} />} width={360}>
                 <Link href={`${base}/notes?note=${n.id}`} className="block px-3 py-1.5 hover:bg-accent-soft/40">
                   <div className="flex justify-between">
                     <span className="font-medium">{n.title}</span>
@@ -217,19 +250,38 @@ export default async function Summary({ params, searchParams }: { params: Promis
                     )}
                   </div>
                 </Link>
-              </li>
+              </Hover>
             ))}
           </ul>
         )}
       </Panel>
+      )}
 
-      {outside.length > 0 && (
+      {show("outside") && outside.length > 0 && (
         <Panel title="Outside records" href={`${base}/documents`}>
           <ul>
             {outside.map((d) => {
               const c = readContent(d.content);
               return (
-                <li key={d.id} className="border-t border-line first:border-t-0">
+                <Hover
+                  as="li"
+                  key={d.id}
+                  className="border-t border-line first:border-t-0"
+                  width={360}
+                  card={
+                    <HoverHint title={d.title}>
+                      <span className="block text-[11.5px] text-ink-3">
+                        {[d.organization, d.author, fmtDateOnly(d.serviceDate)].filter(Boolean).join(" · ")}
+                      </span>
+                      {c.impression && <span className="mt-1 block">{c.impression}</span>}
+                      {c.followUps.length > 0 && (
+                        <span className="mt-1 block text-warn">
+                          Follow up: {c.followUps.map((f) => f.text).join("; ")}
+                        </span>
+                      )}
+                    </HoverHint>
+                  }
+                >
                   <Link href={`${base}/documents?doc=${d.id}`} className="block px-3 py-1.5 hover:bg-accent-soft/40">
                     <div className="flex items-center gap-2">
                       <DocTypeChip type={d.type} />
@@ -243,7 +295,7 @@ export default async function Summary({ params, searchParams }: { params: Promis
                       </div>
                     )}
                   </Link>
-                </li>
+                </Hover>
               );
             })}
           </ul>

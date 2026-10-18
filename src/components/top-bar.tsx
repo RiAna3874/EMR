@@ -8,6 +8,7 @@ import { can, displayName, roleLabel, type SessionUser } from "@/lib/roles";
 import { signOut } from "@/app/login/actions";
 import { CommandPalette } from "@/components/command-palette";
 import { BrandMark } from "@/components/brand-mark";
+import { PatientHover } from "@/components/hover/patient-hover";
 
 const EMPTY: OpenPatient[] = [];
 
@@ -96,7 +97,9 @@ export function TopBar({
                 active ? "bg-bg text-ink" : "bg-chrome-2 text-white/85 hover:bg-chrome-2/80"
               }`}
             >
-              <span className="truncate">{p.label}</span>
+              <PatientHover id={p.id} className="truncate">
+                {p.label}
+              </PatientHover>
               <button
                 aria-label={`Close ${p.label}`}
                 onClick={(e) => close(e, p)}
@@ -124,6 +127,17 @@ export function TopBar({
         <a href="/view/phone" className="rounded px-1.5 py-0.5 text-[12px] hover:bg-white/10 hover:text-white md:hidden">
           Phone view
         </a>
+        <Link
+          href="/account/view"
+          title="View options: hover cards, and what to show or hide"
+          aria-label="View options"
+          className={`rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-white ${pathname === "/account/view" ? "bg-white/10 text-white" : ""}`}
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden className="inline-block align-[-2px]">
+            <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+            <circle cx="8" cy="8" r="2" />
+          </svg>
+        </Link>
         {user.isAdmin && (
           <Link href="/admin/users" className={`rounded px-1.5 py-0.5 text-[12px] hover:bg-white/10 hover:text-white ${pathname.startsWith("/admin") ? "bg-white/10 text-white" : ""}`}>
             Admin

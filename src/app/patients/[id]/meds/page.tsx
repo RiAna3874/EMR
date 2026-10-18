@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Hover } from "@/components/hover/hover-card";
+import { MedCard } from "@/components/hover/cards";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can, displayName, needsCosign } from "@/lib/roles";
@@ -263,12 +265,14 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                     <tr key={m.id} className={`border-t border-line align-top ${m.id === sp.rx ? "bg-accent-soft/40" : ""}`}>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{m.drug}</span>
-                          {m.status === "on_hold" && <Chip tone="warn">ON HOLD</Chip>}
-                          {isControlled(m.drug) && <Chip tone="crit">Controlled</Chip>}
-                          {outside && <Chip tone="muted">OUTSIDE / OTC</Chip>}
-                          {awaitingCosign && <Chip tone="accent">AWAITING COSIGN</Chip>}
-                          {pendingRx && <Chip tone="warn">{(pendingRx.details as Partial<RxDetails> | null)?.refill ? "REFILL IN BASKET" : "CHANGE IN BASKET"}</Chip>}
+                          <Hover className="font-medium" card={<MedCard m={m} />}>
+                            {m.drug}
+                          </Hover>
+                          {m.status === "on_hold" && <Chip tone="warn" about="Paused: the patient should not take it until it is resumed.">ON HOLD</Chip>}
+                          {isControlled(m.drug) && <Chip tone="crit" about="A controlled drug. Prescribing needs extra checks and a printed prescription.">Controlled</Chip>}
+                          {outside && <Chip tone="muted" about="Started elsewhere or bought over the counter; recorded here, not prescribed here.">OUTSIDE / OTC</Chip>}
+                          {awaitingCosign && <Chip tone="accent" about="A resident's prescription. It was sent, and waits for the attending's cosign.">AWAITING COSIGN</Chip>}
+                          {pendingRx && <Chip tone="warn" about="A refill or change for this medication is in the order basket, not yet signed.">{(pendingRx.details as Partial<RxDetails> | null)?.refill ? "REFILL IN BASKET" : "CHANGE IN BASKET"}</Chip>}
                         </div>
                         <div className="text-ink-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</div>
                         <StepNow steps={m.steps} written={m.courseStart ?? m.authoredAt} />
@@ -391,7 +395,9 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
                 {past.map((m) => (
                   <tr key={m.id} className="border-t border-line text-ink-3 first:border-t-0">
                     <td className="px-3 py-1.5">
-                      <span className="font-medium line-through">{m.drug}</span>
+                      <Hover className="font-medium line-through" card={<MedCard m={m} />}>
+                        {m.drug}
+                      </Hover>
                       <span className="ml-2">{sigText({ dose: m.dose, route: m.route, frequency: m.frequency, prn: m.prn, prnReason: m.prnReason, steps: m.steps })}</span>
                     </td>
                     <td className="tabular whitespace-nowrap px-3 py-1.5">
@@ -432,7 +438,11 @@ export default async function Meds({ params, searchParams }: { params: Promise<{
   );
 }
 
-function Chip({ tone, children }: { tone: "warn" | "crit" | "muted" | "accent"; children: React.ReactNode }) {
+function Chip({ tone, about, children }: { tone: "warn" | "crit" | "muted" | "accent"; about?: string; children: React.ReactNode }) {
   const cls = { warn: "bg-warn-soft text-warn", crit: "bg-crit-soft text-crit", muted: "bg-panel-muted text-ink-2", accent: "bg-accent-soft text-accent" }[tone];
-  return <span className={`rounded px-1 text-[10.5px] font-semibold ${cls}`}>{children}</span>;
+  return (
+    <span className={`rounded px-1 text-[10.5px] font-semibold ${cls}`} title={about}>
+      {children}
+    </span>
+  );
 }

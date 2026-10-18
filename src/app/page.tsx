@@ -18,6 +18,13 @@ import { OPEN_STATUSES } from "@/lib/visits/close";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isPhone, VIEW_COOKIE } from "@/lib/phone-view";
+import { Hover } from "@/components/hover/hover-card";
+import { PatientHover } from "@/components/hover/patient-hover";
+import { ResultCard, VisitCard } from "@/components/hover/cards";
+import { HoverHint } from "@/components/hover/card-parts";
+import { ViewMenu } from "@/components/view-menu";
+import { getViewPrefs } from "@/lib/view-prefs-server";
+import { shownIn, viewArea } from "@/lib/view-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +63,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
   const roomed = schedule.filter((e) => e.status === "roomed").length;
   const now = new Date();
   const abnormalPatients = new Set(abnormal.map((o) => o.patientId)).size;
+  const prefs = await getViewPrefs();
+  const show = shownIn(prefs, "myday");
+  const viewItems = viewArea("myday").items.filter((i) => clinical || i.key !== "myday:abnormal");
 
   return (
     <main className="h-full overflow-y-auto">
@@ -67,6 +77,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             </h1>
             <p className="text-ink-2">{fmtDate(new Date())} · {clinic.name}</p>
           </div>
+          <ViewMenu label="My Day" items={viewItems} hidden={prefs.hidden} />
         </div>
 
         {denied && (
@@ -77,12 +88,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
           </p>
         )}
 
+        {show("stats") && (
         <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Clinic visits today" value={schedule.length} sub={isProvider(currentUser.role) ? `${mine.length} on your schedule` : "all providers"} />
-          <Stat label="Waiting" value={waiting} sub={`checked in, not roomed${roomed ? ` · ${roomed} roomed` : ""}`} />
-          {clinical && <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" />}
-          {can(currentUser.role, "writeNotes") && <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" />}
+          <Stat label="Clinic visits today" value={schedule.length} sub={isProvider(currentUser.role) ? `${mine.length} on your schedule` : "all providers"} about="Every appointment on today's clinic schedule that isn't cancelled." />
+          <Stat label="Waiting" value={waiting} sub={`checked in, not roomed${roomed ? ` · ${roomed} roomed` : ""}`} about="Patients who have checked in at the front desk and are waiting for a room." />
+          {clinical && <Stat label="Abnormal results (30 days)" value={abnormal.length} sub={`${abnormalPatients} patients`} tone="high" about="Lab values flagged high, low or critical in the last 30 days, across all patients. The list is below." />}
+          {can(currentUser.role, "writeNotes") && <Stat label="Unsigned notes" value={draftNotes} sub="your drafts" about="Notes you started and pended but haven't signed yet." />}
         </div>
+        )}
 
         {openVisits.length > 0 && (
           <Panel title="Open visits from earlier days" className="mb-4">
@@ -91,7 +104,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                 <li key={e.id} className="border-t border-line first:border-t-0">
                   <Link href={`/patients/${e.patientId}/visit?e=${e.id}`} className="flex items-center gap-3 px-3 py-1.5 hover:bg-accent-soft/40">
                     <span className="tabular w-40 shrink-0 text-ink-2">{fmtDate(e.start)} {fmtTime(e.start)}</span>
-                    <span className="font-medium">{fullName(e.patient)}</span>
+                    <PatientHover id={e.patientId} className="font-medium">{fullName(e.patient)}</PatientHover>
                     <span className="text-ink-3">{e.chiefComplaint ?? e.reason}</span>
                     <span className="ml-auto text-[12px] text-warn">Not closed</span>
                   </Link>
@@ -107,7 +120,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
               {toVerify.map((j) => (
                 <li key={j.id} className="border-t border-line first:border-t-0">
                   <Link href={`/patients/${j.patientId}/import/${j.id}`} className="flex items-center gap-3 px-3 py-1.5 hover:bg-accent-soft/40">
-                    <span className="font-medium">{fullName(j.patient)}</span>
+                    <PatientHover id={j.patientId} className="font-medium">{fullName(j.patient)}</PatientHover>
                     <span className="text-ink-3">
                       {j._count.documents} {j._count.documents === 1 ? "page" : "pages"} uploaded {fmtDate(j.createdAt)} {fmtTime(j.createdAt)} by {j.createdBy.name}
                     </span>
@@ -147,9 +160,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                   <tr>
                     <th className="px-3 py-1.5 font-medium">Time</th>
                     <th className="px-3 py-1.5 font-medium">Patient</th>
-                    <th className="px-3 py-1.5 font-medium">Visit</th>
+                    {show("visit") && <th className="px-3 py-1.5 font-medium">Visit</th>}
                     {showAll && <th className="px-3 py-1.5 font-medium">Provider</th>}
-                    <th className="px-3 py-1.5 font-medium">Room</th>
+                    {show("room") && <th className="px-3 py-1.5 font-medium">Room</th>}
                     <th className="px-3 py-1.5 font-medium">Status</th>
                     <th className="px-3 py-1.5" />
                   </tr>
@@ -159,19 +172,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                     const done = e.status === "checked_out" || e.status === "no_show";
                     return (
                       <tr key={e.id} className={`border-t border-line hover:bg-accent-soft/40 ${done ? "text-ink-3" : ""}`}>
-                        <td className="tabular whitespace-nowrap px-3 py-2">
+                        <Hover as="td" className="tabular whitespace-nowrap px-3 py-2" card={<VisitCard e={e} />}>
                           <Link href={`/appointments/${e.id}`} className="text-ink-2 hover:text-accent">
                             {fmtTime(e.start)}
                           </Link>
-                        </td>
+                        </Hover>
                         <td className="whitespace-nowrap px-3 py-2">
-                          <Link href={`/patients/${e.patientId}`} className={`font-medium hover:text-accent ${done ? "text-ink-3" : "text-ink"}`}>
-                            {fullName(e.patient)}
-                          </Link>
+                          <PatientHover id={e.patientId}>
+                            <Link href={`/patients/${e.patientId}`} className={`font-medium hover:text-accent ${done ? "text-ink-3" : "text-ink"}`}>
+                              {fullName(e.patient)}
+                            </Link>
+                          </PatientHover>
                           <span className="ml-2 text-ink-3">
                             {age(e.patient.dob)} {sexShort(e.patient.sex)}
                           </span>
                         </td>
+                        {show("visit") && (
                         <td className="px-3 py-2">
                           {e.chiefComplaint ?? e.reason}
                           <span className="ml-1.5 text-[11px] text-ink-3">
@@ -179,8 +195,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                             {e.type === "telehealth" ? ", video" : ""}
                           </span>
                         </td>
+                        )}
                         {showAll && <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.provider?.name}</td>}
-                        <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.status === "roomed" || e.status === "in_progress" ? e.room : ""}</td>
+                        {show("room") && <td className="whitespace-nowrap px-3 py-2 text-ink-2">{e.status === "roomed" || e.status === "in_progress" ? e.room : ""}</td>}
                         <td className="px-3 py-2">
                           <VisitStatusChip status={e.status} since={e.statusAt} now={now} />
                         </td>
@@ -195,14 +212,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             )}
           </Panel>
 
-          {clinical && (
+          {clinical && show("abnormal") && (
             <Panel title="Abnormal results">
               {abnormal.length === 0 ? (
                 <Empty>Nothing abnormal in the last 30 days.</Empty>
               ) : (
                 <ul className="max-h-[360px] overflow-y-auto">
                   {abnormal.slice(0, 40).map((o) => (
-                    <li key={o.id} className="border-t border-line first:border-t-0">
+                    <Hover as="li" key={o.id} className="border-t border-line first:border-t-0" card={<ResultCard o={o} report={o.report} imported={o.report?.source === "imported"} note={fullName(o.patient)} />}>
                       <Link
                         href={resultHref(`/patients/${o.patientId}`, o, o.report?.display)}
                         className="flex items-center justify-between gap-3 px-3 py-1.5 hover:bg-accent-soft/40"
@@ -216,7 +233,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
                           <FlagBadge flag={o.flag} />
                         </span>
                       </Link>
-                    </li>
+                    </Hover>
                   ))}
                 </ul>
               )}
@@ -233,12 +250,12 @@ function greeting() {
   return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone?: "high" }) {
+function Stat({ label, value, sub, tone, about }: { label: string; value: number; sub: string; tone?: "high"; about: string }) {
   return (
-    <div className="rounded-md border border-line bg-panel px-4 py-3">
+    <Hover as="div" className="rounded-md border border-line bg-panel px-4 py-3" card={<HoverHint title={label}>{about}</HoverHint>}>
       <div className="text-[11.5px] font-medium uppercase tracking-wide text-ink-3">{label}</div>
       <div className={`tabular mt-1 text-2xl font-semibold ${tone === "high" && value > 0 ? "text-high" : ""}`}>{value}</div>
       <div className="text-[12px] text-ink-2">{sub}</div>
-    </div>
+    </Hover>
   );
 }
