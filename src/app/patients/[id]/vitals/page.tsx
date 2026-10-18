@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Hover } from "@/components/hover/hover-card";
+import { ResultCard } from "@/components/hover/cards";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/session";
 import { can } from "@/lib/roles";
@@ -196,13 +198,21 @@ export default async function Vitals({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const times = [...r.byTime.keys()].sort((a, b) => b - a);
+                return (
                 <tr key={r.code} className="border-t border-line hover:bg-accent-soft/30">
                   <td className="px-3 py-1.5">{r.display}</td>
                   {cols.map((t) => {
                     const o = r.byTime.get(t);
+                    const older = times[times.indexOf(t) + 1];
                     return (
-                      <td key={t} className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}>
+                      <Hover
+                        as="td"
+                        key={t}
+                        className={`tabular px-3 py-1.5 text-right ${o ? flagText(o.flag) : ""}`}
+                        card={o ? <ResultCard o={o} previous={older !== undefined ? r.byTime.get(older) : null} /> : null}
+                      >
                         {o ? (
                           <>
                             {isGlucoseCode(r.code) && o.valueNum !== null ? o.valueNum.toFixed(1) : fmtValue(o)}
@@ -213,7 +223,7 @@ export default async function Vitals({
                         ) : (
                           <span className="text-ink-3">—</span>
                         )}
-                      </td>
+                      </Hover>
                     );
                   })}
                   <td className="px-3 py-1.5 text-ink-2">{unitLabel(r.unit)}</td>
@@ -221,7 +231,8 @@ export default async function Vitals({
                     <Sparkline values={r.values} refLow={r.refLow} refHigh={r.refHigh} />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           {canEdit && (

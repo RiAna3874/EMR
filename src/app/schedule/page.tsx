@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PatientHover } from "@/components/hover/patient-hover";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/roles";
@@ -245,7 +246,9 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                           }}
                         >
                           <div className="flex items-center justify-between gap-1">
-                            <span className="truncate font-semibold">{fullName(a.patient)}</span>
+                            <PatientHover id={a.patientId} className="truncate font-semibold">
+                              {fullName(a.patient)}
+                            </PatientHover>
                             <VisitStatusChip status={a.status} />
                           </div>
                           <div className="truncate text-ink-2">
@@ -266,7 +269,9 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                   {cancelled.map((a) => (
                     <li key={a.id}>
                       <Link href={`/appointments/${a.id}`} className="block rounded border border-line bg-panel px-2 py-1 hover:border-accent">
-                        <div className="font-medium">{fullName(a.patient)}</div>
+                        <PatientHover as="div" id={a.patientId} className="font-medium">
+                          {fullName(a.patient)}
+                        </PatientHover>
                         <div className="text-[11.5px] text-ink-3">
                           {fmtTime(a.start)} · {providers.find((p) => p.id === a.providerId)?.name} · {a.cancelReason}
                         </div>

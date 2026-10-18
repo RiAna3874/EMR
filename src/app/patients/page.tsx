@@ -5,6 +5,10 @@ import { todayRange } from "@/lib/queries";
 import { requireUser } from "@/lib/session";
 import { can, isProvider } from "@/lib/roles";
 import { age, fmtDob, fmtTime, fullName, sexShort } from "@/lib/format";
+import { PatientHover } from "@/components/hover/patient-hover";
+import { ViewMenu } from "@/components/view-menu";
+import { getViewPrefs } from "@/lib/view-prefs-server";
+import { shownIn, viewArea } from "@/lib/view-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +35,9 @@ export default async function PatientLists({
   const sp = await searchParams;
   const currentUser = await requireUser();
   const clinical = can(currentUser.role, "viewClinical");
+  const prefs = await getViewPrefs();
+  const col = shownIn(prefs, "patients");
+  const viewItems = viewArea("patients").items.filter((i) => clinical || i.key !== "patients:problems");
   const canRegister = can(currentUser.role, "registerPatients");
   // "My Patients" is a PCP panel, so only providers have one.
   const shownLists = lists.filter((l) => l.key !== "mine" || isProvider(currentUser.role));
@@ -56,7 +63,7 @@ export default async function PatientLists({
     where,
     include: {
       pcp: true,
-      allergies: { select: { substance: true, severity: true } },
+      allergies: { select: { substance: true, reaction: true, severity: true } },
       encounters: { where: { start: { gte: start, lt: end } }, orderBy: { start: "asc" }, take: 1 },
       conditions: { where: { status: "active" }, orderBy: { priority: "asc" }, take: 2 },
       _count: {
@@ -121,7 +128,10 @@ export default async function PatientLists({
         <div className="flex items-center gap-3 border-b border-line bg-panel px-4 py-2.5">
           <h1 className="text-base font-semibold">{lists.find((l) => l.key === list)?.label}</h1>
           <span className="text-ink-3">{patients.length} patients</span>
-          <form className="ml-auto" action="/patients">
+          <div className="ml-auto">
+            <ViewMenu label="Patient list columns" items={viewItems} hidden={prefs.hidden} />
+          </div>
+          <form action="/patients">
             <input type="hidden" name="list" value={list} />
             <input
               name="q"
@@ -142,13 +152,13 @@ export default async function PatientLists({
             <thead className="sticky top-0 bg-panel-muted text-left text-[11.5px] text-ink-3 shadow-[inset_0_-1px_0_var(--line)]">
               <tr>
                 <th className="px-4 py-2 font-medium">{sortHeader("name")}</th>
-                <th className="px-3 py-2 font-medium">{sortHeader("age")}</th>
-                <th className="px-3 py-2 font-medium">{sortHeader("mrn")}</th>
-                <th className="px-3 py-2 font-medium">DOB</th>
-                <th className="px-3 py-2 font-medium">{sortHeader("appt")}</th>
-                {clinical && <th className="px-3 py-2 font-medium">Top problems</th>}
-                <th className="px-3 py-2 font-medium">PCP</th>
-                <th className="px-3 py-2 font-medium">Alerts</th>
+                {col("age") && <th className="px-3 py-2 font-medium">{sortHeader("age")}</th>}
+                {col("mrn") && <th className="px-3 py-2 font-medium">{sortHeader("mrn")}</th>}
+                {col("dob") && <th className="px-3 py-2 font-medium">DOB</th>}
+                {col("appt") && <th className="px-3 py-2 font-medium">{sortHeader("appt")}</th>}
+                {clinical && col("problems") && <th className="px-3 py-2 font-medium">Top problems</th>}
+                {col("pcp") && <th className="px-3 py-2 font-medium">PCP</th>}
+                {col("alerts") && <th className="px-3 py-2 font-medium">Alerts</th>}
               </tr>
             </thead>
             <tbody>
@@ -158,15 +168,20 @@ export default async function PatientLists({
                 return (
                   <tr key={p.id} className="border-t border-line hover:bg-accent-soft/40">
                     <td className="whitespace-nowrap px-4 py-2">
-                      <Link href={`/patients/${p.id}`} className="font-medium hover:text-accent">
-                        {fullName(p)}
-                      </Link>
+                      <PatientHover id={p.id}>
+                        <Link href={`/patients/${p.id}`} className="font-medium hover:text-accent">
+                          {fullName(p)}
+                        </Link>
+                      </PatientHover>
                     </td>
-                    <td className="tabular whitespace-nowrap px-3 py-2 text-ink-2">
-                      {age(p.dob)} y {sexShort(p.sex)}
-                    </td>
-                    <td className="tabular px-3 py-2 font-mono text-[12px] text-ink-2">{p.mrn}</td>
-                    <td className="tabular px-3 py-2 text-ink-2">{fmtDob(p.dob)}</td>
+                    {col("age") && (
+                      <td className="tabular whitespace-nowrap px-3 py-2 text-ink-2">
+                        {age(p.dob)} y {sexShort(p.sex)}
+                      </td>
+                    )}
+                    {col("mrn") && <td className="tabular px-3 py-2 font-mono text-[12px] text-ink-2">{p.mrn}</td>}
+                    {col("dob") && <td className="tabular px-3 py-2 text-ink-2">{fmtDob(p.dob)}</td>}
+                    {col("appt") && (
                     <td className="px-3 py-2">
                       {appt ? (
                         <>
@@ -177,15 +192,20 @@ export default async function PatientLists({
                         <span className="text-ink-3">—</span>
                       )}
                     </td>
-                    {clinical && (
+                    )}
+                    {clinical && col("problems") && (
                       <td className="max-w-72 truncate px-3 py-2 text-ink-2" title={p.conditions.map((c) => c.display).join("; ")}>
                         {p.conditions.map((c) => c.display).join("; ")}
                       </td>
                     )}
-                    <td className="whitespace-nowrap px-3 py-2 text-ink-2">{p.pcp?.name}</td>
+                    {col("pcp") && <td className="whitespace-nowrap px-3 py-2 text-ink-2">{p.pcp?.name}</td>}
+                    {col("alerts") && (
                     <td className="space-x-1 whitespace-nowrap px-3 py-2">
                       {p.allergies.length > 0 && (
-                        <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${severe ? "bg-crit text-white" : "bg-crit-soft text-crit"}`}>
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${severe ? "bg-crit text-white" : "bg-crit-soft text-crit"}`}
+                          title={p.allergies.map((x) => `${x.substance}${x.reaction ? ` (${x.reaction})` : ""}`).join(", ")}
+                        >
                           Allergies {p.allergies.length}
                         </span>
                       )}
@@ -204,6 +224,7 @@ export default async function PatientLists({
                         <span className="rounded bg-ink px-1.5 py-0.5 text-[11px] font-medium text-white">{p.codeStatus}</span>
                       )}
                     </td>
+                    )}
                   </tr>
                 );
               })}

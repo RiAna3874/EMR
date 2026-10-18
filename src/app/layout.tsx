@@ -13,6 +13,9 @@ import { headers } from "next/headers";
 import { PHONE_VIEW_HEADER } from "@/lib/phone-view";
 import { Dictation } from "@/components/dictation";
 import { dictationMode } from "@/lib/dictation/engine";
+import { HoverProvider } from "@/components/hover/hover-card";
+import { Tips } from "@/components/hover/tips";
+import { getViewPrefs } from "@/lib/view-prefs-server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -40,38 +43,44 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </html>
     );
   }
+  const signedIn = !!user && signInComplete(user);
+  // Hover cards and quick tips are on unless this person turned them off (src/lib/view-prefs.ts).
+  const hover = signedIn && (await getViewPrefs()).hover;
   return (
     <html lang="en" style={brandStyle()}>
       <body className="flex h-screen flex-col antialiased print:block print:h-auto">
-        {/* Part-way through sign-in (temporary password, two-step not set up): no chart data, just a way out. */}
-        {/* data-desktop-chrome: hidden by the phone view if this layout was rendered for another page (src/app/m/layout.tsx). */}
-        {user && !signInComplete(user) && (
-          <header data-desktop-chrome className="flex h-11 shrink-0 items-center justify-between bg-chrome px-4 text-[12.5px] text-white/80 print:hidden">
-            <span className="flex items-center gap-2 font-semibold tracking-wide text-white">
-              <BrandMark name={brand.shortName} logoUrl={brand.logoUrl} />
-            </span>
-            <form action={signOut}>
-              <button type="submit" className="rounded border border-white/15 px-2 py-0.5 text-[12px] hover:bg-white/10 hover:text-white">
-                Sign out
-              </button>
-            </form>
-          </header>
-        )}
-        {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
-        {user && signInComplete(user) && (
-          <div data-desktop-chrome className="contents">
-            <TopBar
-              user={user}
-              brand={{ name: brand.shortName, logoUrl: brand.logoUrl }}
-              dataLabel={dataNotice?.label ?? null}
-              inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
-              chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
-            />
-          </div>
-        )}
-        <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
-        {/* A microphone on whichever text box has the cursor (docs/DICTATION.md). */}
-        {user && signInComplete(user) && dictationMode() && <Dictation engine={dictationMode()!} />}
+        <HoverProvider on={hover}>
+          {/* Part-way through sign-in (temporary password, two-step not set up): no chart data, just a way out. */}
+          {/* data-desktop-chrome: hidden by the phone view if this layout was rendered for another page (src/app/m/layout.tsx). */}
+          {user && !signInComplete(user) && (
+            <header data-desktop-chrome className="flex h-11 shrink-0 items-center justify-between bg-chrome px-4 text-[12.5px] text-white/80 print:hidden">
+              <span className="flex items-center gap-2 font-semibold tracking-wide text-white">
+                <BrandMark name={brand.shortName} logoUrl={brand.logoUrl} />
+              </span>
+              <form action={signOut}>
+                <button type="submit" className="rounded border border-white/15 px-2 py-0.5 text-[12px] hover:bg-white/10 hover:text-white">
+                  Sign out
+                </button>
+              </form>
+            </header>
+          )}
+          {user && signInComplete(user) && <IdleLock afterMs={LOCK_AFTER_MS} />}
+          {user && signInComplete(user) && (
+            <div data-desktop-chrome className="contents">
+              <TopBar
+                user={user}
+                brand={{ name: brand.shortName, logoUrl: brand.logoUrl }}
+                dataLabel={dataNotice?.label ?? null}
+                inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
+                chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
+              />
+            </div>
+          )}
+          <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
+          {/* A microphone on whichever text box has the cursor (docs/DICTATION.md). */}
+          {user && signInComplete(user) && dictationMode() && <Dictation engine={dictationMode()!} />}
+          <Tips />
+        </HoverProvider>
       </body>
     </html>
   );

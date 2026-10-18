@@ -3,31 +3,41 @@ import type { AllergyIntolerance, Condition, Encounter, Observation, Patient, Pr
 import { age, fmtDate, fmtDob, fmtShortDate, fmtTime, sexShort, unitLabel } from "@/lib/format";
 import { flagText } from "@/components/flag";
 import { GLUCOSE_TIMINGS, fmtGlucose, isGlucoseCode } from "@/lib/glucose";
+import { Hover } from "@/components/hover/hover-card";
+import { HoverHint } from "@/components/hover/card-parts";
+import { AllergyCard, ProblemCard, ResultCard, VisitCard } from "@/components/hover/cards";
+import { ViewMenu } from "@/components/view-menu";
+import { viewArea } from "@/lib/view-prefs";
 
 type RailPatient = Patient & {
   pcp: Practitioner | null;
   allergies: AllergyIntolerance[];
   conditions: Condition[];
-  encounters: Encounter[];
+  encounters: (Encounter & { provider: Practitioner | null })[];
 };
 
 type RailChat = { id: string; name: string; at: Date };
 
 // `clinical` false (front desk) keeps demographics, allergies and the next visit only.
-// `chats` is null for a role without secure chat.
+// `chats` is null for a role without secure chat. `hidden` holds sections this person hid
+// (View menu at the bottom); allergies and code status always show.
 export function PatientRail({
   patient: p,
   vitals,
   clinical,
   chats,
   admin = false,
+  hidden = [],
 }: {
   patient: RailPatient;
   vitals: Observation[];
   clinical: boolean;
   chats: RailChat[] | null;
   admin?: boolean;
+  hidden?: string[];
 }) {
+  const show = (k: string) => !hidden.includes(`rail:${k}`);
+  const railItems = viewArea("rail").items.filter((i) => (clinical || !["rail:problems", "rail:vitals"].includes(i.key)) && (chats || i.key !== "rail:chat"));
   const base = `/patients/${p.id}`;
   const v = Object.fromEntries(vitals.map((o) => [o.code, o]));
   const bp = v["8480-6"] && v["8462-4"] ? `${v["8480-6"].valueNum}/${v["8462-4"].valueNum}` : null;
@@ -54,6 +64,7 @@ export function PatientRail({
             </div>
           </div>
         </div>
+        {show("details") && (
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           <dt className="text-ink-3">MRN</dt>
           <dd className="font-mono">{p.mrn}</dd>
@@ -67,12 +78,23 @@ export function PatientRail({
             {p.smsOptOutAt && <span className="ml-1.5 whitespace-nowrap rounded bg-crit-soft px-1 text-[10.5px] font-medium text-crit">No texts</span>}
           </dd>
         </dl>
+        )}
         <Link href={`${base}/edit`} className="mt-1 inline-block text-[11.5px] text-accent hover:underline">
           Edit patient details
         </Link>
-        <div className={`mt-3 rounded px-2 py-1 text-center text-[11.5px] font-semibold ${p.codeStatus === "Full code" ? "bg-panel-muted text-ink-2" : "bg-ink text-white"}`}>
+        <Hover
+          as="div"
+          className={`mt-3 rounded px-2 py-1 text-center text-[11.5px] font-semibold ${p.codeStatus === "Full code" ? "bg-panel-muted text-ink-2" : "bg-ink text-white"}`}
+          card={
+            <HoverHint title={`Code status: ${p.codeStatus}`}>
+              {p.codeStatus === "Full code"
+                ? "Full resuscitation if the heart or breathing stops. Change it on Edit patient details."
+                : "Limits on resuscitation are recorded. Check before any emergency treatment. Change it on Edit patient details."}
+            </HoverHint>
+          }
+        >
           Code status: {p.codeStatus}
-        </div>
+        </Hover>
       </div>
 
       <RailSection title="Allergies" href={clinical ? `${base}/allergies` : undefined}>
@@ -83,33 +105,49 @@ export function PatientRail({
         ) : (
           <div className={`rounded px-2 py-1 ${severe ? "bg-crit text-white" : "bg-crit-soft text-crit"}`}>
             {p.allergies.map((a) => (
-              <div key={a.id} className="font-medium">
+              <Hover key={a.id} as="div" className="font-medium" card={<AllergyCard a={a} />}>
                 {a.substance}
                 <span className="font-normal opacity-80"> · {a.reaction}</span>
-              </div>
+              </Hover>
             ))}
           </div>
         )}
       </RailSection>
 
-      {clinical && (
+      {clinical && show("problems") && (
         <RailSection title="Active problems" href={`${base}/problems`}>
           {p.conditions.length === 0 ? (
             <div className="text-ink-3">None recorded</div>
           ) : (
             <ul className="space-y-0.5">
               {p.conditions.slice(0, 3).map((c) => (
-                <li key={c.id} className="leading-snug">
+                <Hover key={c.id} as="li" className="leading-snug" card={<ProblemCard c={c} />}>
                   {c.display}
-                </li>
+                </Hover>
               ))}
-              {p.conditions.length > 3 && <li className="text-ink-3">+{p.conditions.length - 3} more</li>}
+              {p.conditions.length > 3 && (
+                <Hover
+                  as="li"
+                  className="text-ink-3"
+                  card={
+                    <HoverHint title="More active problems">
+                      {p.conditions.slice(3).map((c) => (
+                        <span key={c.id} className="block">
+                          {c.display}
+                        </span>
+                      ))}
+                    </HoverHint>
+                  }
+                >
+                  +{p.conditions.length - 3} more
+                </Hover>
+              )}
             </ul>
           )}
         </RailSection>
       )}
 
-      {clinical && (
+      {clinical && show("vitals") && (
         <RailSection title={vitals[0] ? `Last vitals · ${fmtShortDate(vitals[0].effectiveAt)}` : "Last vitals"} href={`${base}/vitals`}>
           {vitals.length === 0 ? (
             <div className="text-ink-3">None recorded</div>
@@ -118,7 +156,18 @@ export function PatientRail({
               {bp && (
                 <>
                   <dt className="text-ink-3">BP</dt>
-                  <dd className={flagText(v["8480-6"]?.flag === "N" ? v["8462-4"]?.flag : v["8480-6"]?.flag)}>{bp}</dd>
+                  <Hover
+                    as="dd"
+                    className={flagText(v["8480-6"]?.flag === "N" ? v["8462-4"]?.flag : v["8480-6"]?.flag)}
+                    card={
+                      <ResultCard
+                        o={{ ...v["8480-6"], display: "Blood pressure", valueNum: null, valueText: bp, refLow: null, refHigh: null, refText: null, flag: v["8480-6"].flag === "N" ? v["8462-4"].flag : v["8480-6"].flag }}
+                        note={`Systolic ${v["8480-6"].valueNum}, diastolic ${v["8462-4"].valueNum} mmHg.`}
+                      />
+                    }
+                  >
+                    {bp}
+                  </Hover>
                 </>
               )}
               {[
@@ -138,20 +187,22 @@ export function PatientRail({
         </RailSection>
       )}
 
+      {show("next") && (
       <RailSection title="Next appointment">
         {next ? (
-          <div>
+          <Hover as="div" card={<VisitCard e={next} />}>
             <div>
               {fmtDate(next.start)} {fmtTime(next.start)}
             </div>
             <div className="text-ink-3">{next.reason}</div>
-          </div>
+          </Hover>
         ) : (
           <div className="text-ink-3">None scheduled</div>
         )}
       </RailSection>
+      )}
 
-      {chats && (
+      {chats && show("chat") && (
         <RailSection title="Secure chat">
           {chats.length > 0 && (
             <ul className="mb-1.5 space-y-0.5">
@@ -180,6 +231,9 @@ export function PatientRail({
           </Link>
         </div>
       )}
+      <div className="mt-auto flex justify-end px-3 py-2">
+        <ViewMenu label="Patient sidebar" items={railItems} hidden={hidden} tone="subtle" align="left" />
+      </div>
     </aside>
   );
 }
@@ -188,10 +242,10 @@ function RailVital({ label, o, setAt }: { label: string; o: Observation; setAt?:
   return (
     <>
       <dt className="text-ink-3">{label}</dt>
-      <dd className={flagText(o.flag)}>
+      <Hover as="dd" className={flagText(o.flag)} card={<ResultCard o={o} />}>
         {o.valueNum !== null && isGlucoseCode(o.code) ? fmtGlucose(o.valueNum) : `${o.valueNum} ${unitLabel(o.unit)}`}
         {isGlucoseCode(o.code) && setAt && fmtShortDate(o.effectiveAt) !== fmtShortDate(setAt) && <span className="text-ink-3"> · {fmtShortDate(o.effectiveAt)}</span>}
-      </dd>
+      </Hover>
     </>
   );
 }
