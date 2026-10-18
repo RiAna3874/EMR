@@ -248,6 +248,7 @@ model Practitioner {
   verifiedReports    DiagnosticReport[]   @relation("VerifiedReports")
   uploads            DocumentReference[]
   mediaUploads       MediaItem[]
+  sugarNotes         BloodSugarNote[]
   importJobs         ImportJob[]          @relation("ImportCreatedBy")
   filedImports       ImportJob[]          @relation("ImportFiledBy")
   reviewedReports    DiagnosticReport[]   @relation("ReviewedReports")
@@ -385,6 +386,7 @@ model Patient {
   conversations  Conversation[]
   visitDiagnoses EncounterDiagnosis[]
   smsMessages    SmsMessage[]
+  sugarNotes     BloodSugarNote[]
 
   @@index([lastName, firstName])
   // The duplicate-patient check looks up by date of birth.
@@ -1045,6 +1047,22 @@ model MediaItem {
   enteredInErrorById   String?
 
   @@index([patientId, takenAt])
+}
+
+// A note for one day on the Blood sugar tab ("missed breakfast", "took insulin late"), next to
+// that day's fasting and 2-hour readings. One per patient per day; clearing it removes it.
+model BloodSugarNote {
+  id          String       @id @default(cuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  day         String // YYYY-MM-DD, clinic time
+  text        String
+  updatedById String
+  updatedBy   Practitioner @relation(fields: [updatedById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([patientId, day])
 }
 
 enum SmsKind {

@@ -22,6 +22,7 @@ const MOVED = [
   "encounterDiagnosis",
   "mediaItem",
   "smsMessage",
+  "bloodSugarNote",
 ] as const;
 
 // Contact and coverage details the kept chart takes from the duplicate when it has none.
@@ -36,6 +37,14 @@ export type MergeCounts = Record<(typeof MOVED)[number], number>;
 // MRN stay as the kept chart has them.
 export async function mergeCharts(tx: Tx, from: Patient, into: Patient, userId: string): Promise<MergeCounts> {
   const counts = {} as MergeCounts;
+  // One blood sugar note per day: where both charts have one, the kept chart's note takes the other's text.
+  const intoNotes = new Map((await tx.bloodSugarNote.findMany({ where: { patientId: into.id } })).map((n) => [n.day, n]));
+  for (const n of await tx.bloodSugarNote.findMany({ where: { patientId: from.id } })) {
+    const kept = intoNotes.get(n.day);
+    if (!kept) continue;
+    await tx.bloodSugarNote.update({ where: { id: kept.id }, data: { text: `${kept.text}\n${n.text}` } });
+    await tx.bloodSugarNote.delete({ where: { id: n.id } });
+  }
   for (const model of MOVED) {
     // The models share the patientId column; Prisma's per-model types don't share a signature.
     const delegate = tx[model] as unknown as { updateMany: (a: { where: { patientId: string }; data: { patientId: string } }) => Promise<{ count: number }> };

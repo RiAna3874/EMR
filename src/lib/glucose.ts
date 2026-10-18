@@ -7,7 +7,7 @@ import type { Flag } from "@prisma/client";
 export const GLUCOSE_TIMINGS = [
   { key: "fasting", code: "poc-glucose-fasting", label: "Fasting", short: "FBS", range: [3.9, 5.5] },
   { key: "random", code: "poc-glucose-random", label: "Random", short: "RBS", range: [3.9, 7.8] },
-  { key: "post_meal", code: "poc-glucose-post-meal", label: "2 hours after meal", short: "2HABF", range: [3.9, 7.8] },
+  { key: "post_meal", code: "poc-glucose-post-meal", label: "2 hours after breakfast", short: "2HABF", range: [3.9, 7.8] },
 ] as const;
 
 export type GlucoseTiming = (typeof GLUCOSE_TIMINGS)[number]["key"];
