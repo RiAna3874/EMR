@@ -16,6 +16,7 @@ import { dictationMode } from "@/lib/dictation/engine";
 import { HoverProvider } from "@/components/hover/hover-card";
 import { Tips } from "@/components/hover/tips";
 import { getViewPrefs } from "@/lib/view-prefs-server";
+import { movableOrder } from "@/lib/view-prefs";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -45,7 +46,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   }
   const signedIn = !!user && signInComplete(user);
   // Hover cards and quick tips are on unless this person turned them off (src/lib/view-prefs.ts).
-  const hover = signedIn && (await getViewPrefs()).hover;
+  const prefs = await getViewPrefs();
+  const hover = signedIn && prefs.hover;
   return (
     <html lang="en" style={brandStyle()}>
       <body className="flex h-screen flex-col antialiased print:block print:h-auto">
@@ -73,10 +75,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 dataLabel={dataNotice?.label ?? null}
                 inboxCount={can(user.role, "useInbox") ? (await inboxCounts(user)).total : null}
                 chat={can(user.role, "useChat") ? await chatBadge(user.id) : { total: 0, urgent: 0, latestUrgent: null }}
+                navOrder={movableOrder(prefs, "nav")}
+                drag={prefs.drag}
               />
             </div>
           )}
-          <div className="min-h-0 flex-1 print:min-h-0">{children}</div>
+          {/* Text size (View options) scales the screen below the top bar; hover cards and tips sit outside it. */}
+          <div className="min-h-0 flex-1 print:min-h-0" style={signedIn && prefs.textSize !== 100 ? { zoom: prefs.textSize / 100 } : undefined}>
+            {children}
+          </div>
           {/* A microphone on whichever text box has the cursor (docs/DICTATION.md). */}
           {user && signInComplete(user) && dictationMode() && <Dictation engine={dictationMode()!} />}
           <Tips />

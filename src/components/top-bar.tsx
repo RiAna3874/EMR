@@ -9,15 +9,17 @@ import { signOut } from "@/app/login/actions";
 import { CommandPalette } from "@/components/command-palette";
 import { BrandMark } from "@/components/brand-mark";
 import { PatientHover } from "@/components/hover/patient-hover";
+import { Arrange, Sortable } from "@/components/arrange";
 
 const EMPTY: OpenPatient[] = [];
 
+// `key` matches the "nav" area in src/lib/view-prefs.ts, where each person's order is kept.
 const nav = [
-  { href: "/", label: "My Day" },
-  { href: "/schedule", label: "Schedule" },
-  { href: "/inbox", label: "Inbox" },
-  { href: "/messages", label: "Messages" },
-  { href: "/patients", label: "Patient Lists" },
+  { key: "nav:home", href: "/", label: "My Day" },
+  { key: "nav:schedule", href: "/schedule", label: "Schedule" },
+  { key: "nav:inbox", href: "/inbox", label: "Inbox" },
+  { key: "nav:messages", href: "/messages", label: "Messages" },
+  { key: "nav:patients", href: "/patients", label: "Patient Lists" },
 ];
 
 export type ChatBadge = { total: number; urgent: number; latestUrgent: { id: string; conversationId: string; from: string; preview: string } | null };
@@ -27,16 +29,19 @@ const CHAT_POLL_MS = 15_000;
 
 // inboxCount is null for roles without an Inbox (front desk). dataLabel warns what data this
 // system may hold ("Synthetic data", "Not for real patients"); null once cleared for real patients.
+// `navOrder` is this person's order for the links (dragged into place unless `drag` is off).
 export function TopBar({
   user,
   brand,
   inboxCount,
   chat: initialChat,
   dataLabel,
+  navOrder,
+  drag,
 }: {
   user: SessionUser;
   brand: { name: string; logoUrl: string | null };
-  inboxCount: number | null; chat: ChatBadge; dataLabel: string | null }) {
+  inboxCount: number | null; chat: ChatBadge; dataLabel: string | null; navOrder: string[]; drag: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const open = useSyncExternalStore(subscribeOpenPatients, readOpenPatients, () => EMPTY);
@@ -60,15 +65,16 @@ export function TopBar({
       <Link href="/" className="flex items-center gap-2 px-4 font-semibold tracking-wide">
         <BrandMark name={brand.name} logoUrl={brand.logoUrl} />
       </Link>
-      <nav className="flex items-stretch">
-        {nav.filter((n) => n.href !== "/inbox" || inboxCount !== null).map((n) => {
+      <Arrange area="nav" order={navOrder} drag={drag}>
+      <nav>
+        <Sortable area="nav" label="Top bar" className="flex h-full items-stretch" items={nav.filter((n) => n.href !== "/inbox" || inboxCount !== null).map((n) => {
           const active = n.href === "/" ? pathname === "/" : pathname === n.href || pathname.startsWith(`${n.href}/`);
           const count = n.href === "/inbox" ? (inboxCount ?? 0) : n.href === "/messages" ? chat.total : 0;
           const urgent = n.href === "/messages" && chat.urgent > 0;
-          return (
+          return { key: n.key, className: "flex", node: (
             <Link
-              key={n.href}
               href={n.href}
+              draggable={false}
               className={`flex items-center px-3 text-[13px] ${active ? "bg-chrome-2 text-white" : "text-white/75 hover:bg-chrome-2/60 hover:text-white"}`}
             >
               {n.label}
@@ -82,9 +88,10 @@ export function TopBar({
                 </span>
               )}
             </Link>
-          );
-        })}
+          ) };
+        })} />
       </nav>
+      </Arrange>
       <div className="mx-2 my-2 w-px bg-white/15" />
       <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto pt-1.5">
         {open.map((p) => {

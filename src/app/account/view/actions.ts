@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { DEFAULT_PREFS, readPrefs, withHidden, type ViewPrefs } from "@/lib/view-prefs";
+import { DEFAULT_PREFS, readPrefs, TEXT_SIZES, withAreaReset, withHidden, withOrder, withWide, type ViewPrefs } from "@/lib/view-prefs";
 
 async function save(change: (prefs: ViewPrefs) => ViewPrefs) {
   const user = await requireUser();
@@ -20,6 +20,33 @@ export async function setHidden(keys: string[], hidden: boolean) {
 
 export async function setHover(on: boolean) {
   await save((p) => ({ ...p, hover: on }));
+}
+
+// `keys` is the area's movable items in their new order.
+export async function setOrder(area: string, keys: string[]) {
+  await save((p) => withOrder(p, area, keys));
+}
+
+export async function setDrag(on: boolean) {
+  await save((p) => ({ ...p, drag: on }));
+}
+
+export async function setWide(key: string, wide: boolean) {
+  await save((p) => withWide(p, key, wide));
+}
+
+export async function setTextSize(size: number) {
+  await save((p) => ((TEXT_SIZES as readonly number[]).includes(size) ? { ...p, textSize: size } : p));
+}
+
+export async function setStartTab(slug: string) {
+  // readPrefs drops a tab that doesn't exist.
+  await save((p) => readPrefs({ ...p, startTab: slug }));
+}
+
+// One area as it came: all shown, standard order, normal width.
+export async function resetArea(area: string) {
+  await save((p) => withAreaReset(p, area));
 }
 
 // Everything back on: one area's items, or the lot.

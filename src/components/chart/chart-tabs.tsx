@@ -8,12 +8,30 @@ import { touchOpenPatient } from "@/lib/open-patients";
 import type { Permission } from "@/lib/roles";
 import { chartTabs, tabCountMeaning } from "@/lib/chart-tabs";
 import { viewArea } from "@/lib/view-prefs";
+import { Arrange, Sortable } from "@/components/arrange";
 import { Hover } from "@/components/hover/hover-card";
 import { HoverHint } from "@/components/hover/card-parts";
 import { ViewMenu } from "@/components/view-menu";
 
 // `hidden` holds the tabs this person chose to hide (View menu); the tab they're on always shows.
-export function ChartTabs({ patientId, label, counts, allowed, hidden }: { patientId: string; label: string; counts: Record<string, number>; allowed: Permission[]; hidden: string[] }) {
+// `order` is their tab order (every tab key); tabs are dragged into place unless `drag` is off.
+export function ChartTabs({
+  patientId,
+  label,
+  counts,
+  allowed,
+  hidden,
+  order,
+  drag,
+}: {
+  patientId: string;
+  label: string;
+  counts: Record<string, number>;
+  allowed: Permission[];
+  hidden: string[];
+  order: string[];
+  drag: boolean;
+}) {
   const pathname = usePathname();
   const base = `/patients/${patientId}`;
   const mine = chartTabs.filter((t) => !t.needs || allowed.includes(t.needs));
@@ -21,21 +39,17 @@ export function ChartTabs({ patientId, label, counts, allowed, hidden }: { patie
 
   // Register this chart as an open tab and remember which activity was last used.
   useEffect(() => {
-    touchOpenPatient({ id: patientId, label, lastPath: pathname });
-  }, [patientId, label, pathname]);
+    // Summary is reopened as Summary, even when this person's charts open on another tab.
+    touchOpenPatient({ id: patientId, label, lastPath: pathname === base ? `${base}?tab=summary` : pathname });
+  }, [patientId, label, pathname, base]);
 
-  return (
-    <nav className="flex shrink-0 border-b border-line bg-panel px-3">
-      {/* Tabs scroll sideways on a narrow screen; the View menu and search stay put. */}
-      <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
-      {mine.map((t) => {
+  const tabs = mine.flatMap((t) => {
         const href = t.slug ? `${base}/${t.slug}` : base;
         const active = t.slug ? pathname.startsWith(href) : pathname === base;
-        if (!active && t.slug && hidden.includes(`tab:${t.slug}`)) return null;
+        if (!active && t.slug && hidden.includes(`tab:${t.slug}`)) return [];
         const count = counts[t.slug];
-        return (
+        return [{ key: `tab:${t.slug || "summary"}`, node: (
           <Hover
-            key={t.slug}
             as="span"
             className="flex"
             card={
@@ -50,7 +64,9 @@ export function ChartTabs({ patientId, label, counts, allowed, hidden }: { patie
             }
           >
             <Link
-              href={href}
+              // The Summary tab always opens Summary, even when charts open on another tab.
+              href={t.slug ? href : `${base}?tab=summary`}
+              draggable={false}
               className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] ${
                 active ? "border-accent font-semibold text-ink" : "border-transparent text-ink-2 hover:border-line hover:text-ink"
               }`}
@@ -59,14 +75,20 @@ export function ChartTabs({ patientId, label, counts, allowed, hidden }: { patie
               {count ? <span className="ml-1.5 rounded-full bg-high-soft px-1.5 text-[10.5px] font-semibold text-high">{count}</span> : null}
             </Link>
           </Hover>
-        );
-      })}
-      </div>
+        ) }];
+      });
+
+  return (
+    <Arrange area="tab" order={order} drag={drag}>
+    <nav className="flex shrink-0 border-b border-line bg-panel px-3">
+      {/* Tabs scroll sideways on a narrow screen; the View menu and search stay put. */}
+      <Sortable area="tab" label="Chart tabs" items={tabs} className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]" />
       <div className="flex shrink-0 items-center pl-2">
-        <ViewMenu label="Chart tabs" items={tabItems} hidden={hidden} tone="subtle" />
+        <ViewMenu label="Chart tabs" area="tab" items={tabItems} hidden={hidden} tone="subtle" />
       </div>
       {!pathname.startsWith(`${base}/search`) && <ChartSearchBox base={base} />}
     </nav>
+    </Arrange>
   );
 }
 
